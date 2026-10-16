@@ -1,6 +1,6 @@
 # XX-PRD
 
-> **WorkBuddy 技能** —— 产品经理需求分析与原型设计工作台。
+> **Agent Skill** —— 产品经理需求分析与原型设计工作台。
 > 把「口头需求 / 一句话想法 / Vibe-Coding Demo」收敛成
 > **可交互原型 + EARS 规范 PRD + 标注对齐** 三合一的单文件 HTML 容器，
 > 基于 **Ant Design 5** 做设计，并产出可直接交给 AI 开工的开发交接包。
@@ -28,40 +28,47 @@
 
 ## 安装
 
-### 方式 1 · 放进技能目录（最稳，任何版本都能用）
+本技能包遵循通用的 **Agent Skills** 约定：**一个目录 + 一个 `SKILL.md`**。
+任何支持该约定的 AI 助手都能直接使用。
+
+### 方式 1 · 放进 skills 目录（最稳）
 
 1. 下载本仓库（`Code → Download ZIP`）或 `git clone`
-2. 把整个 `XX-PRD` 文件夹放到技能目录下：
+2. 把整个 `XX-PRD` 文件夹放进你所用 AI 助手的 **skills 目录**（个人级）
 
-   | 系统 | 路径 |
+   不同工具的目录位置不同，常见形态如下 —— 具体以该工具文档为准：
+
+   | 系统 | 示例（Claude Code） |
    |---|---|
-   | macOS / Linux | `~/.workbuddy-ai/skills/` |
-   | Windows | `C:\Users\<你的用户名>\.workbuddy-ai\skills\` |
+   | macOS / Linux | `~/.claude/skills/` |
+   | Windows | `C:\Users\<你的用户名>\.claude\skills\` |
+
+   其他工具一般是 `~/.<工具名>/skills/`，或项目内的 `.<工具名>/skills/`。
 
 3. 最终路径应该是 —— **`SKILL.md` 必须就在 `XX-PRD/` 这一层**：
 
    ```
-   ~/.workbuddy-ai/skills/XX-PRD/SKILL.md
-   ~/.workbuddy-ai/skills/XX-PRD/guide.html
-   ~/.workbuddy-ai/skills/XX-PRD/references/
-   ~/.workbuddy-ai/skills/XX-PRD/assets/
+   <skills 目录>/XX-PRD/SKILL.md
+   <skills 目录>/XX-PRD/guide.html
+   <skills 目录>/XX-PRD/references/
+   <skills 目录>/XX-PRD/assets/
    ```
 
-4. 重启 WorkBuddy，或直接新建一个任务
+4. 重启你的 AI 助手，或直接新建一个会话
 
 > ⚠️ 两个最常见的失败原因：
 > ① 解压后多套了一层目录（变成 `skills/XX-PRD/XX-PRD/SKILL.md`）；
 > ② 目录名被改掉（技能名由 frontmatter 的 `name: XX-PRD` 决定，目录名请保持一致）。
 
-### 方式 2 · 让 WorkBuddy 自己装
+### 方式 2 · 让 AI 助手自己装
 
-新建任务 → 把仓库 zip 拖进对话框 → 说一句：
+新建会话 → 把仓库 zip 拖进对话框 → 说一句：
 
 > 帮我安装这个技能包
 
 ### 方式 3 · URL 导入
 
-在 WorkBuddy 的技能市场里用「URL 导入」，填本仓库地址：
+在你的 AI 助手的技能市场 / 技能管理里用「URL 导入」，填本仓库地址：
 
 ```
 https://github.com/jiujiume81/XX-PRD
@@ -143,6 +150,6 @@ XX-PRD/
 
 ## 环境要求
 
-- WorkBuddy（任意版本）
+- 支持 **Agent Skills** 约定的 AI 助手（一个目录 + `SKILL.md` 即可）
 - 跑校验器需要 Python 3（可选，不跑也能用）
 - 生成的 HTML 原型**零依赖**：不联网、不引 CDN、双击即开

@@ -5,7 +5,6 @@
 > **可交互原型 + EARS 规范 PRD + 标注对齐** 三合一的单文件 HTML 容器，
 > 基于 **Ant Design 5** 做设计，并产出可直接交给 AI 开工的开发交接包。
 
-![设计准则](docs/design-principles.png)
 
 ---
 

@@ -1,0 +1,915 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+validate_prd_json.py — XX-PRD 产物结构校验器
+
+用法:
+    python3 validate_prd_json.py <file.json|file.html> [more...]
+    python3 validate_prd_json.py --json      # 机器可读输出
+
+校验维度:
+  1. 顶层结构完整性
+  2. ID 唯一性与前缀规范
+  3. 引用完整性（悬空引用检测）
+  4. 组件类型白名单
+  5. 页面状态覆盖（默认/加载/空/异常 四态）
+  6. EARS 质量门禁
+  7. 状态机完整性（初始态 / 孤立状态）
+  8. 标注闭环
+  9. 布局与交互完整性
+
+退出码: 0 = 无 ERROR, 1 = 存在 ERROR
+"""
+import json
+import re
+import sys
+import os
+
+# ---------- 组件类型白名单（与 references/05-component-states.md 保持一致） ----------
+WHITELIST = {
+    # 布局
+    "Layout", "Header", "Sider", "Content", "Footer", "Row", "Col", "Space", "Divider",
+    # 导航
+    "Menu", "Breadcrumb", "Tabs", "Steps", "Pagination", "Dropdown", "Segmented",
+    # 数据录入
+    "Button", "Input", "TextArea", "InputNumber", "Select", "Checkbox", "CheckboxGroup",
+    "Radio", "RadioGroup", "Switch", "DatePicker", "TimePicker", "Upload", "Form",
+    "FormItem", "Slider", "Rate", "Cascader", "Transfer",
+    # 数据展示
+    "Table", "List", "List.Item", "Card", "Descriptions", "Tag", "Badge", "Avatar",
+    "Tooltip", "Collapse", "Timeline", "Tree", "Statistic", "Empty", "Progress",
+    "Skeleton", "Alert", "Image", "Carousel", "Calendar",
+    # 复合结构（主子表：主表 + 可展开子表）
+    "MasterDetail",
+    # 反馈
+    "Modal", "Drawer", "Popconfirm", "Spin", "Result",
+    # 排版与辅助
+    "Typography", "Paragraph", "Text", "Icon", "Placeholder", "Chart", "Frame",
+}
+
+ID_PREFIXES = {
+    "u-": "user", "m-": "module", "page-": "page", "flow-": "userFlow",
+    "n-": "componentTreeNode", "ix-": "interaction", "s-": "pageState",
+    "an-": "annotation", "c-": "component", "sm-": "stateMachine",
+    "REQ-": "requirement", "bp-": "boardPlan", "q-": "openQuestion",
+}
+
+EARS_PATTERNS = {"ubiquitous", "event-driven", "state-driven", "option", "unwanted"}
+
+SUBJECTIVE_WORDS = ["友好", "快速", "合理", "尽量", "美观", "尽可能", "优秀", "良好",
+                    "适当", "较好", "高效", "便捷", "流畅"]
+
+IMPL_HINTS = ["api/", "/api", "数据库", "表名", "接口路径", "SELECT ", "INSERT ",
+              "React", "Vue", "Django", "Spring", "调用接口"]
+
+BOARD_STATUS = {"todo", "doing", "done"}
+ANNO_STATUS = {"open", "resolved", "rejected"}
+REQ_STATUS = {"draft", "confirmed"}
+REQ_SOURCE = {"user", "demo", "inferred"}
+
+# 节点级允许的字段（其余应写进 props）
+NODE_KEYS = {"id", "type", "ref", "props", "state", "when", "children", "slots"}
+
+# interactions.actions 的 action 白名单（必须与容器 doAction 的 case 分支一致）
+ACTION_WHITELIST = {
+    "setState", "setNode", "gotoState", "navigate", "back", "scrollTo",
+    "message", "showModal", "showDrawer", "hideModal", "hideDrawer",
+    "delay", "reset",
+}
+# 事件白名单
+EVENT_WHITELIST = {"click", "change", "submit", "focus", "blur", "hover"}
+
+# 四态关键字（中文/英文都接受）
+STATE_KEYS = {
+    "default": ["默认", "default", "常规", "正常"],
+    "loading": ["加载", "loading", "请求中"],
+    "empty": ["空", "empty", "无数据"],
+    "error": ["异常", "错误", "error", "失败", "无权限", "超时"],
+}
+
+
+class Report:
+    def __init__(self, target):
+        self.target = target
+        self.errors = []
+        self.warns = []
+        self.infos = []
+
+    def error(self, msg):
+        self.errors.append(msg)
+
+    def warn(self, msg):
+        self.warns.append(msg)
+
+    def info(self, msg):
+        self.infos.append(msg)
+
+
+# ---------- 载入 ----------
+def load_data(path):
+    """支持 .json 与 .html（从 #iprd-data 提取）。"""
+    with open(path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    if path.lower().endswith((".html", ".htm")):
+        m = re.search(
+            r'<script[^>]*id=["\']iprd-data["\'][^>]*>(.*?)</script>', raw, re.S)
+        if not m:
+            raise ValueError("HTML 中未找到 <script id=\"iprd-data\"> 数据块")
+        raw = m.group(1)
+    return json.loads(raw)
+
+
+# ---------- 工具 ----------
+def walk_nodes(node, out):
+    if not isinstance(node, dict):
+        return
+    if node.get("id"):
+        out.append(node)
+    for c in node.get("children") or []:
+        walk_nodes(c, out)
+    for key, arr in (node.get("slots") or {}).items():
+        for c in arr or []:
+            walk_nodes(c, out)
+
+
+def collect_node_ids(data):
+    ids = set()
+    for page in data.get("pages") or []:
+        nodes = []
+        walk_nodes(page.get("componentTree") or {}, nodes)
+        for n in nodes:
+            ids.add(n["id"])
+    return ids
+
+
+# 容器为某些组件内建了「合成节点 id」，可被 interactions.on.target / actions.scrollTo 引用：
+#   <Header 节点 id>__back            → 返回箭头（内建 back 动作）
+#   <Modal 节点 id>__ok / __cancel    → 弹窗底部「确定」/「取消」按钮
+#   <Table 节点 id>__row_<i>          → 第 i 行（需 props.rowClick: true）
+#   <Table 节点 id>__act_<i>_<key>    → 第 i 行操作列的第 key 个按钮
+# 序号位可写成 `*` 作为通配（一条 interaction 服务所有行 / 所有行内按钮）：
+#   <Table 节点 id>__row_*            → 任意一行
+#   <Table 节点 id>__act_*_<key>      → 任意一行的第 key 个按钮
+SYNTH_RE = re.compile(r"^(.+?)__(back|ok|cancel|row_(?:\d+|\*)|act_(?:\d+|\*)_[A-Za-z0-9_\-*]+)$")
+
+
+def collect_node_types(data):
+    types = {}
+    for page in data.get("pages") or []:
+        nodes = []
+        walk_nodes(page.get("componentTree") or {}, nodes)
+        for n in nodes:
+            types[n["id"]] = n.get("type")
+    return types
+
+
+def node_subtree(node):
+    """收集某节点自身及其全部后代（含 slots）。"""
+    out = []
+    walk_nodes(node, out)
+    return out
+
+
+# ---------- 容器选型准则（见 references/08-container-choice.md） ----------
+# 只数「叶子字段控件」，FormItem 只是包裹层，不重复计数
+FIELD_TYPES = {"Input", "TextArea", "InputNumber", "Select", "Checkbox", "CheckboxGroup",
+               "Radio", "RadioGroup", "Switch", "DatePicker", "TimePicker", "Upload",
+               "Slider", "Rate", "Cascader", "Transfer"}
+MODAL_MAX_FIELDS = 15        # 长表单（>15 字段）禁用对话框
+MODAL_DETAIL_HINT_FIELDS = 8  # 弹窗里塞这么多字段的「详情」通常展不开关联信息
+
+
+def resolve_target(tgt, node_types):
+    """解析交互目标：真实节点 / 容器合成节点（支持 `*` 通配）。返回 None 表示合法，否则返回错误说明。"""
+    if not tgt:
+        return None
+    if tgt in node_types:
+        return None
+    m = SYNTH_RE.match(tgt)
+    if not m:
+        return f"节点 `{tgt}` 不存在"
+    base, kind = m.group(1), m.group(2)
+    if base not in node_types:
+        return f"合成目标 `{tgt}` 的基节点 `{base}` 不存在"
+    btype = node_types.get(base)
+    if kind == "back":
+        if btype != "Header":
+            return f"合成目标 `{tgt}`：`__back` 只能挂在 Header 上，`{base}` 是 {btype}"
+    elif kind in ("ok", "cancel"):
+        if btype != "Modal":
+            return f"合成目标 `{tgt}`：`__{kind}` 只能挂在 Modal 上，`{base}` 是 {btype}"
+    elif btype != "Table":
+        return f"合成目标 `{tgt}`：`{kind.split('_')[0]}` 只能挂在 Table 上，`{base}` 是 {btype}"
+    return None
+
+
+def eval_pattern_trigger_ok(pat, trigger):
+    """pattern 与 trigger 的填写一致性。"""
+    if pat == "ubiquitous":
+        return not trigger
+    return True
+
+
+# ---------- 校验主体 ----------
+def validate(data, rep: Report):
+    # 1. 顶层结构
+    required = ["meta", "product", "users", "userFlows", "modules", "pages",
+                "components", "stateMachines", "requirements", "boardPlan",
+                "glossary", "openQuestions"]
+    for k in required:
+        if k not in data:
+            rep.warn(f"缺少顶层字段 `{k}`（容器可降级渲染，但建议补齐）")
+    meta = data.get("meta") or {}
+    if meta.get("schemaVersion") != "1.0":
+        rep.warn(f"meta.schemaVersion 建议为 '1.0'，当前为 {meta.get('schemaVersion')!r}")
+    if not data.get("pages"):
+        rep.error("pages 为空：容器无内容可渲染")
+        return
+
+    # 2. ID 唯一性
+    #    全局实体（user/module/page/flow/component/stateMachine/requirement/boardPlan/
+    #    openQuestion）必须全局唯一；
+    #    页内实体（node/interaction/state/annotation）只需在所属页面内唯一。
+    all_ids = {}
+    dup = []
+
+    def reg(idv, kind):
+        if not idv:
+            return
+        if idv in all_ids:
+            dup.append(f"{idv}（{all_ids[idv]} 与 {kind} 重复）")
+        else:
+            all_ids[idv] = kind
+
+    for u in data.get("users") or []:
+        reg(u.get("id"), "user")
+    for m in data.get("modules") or []:
+        reg(m.get("id"), "module")
+    for f in data.get("userFlows") or []:
+        reg(f.get("id"), "userFlow")
+    for c in data.get("components") or []:
+        reg(c.get("id"), "component")
+    for s in data.get("stateMachines") or []:
+        reg(s.get("id"), "stateMachine")
+    for r in data.get("requirements") or []:
+        reg(r.get("id"), "requirement")
+    for b in data.get("boardPlan") or []:
+        reg(b.get("id"), "boardPlan")
+    for q in data.get("openQuestions") or []:
+        reg(q.get("id"), "openQuestion")
+    for p in data.get("pages") or []:
+        reg(p.get("id"), "page")
+    if dup:
+        rep.error("ID 重复：" + "；".join(dup[:10]))
+
+    # 页内唯一
+    for p in data.get("pages") or []:
+        pid = p.get("id")
+        local, ldup = {}, []
+
+        def lreg(idv, kind):
+            if not idv:
+                return
+            if idv in local:
+                ldup.append(f"{idv}（{local[idv]} 与 {kind}）")
+            else:
+                local[idv] = kind
+
+        for st in p.get("states") or []:
+            lreg(st.get("id"), "state")
+        for ix in p.get("interactions") or []:
+            lreg(ix.get("id"), "interaction")
+        for a in p.get("annotations") or []:
+            lreg(a.get("id"), "annotation")
+        nodes = []
+        walk_nodes(p.get("componentTree") or {}, nodes)
+        for n in nodes:
+            lreg(n.get("id"), "node")
+        if ldup:
+            rep.error(f"[{pid}] 页内 ID 重复：" + "；".join(ldup[:8]))
+
+    # 前缀规范
+    for idv, kind in all_ids.items():
+        ok = any(idv.startswith(p) for p in ID_PREFIXES)
+        if not ok:
+            rep.warn(f"ID `{idv}`（{kind}）未使用约定前缀：{list(ID_PREFIXES)[:6]}…")
+
+    node_ids = collect_node_ids(data)
+    page_ids = {p.get("id") for p in data.get("pages") or []}
+    pages_by_id = {p.get("id"): p for p in data.get("pages") or []}
+    module_ids = {m.get("id") for m in data.get("modules") or []}
+    user_ids = {u.get("id") for u in data.get("users") or []}
+    sm_ids = {s.get("id") for s in data.get("stateMachines") or []}
+    req_ids = {r.get("id") for r in data.get("requirements") or []}
+    flow_ids = {f.get("id") for f in data.get("userFlows") or []}
+
+    # 3+4+5 逐页校验
+    for p in data.get("pages") or []:
+        pid = p.get("id")
+        # 模块归属
+        if p.get("moduleId") and p.get("moduleId") not in module_ids:
+            rep.error(f"[{pid}] moduleId `{p.get('moduleId')}` 不存在")
+        # 多级页面（parentId，用于左侧导航树）
+        par_id = p.get("parentId")
+        if par_id:
+            if par_id == pid:
+                rep.error(f"[{pid}] parentId 指向自身")
+            elif par_id not in page_ids:
+                rep.error(f"[{pid}] parentId `{par_id}` 不存在")
+            else:
+                # 环检测
+                seen, cur, guard = {pid}, par_id, 0
+                while cur and guard < 50:
+                    if cur in seen:
+                        rep.error(f"[{pid}] parentId 链存在环，经过 `{cur}`")
+                        break
+                    seen.add(cur)
+                    guard += 1
+                    parent = next((q for q in data.get("pages") or []
+                                   if q.get("id") == cur), None)
+                    cur = (parent or {}).get("parentId")
+                # 跨模块挂载提示
+                parent = next((q for q in data.get("pages") or []
+                               if q.get("id") == par_id), None)
+                if parent and p.get("moduleId") and parent.get("moduleId") \
+                        and parent.get("moduleId") != p.get("moduleId"):
+                    rep.warn(f"[{pid}] parentId `{par_id}` 属于其他模块 "
+                             f"`{parent.get('moduleId')}`，导航树中会挂在父页面所在模块下")
+        # 默认状态
+        states = p.get("states") or []
+        state_ids = {s.get("id") for s in states}
+        if not states:
+            rep.error(f"[{pid}] 缺少 states，容器无法模拟页面状态")
+        if p.get("defaultStateId") and p.get("defaultStateId") not in state_ids:
+            rep.error(f"[{pid}] defaultStateId `{p.get('defaultStateId')}` 不在 states 中")
+        # 四态覆盖
+        na_states = {str(x).lower() for x in (p.get("notApplicableStates") or [])}
+        names = " ".join(
+            f"{s.get('id','')} {s.get('name','')} {s.get('description','')}"
+            for s in states).lower()
+        for key, kws in STATE_KEYS.items():
+            if key in na_states:
+                rep.info(f"[{pid}] 「{key}」态已声明为不适用，跳过检查")
+                continue
+            if not any(k.lower() in names for k in kws):
+                rep.warn(f"[{pid}] 未覆盖「{key}」态（默认/加载/空/异常四态建议齐全；"
+                         f"若不适用请在页面加 notApplicableStates: [\"{key}\"]）")
+        # 组件类型白名单 + 结构
+        nodes = []
+        walk_nodes(p.get("componentTree") or {}, nodes)
+        if not nodes:
+            rep.error(f"[{pid}] componentTree 为空或缺少 id/type")
+        unknown = sorted({n.get("type") for n in nodes
+                          if n.get("type") and n.get("type") not in WHITELIST})
+        if unknown:
+            rep.error(f"[{pid}] 使用了白名单外的组件类型：{unknown}")
+        for n in nodes:
+            if not n.get("type"):
+                rep.error(f"[{pid}] 节点 `{n.get('id')}` 缺少 type")
+            # 节点级未知字段：props 写错层是最常见的静默失效原因
+            # （例：List 的 renderItem 写到节点级 → 容器读不到 → 列表渲染成空）
+            extra = sorted(set(n) - NODE_KEYS)
+            if extra:
+                rep.warn(f"[{pid}] 节点 `{n.get('id')}` 含未识别的节点级字段 {extra}；"
+                         f"组件属性请写在 `props` 内（允许的节点级字段：{sorted(NODE_KEYS)}）")
+            if n.get("type") == "List":
+                pr = n.get("props") or {}
+                if "renderItem" not in pr and not isinstance(pr.get("itemTemplate"), dict) \
+                        and pr.get("data") and not n.get("renderItem"):
+                    rep.warn(f"[{pid}] List `{n.get('id')}` 有 data 但缺少 props.renderItem，"
+                             f"容器会渲染成空列表")
+        # 交互目标 / 覆写目标 / 标注锚点
+        page_node_types = {n.get("id"): n.get("type") for n in nodes}
+        # Table 的 props.rowClick / columns[].actions 决定合成 id 是否存在
+        table_row_click = {}
+        table_act_keys = {}
+        table_row_keys = {}
+        for n in nodes:
+            if n.get("type") != "Table":
+                continue
+            pr = n.get("props") or {}
+            table_row_click[n.get("id")] = bool(pr.get("rowClick"))
+            keys = set()
+            for c in pr.get("columns") or []:
+                if isinstance(c, dict) and c.get("type") == "action":
+                    acts = c.get("actions") or [{"key": "edit"}, {"key": "delete"}]
+                    for a in acts:
+                        if isinstance(a, dict) and a.get("key"):
+                            keys.add(str(a["key"]))
+            table_act_keys[n.get("id")] = keys
+            rk = set()
+            for row in pr.get("data") or []:
+                if isinstance(row, dict):
+                    rk.update(row.keys())
+            table_row_keys[n.get("id")] = rk
+
+        # ---------- 主子表结构（MasterDetail，见 04-container-schema.md §6.7） ----------
+        for n in nodes:
+            if n.get("type") != "MasterDetail":
+                continue
+            nid = n.get("id")
+            pr = n.get("props") or {}
+            kids = [c for c in (n.get("children") or []) if isinstance(c, dict)]
+            if len(kids) != 2:
+                rep.error(f"[{pid}] MasterDetail `{nid}` 需要正好 2 个子节点"
+                          f"（children[0]=主表 Table，children[1]=子表 Table），当前 {len(kids)} 个")
+                continue
+            m, d = kids[0], kids[1]
+            for role, k in (("主表", m), ("子表", d)):
+                if k.get("type") != "Table":
+                    rep.error(f"[{pid}] MasterDetail `{nid}` 的{role} `{k.get('id')}` "
+                              f"类型是 `{k.get('type')}`，应为 Table")
+            mp = m.get("props") or {}
+            if mp.get("rowClick"):
+                rep.error(f"[{pid}] MasterDetail `{nid}` 的主表 `{m.get('id')}` 设了 "
+                          f"props.rowClick —— 主子表里「点行 = 选中行」，容器会强制关掉它；"
+                          f"要跳页请改用 columns[].actions 里的按钮")
+            bind = pr.get("bind")
+            if not bind:
+                rep.warn(f"[{pid}] MasterDetail `{nid}` 未声明 props.bind"
+                         f"（主表行字段 → 子表行字段），容器会默认用 `id` 匹配")
+            else:
+                rk = table_row_keys.get(m.get("id"), set())
+                if rk and bind not in rk:
+                    rep.error(f"[{pid}] MasterDetail `{nid}` 的 bind `{bind}` 不在主表数据字段里"
+                              f"（现有：{sorted(rk)[:12]}）")
+                bt = pr.get("bindTo") or bind
+                dk = table_row_keys.get(d.get("id"), set())
+                if dk and bt not in dk:
+                    rep.error(f"[{pid}] MasterDetail `{nid}` 的子表匹配字段 `{bt}` 不存在"
+                              f"（子表现有：{sorted(dk)[:12]}）")
+
+        # ---------- 容器选型：对话框 / 抽屉 / 新页面 ----------
+        for n in nodes:
+            t = n.get("type")
+            if t not in ("Modal", "Drawer"):
+                continue
+            nid = n.get("id")
+            sub = node_subtree(n)
+            if t == "Modal":
+                nested = [x for x in sub if x is not n and x.get("type") == "Modal"]
+                if nested:
+                    rep.error(f"[{pid}] 对话框 `{nid}` 里又嵌了对话框（{nested[0].get('id')}）"
+                              f"—— 禁止 dialogception，第二层请改用 Drawer 或新页面"
+                              f"（见 08-container-choice.md §6）")
+                fields = [x for x in sub if x.get("type") in FIELD_TYPES]
+                if len(fields) > MODAL_MAX_FIELDS:
+                    rep.error(f"[{pid}] 对话框 `{nid}` 承载了 {len(fields)} 个表单字段"
+                              f"（阈值 {MODAL_MAX_FIELDS}）—— 长表单禁用对话框，"
+                              f"请改用 Drawer 或新页面（见 08-container-choice.md §5）")
+                elif len(fields) > MODAL_DETAIL_HINT_FIELDS:
+                    rep.warn(f"[{pid}] 对话框 `{nid}` 有 {len(fields)} 个字段 —— 若是「详情」视图，"
+                             f"对话框展不开关联信息与操作区，主从详情首选 Drawer")
+            if t == "Drawer":
+                for x in sub:
+                    if x.get("type") != "Tabs":
+                        continue
+                    ntab = len((x.get("props") or {}).get("items") or [])
+                    if ntab >= 3:
+                        rep.warn(f"[{pid}] 抽屉 `{nid}` 里有 {ntab} 个 tab"
+                                 f"—— 抽屉里塞多 tab 工作台应升级为新页面"
+                                 f"（见 08-container-choice.md §6）")
+                    break
+
+        # ---------- 主子表提示：同一父节点下平铺多张表 ----------
+        def scan_siblings(nd):
+            if not isinstance(nd, dict):
+                return
+            kids = [c for c in (nd.get("children") or []) if isinstance(c, dict)]
+            tabs_ = [c for c in kids if c.get("type") == "Table"]
+            if len(tabs_) >= 2 and nd.get("type") != "MasterDetail":
+                rep.info(f"[{pid}] `{nd.get('id') or 'root'}` 下平铺了 {len(tabs_)} 张 Table"
+                         f"（{', '.join(x.get('id', '?') for x in tabs_[:4])}）—— "
+                         f"若存在主从关系（点上行看下行），建议用 MasterDetail 包起来，"
+                         f"子表可展开收起（见 04-container-schema.md §6.7）")
+            for c in kids:
+                scan_siblings(c)
+        scan_siblings(p.get("componentTree") or {})
+
+        def check_target(where, tgt):
+            bad = resolve_target(tgt, page_node_types)
+            if bad:
+                rep.error(f"[{pid}] {where}：{bad}")
+                return
+            m = SYNTH_RE.match(tgt or "")
+            if not m:
+                return
+            base, kind = m.group(1), m.group(2)
+            if kind.startswith("row_") and not table_row_click.get(base):
+                rep.warn(f"[{pid}] {where} 引用了行节点 `{tgt}`，但 Table `{base}` 未设置 "
+                         f"props.rowClick: true，容器不会给行加 id")
+            if kind.startswith("act_"):
+                key = kind.split("_", 2)[2]
+                declared = table_act_keys.get(base, set())
+                if key == "*":
+                    if not declared:
+                        rep.warn(f"[{pid}] {where} 用通配引用了 `{tgt}` 的操作按钮，"
+                                 f"但 Table `{base}` 的 columns[].actions 未声明任何 key")
+                elif key not in declared:
+                    rep.warn(f"[{pid}] {where} 引用了操作按钮 `{tgt}`，但 Table `{base}` 的 "
+                             f"columns[].actions 未声明 key `{key}`（已声明：{sorted(declared)}）")
+
+        for ix in p.get("interactions") or []:
+            on = ix.get("on") or {}
+            tgt = on.get("target")
+            if tgt:
+                check_target(f"交互 `{ix.get('id')}` 的 on.target", tgt)
+            if on.get("event") and on.get("event") not in EVENT_WHITELIST:
+                rep.error(f"[{pid}] 交互 `{ix.get('id')}` 的 on.event `{on.get('event')}` 不在白名单 {sorted(EVENT_WHITELIST)}")
+            if not (ix.get("actions") or []):
+                rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 没有 actions")
+            for act in ix.get("actions") or []:
+                atype = act.get("type")
+                if atype not in ACTION_WHITELIST:
+                    rep.error(f"[{pid}] 交互 `{ix.get('id')}` 使用了白名单外的 action `{atype}`；"
+                              f"可用：{sorted(ACTION_WHITELIST)}")
+                    continue
+                if atype == "navigate":
+                    tpid = act.get("pageId")
+                    if tpid not in page_ids:
+                        rep.error(f"[{pid}] 交互 `{ix.get('id')}` 跳转到不存在的页面 `{tpid}`")
+                    # navigate 可带 stateId：必须是「目标页」的状态
+                    if act.get("stateId"):
+                        tpage = pages_by_id.get(tpid) or {}
+                        tstates = {s.get("id") for s in (tpage.get("states") or [])}
+                        if act["stateId"] not in tstates:
+                            rep.error(f"[{pid}] 交互 `{ix.get('id')}` navigate.stateId `{act['stateId']}` "
+                                      f"不是目标页 `{tpid}` 的状态")
+                    if act.get("params") is not None and not isinstance(act["params"], dict):
+                        rep.error(f"[{pid}] 交互 `{ix.get('id')}` navigate.params 必须是对象")
+                    elif isinstance(act.get("params"), dict):
+                        # {{row.field}} 只有在「点表格行 / 行内操作按钮」时才有 row 上下文
+                        mt = SYNTH_RE.match(tgt or "")
+                        is_row_ctx = bool(mt and (mt.group(2).startswith("row_") or mt.group(2).startswith("act_")))
+                        for pk, pv in act["params"].items():
+                            if not isinstance(pv, str):
+                                continue
+                            for fld in re.findall(r"\{\{\s*row\.([A-Za-z0-9_]+)", pv):
+                                if not is_row_ctx:
+                                    rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 的 params.{pk} 用了 "
+                                             f"`{{{{row.{fld}}}}}`，但 on.target `{tgt}` 不是表格行/行内按钮，"
+                                             f"点击时没有 row 上下文")
+                                elif mt:
+                                    avail = table_row_keys.get(mt.group(1), set())
+                                    if avail and fld not in avail:
+                                        rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 的 params.{pk} 引用了 "
+                                                 f"row.{fld}，但 Table `{mt.group(1)}` 的数据里没有该字段"
+                                                 f"（可用：{sorted(avail)}）")
+                if atype == "gotoState" and act.get("stateId") not in state_ids:
+                    rep.error(f"[{pid}] 交互 `{ix.get('id')}` 切到不存在的状态 `{act.get('stateId')}`")
+                if atype == "setNode":
+                    check_target(f"交互 `{ix.get('id')}` 的 setNode", act.get("target"))
+                if atype == "scrollTo":
+                    if not act.get("target"):
+                        rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 的 scrollTo 缺少 target")
+                    else:
+                        check_target(f"交互 `{ix.get('id')}` 的 scrollTo", act.get("target"))
+                if atype in ("showModal", "showDrawer", "hideModal", "hideDrawer"):
+                    if not (act.get("modalId") or act.get("drawerId") or act.get("target")):
+                        rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 的 `{atype}` 缺少 modalId/drawerId/target")
+                if atype == "message" and not (act.get("text") or "").strip():
+                    rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 的 message 没有 text")
+                if atype == "delay" and not isinstance(act.get("ms"), (int, float)):
+                    rep.warn(f"[{pid}] 交互 `{ix.get('id')}` 的 delay 缺少 ms")
+        for st in states:
+            for ov in st.get("overrides") or []:
+                if ov.get("target") not in node_ids:
+                    rep.error(f"[{pid}] 状态 `{st.get('id')}` 覆写目标 `{ov.get('target')}` 不存在")
+            for hid in (st.get("hidden") or []):
+                if hid not in node_ids:
+                    rep.warn(f"[{pid}] 状态 `{st.get('id')}` hidden 列表含未知节点 `{hid}`")
+        # 标注
+        for a in p.get("annotations") or []:
+            anc = a.get("anchor") or {}
+            if anc.get("nodeId"):
+                bad = resolve_target(anc.get("nodeId"), page_node_types)
+                if bad:
+                    rep.error(f"[{pid}] 标注 `{a.get('id')}` 锚点：{bad}")
+            if a.get("status") not in ANNO_STATUS:
+                rep.error(f"[{pid}] 标注 `{a.get('id')}` status 非法：{a.get('status')!r}")
+            if a.get("status") == "resolved" and not (a.get("replies") or []):
+                rep.warn(f"[{pid}] 标注 `{a.get('id')}` 已标记处理但没有处理说明（replies 为空）")
+            if not (a.get("text") or "").strip():
+                rep.warn(f"[{pid}] 标注 `{a.get('id')}` 内容为空")
+        # 页面关系
+        for e in (p.get("entryFrom") or []) + (p.get("exitTo") or []):
+            if e not in page_ids:
+                rep.error(f"[{pid}] 页面关系引用了不存在的页面 `{e}`")
+        # PRD
+        prd = p.get("prd") or {}
+        if not (prd.get("sections") or []):
+            rep.warn(f"[{pid}] 缺少 prd.sections")
+        for rid in (prd.get("reqIds") or []):
+            if rid not in req_ids:
+                rep.error(f"[{pid}] prd.reqIds 引用了不存在的需求 `{rid}`")
+        # PRD 小节：type="flow" 的小节会渲染成内嵌 SVG 流程图，必须自带节点与边
+        for sec in (prd.get("sections") or []):
+            stype = sec.get("type")
+            if stype in (None, "", "text"):
+                continue
+            if stype != "flow":
+                rep.warn(f"[{pid}] prd.sections `{sec.get('id')}` 的 type `{stype}` 未知（只支持 flow）")
+                continue
+            sid = sec.get("id", "?")
+            fnodes = sec.get("nodes") or []
+            fedges = sec.get("edges") or []
+            if not fnodes:
+                rep.error(f"[{pid}] 流程图 `{sid}` 缺少 nodes")
+                continue
+            if len(fnodes) < 2:
+                rep.warn(f"[{pid}] 流程图 `{sid}` 只有 1 个节点，无法表达流程")
+            fids = set()
+            for n in fnodes:
+                nid = n.get("id")
+                if not nid:
+                    rep.error(f"[{pid}] 流程图 `{sid}` 有节点缺少 id")
+                    continue
+                if nid in fids:
+                    rep.error(f"[{pid}] 流程图 `{sid}` 节点 id `{nid}` 重复")
+                fids.add(nid)
+                if not (n.get("label") or "").strip():
+                    rep.warn(f"[{pid}] 流程图 `{sid}` 节点 `{nid}` 缺少 label")
+                kind = n.get("kind")
+                if kind and kind not in {"start", "end", "decision", "warn", "process"}:
+                    rep.warn(f"[{pid}] 流程图 `{sid}` 节点 `{nid}` 的 kind `{kind}` 不在 "
+                             f"start/end/decision/warn/process 内")
+            for e in fedges:
+                if e.get("from") not in fids:
+                    rep.error(f"[{pid}] 流程图 `{sid}` 边 from `{e.get('from')}` 不存在")
+                if e.get("to") not in fids:
+                    rep.error(f"[{pid}] 流程图 `{sid}` 边 to `{e.get('to')}` 不存在")
+                if e.get("from") and e.get("from") == e.get("to"):
+                    rep.warn(f"[{pid}] 流程图 `{sid}` 存在自环边 `{e.get('from')}`")
+            if fedges:
+                touched = {e.get("from") for e in fedges} | {e.get("to") for e in fedges}
+                for nid in sorted(fids - touched):
+                    rep.warn(f"[{pid}] 流程图 `{sid}` 节点 `{nid}` 是孤岛（没有任何边相连）")
+            if not (sec.get("caption") or "").strip():
+                rep.warn(f"[{pid}] 流程图 `{sid}` 建议补 caption（图注），便于 AI 理解该图的用途")
+        # 布局
+        lay = p.get("layout")
+        if lay and lay not in {"blank", "header-content", "sider-content", "header-sider-content"}:
+            rep.warn(f"[{pid}] layout `{lay}` 不在约定枚举内")
+
+    # 6. 需求 EARS 门禁
+    for r in data.get("requirements") or []:
+        rid = r.get("id", "?")
+        pat = r.get("pattern")
+        if pat not in EARS_PATTERNS:
+            rep.error(f"[{rid}] pattern `{pat}` 不在 EARS 五种句式内")
+        trig = (r.get("trigger") or "").strip()
+        if pat and not eval_pattern_trigger_ok(pat, trig):
+            rep.error(f"[{rid}] pattern={pat} 时 trigger 必须为空，当前为 {trig!r}")
+        if pat in {"event-driven"} and not trig:
+            rep.error(f"[{rid}] event-driven 句式必须填写 trigger")
+        if r.get("moduleId") and r.get("moduleId") not in module_ids:
+            rep.error(f"[{rid}] moduleId `{r.get('moduleId')}` 不存在")
+        if r.get("pageId") and r.get("pageId") not in page_ids:
+            rep.error(f"[{rid}] pageId `{r.get('pageId')}` 不存在")
+        if r.get("role") and r.get("role") not in user_ids and r.get("role") != "system":
+            rep.warn(f"[{rid}] role `{r.get('role')}` 不在 users 中（系统行为请写 'system'）")
+        if r.get("stateMachine") and r.get("stateMachine") not in sm_ids:
+            rep.error(f"[{rid}] stateMachine `{r.get('stateMachine')}` 不存在")
+        if r.get("status") not in REQ_STATUS:
+            rep.warn(f"[{rid}] status `{r.get('status')}` 非法（应为 draft/confirmed）")
+        if r.get("source") not in REQ_SOURCE:
+            rep.warn(f"[{rid}] source `{r.get('source')}` 非法（应为 user/demo/inferred）")
+        # 可验证性
+        blob = " ".join(str(r.get(k, "")) for k in ("expected", "rule", "title"))
+        hit = [w for w in SUBJECTIVE_WORDS if w in blob]
+        if hit:
+            rep.error(f"[{rid}] 含主观词 {hit}，不可验证，需改为量化描述")
+        impl = [w for w in IMPL_HINTS if w in blob]
+        if impl:
+            rep.warn(f"[{rid}] 疑似含实现细节 {impl}，需求应描述行为而非实现")
+        acc = r.get("acceptance") or []
+        if len(acc) < 2:
+            rep.error(f"[{rid}] acceptance 少于 2 条（需含正常路径与边界/异常）")
+        if r.get("stateMachine") and pat in {"event-driven", "unwanted"}:
+            joined = " ".join(acc)
+            if not any(k in joined for k in ("拒绝", "不可", "禁用", "非法",
+                                             "不允许", "置灰", "终态", "回退")):
+                rep.warn(f"[{rid}] 关联状态机但验收条件未覆盖「非法流转被拒绝」")
+        # 单一响应启发式
+        exp = str(r.get("expected", ""))
+        if exp.count("并且") + exp.count("以及") >= 2:
+            rep.warn(f"[{rid}] expected 可能包含多个响应，建议拆分为多条需求")
+        # inferred 需有对应 openQuestion
+        if r.get("source") == "inferred":
+            oq = " ".join((q.get("question", "") + q.get("answer", ""))
+                          for q in data.get("openQuestions") or [])
+            if r.get("title", "") not in oq and rid not in oq:
+                rep.warn(f"[{rid}] source=inferred 但 openQuestions 中未见对应确认项")
+
+    # 7. 状态机
+    for sm in data.get("stateMachines") or []:
+        sid = sm.get("id", "?")
+        sids = {s.get("id") for s in sm.get("states") or []}
+        if not sids:
+            rep.error(f"[{sid}] states 为空")
+            continue
+        if sm.get("initial") not in sids:
+            rep.error(f"[{sid}] initial `{sm.get('initial')}` 不在 states 中")
+        has_in, has_out = set(), set()
+        for t in sm.get("transitions") or []:
+            if t.get("from") not in sids:
+                rep.error(f"[{sid}] 转移 `{t.get('id')}` 的 from `{t.get('from')}` 不存在")
+            if t.get("to") not in sids:
+                rep.error(f"[{sid}] 转移 `{t.get('id')}` 的 to `{t.get('to')}` 不存在")
+            if not (t.get("trigger") or "").strip():
+                rep.warn(f"[{sid}] 转移 `{t.get('id')}` 缺少 trigger")
+            if t.get("role") and t.get("role") not in user_ids and t.get("role") != "system":
+                rep.warn(f"[{sid}] 转移 `{t.get('id')}` 的 role `{t.get('role')}` 不在 users 中")
+            has_in.add(t.get("to"))
+            has_out.add(t.get("from"))
+        for st in sids:
+            if st == sm.get("initial"):
+                if st not in has_out and len(sids) > 1:
+                    rep.warn(f"[{sid}] 初始状态 `{st}` 没有任何出边")
+                continue
+            if st not in has_in and st not in has_out:
+                rep.warn(f"[{sid}] 孤立状态 `{st}`：既无入边也无出边")
+
+    # 8. boardPlan
+    for b in data.get("boardPlan") or []:
+        if b.get("status") not in BOARD_STATUS:
+            rep.error(f"[bp] `{b.get('id')}` status `{b.get('status')}` 非法（todo/doing/done）")
+        if b.get("pageId") and b.get("pageId") not in page_ids:
+            rep.error(f"[bp] `{b.get('id')}` pageId `{b.get('pageId')}` 不存在")
+        for rid in b.get("reqIds") or []:
+            if rid not in req_ids:
+                rep.error(f"[bp] `{b.get('id')}` reqIds 引用不存在的需求 `{rid}`")
+
+    # 9. userFlows / 模块
+    for f in data.get("userFlows") or []:
+        if f.get("role") and f.get("role") not in user_ids:
+            rep.warn(f"[flow] `{f.get('id')}` role `{f.get('role')}` 不在 users 中")
+        for s in f.get("steps") or []:
+            if s.get("pageId") and s.get("pageId") not in page_ids:
+                rep.error(f"[flow] `{f.get('id')}` 步骤 `{s.get('id')}` pageId `{s.get('pageId')}` 不存在")
+    for m in data.get("modules") or []:
+        for pid2 in m.get("pageIds") or []:
+            if pid2 not in page_ids:
+                rep.error(f"[module] `{m.get('id')}` pageIds 含不存在的页面 `{pid2}`")
+
+    # 10. dataModel（机器可读的数据实体，供 AI 生成 TS 类型 / mock / 接口契约）
+    dm = data.get("dataModel")
+    if dm is None:
+        rep.info("未提供 dataModel：devspec 仍可导出，但后端建模需自行补全")
+    else:
+        if isinstance(dm, list):
+            ents = dm
+            derived = []
+            rep.warn("dataModel 建议写成 {entities:[...], derived:[...]} 对象形式")
+        else:
+            ents = dm.get("entities") or []
+            derived = dm.get("derived") or []
+        if not ents:
+            rep.warn("dataModel.entities 为空")
+        ent_ids, ent_names = set(), set()
+        for en in ents:
+            eid = en.get("id")
+            if not eid:
+                rep.error("[dataModel] 存在缺少 id 的实体")
+                continue
+            if eid in ent_ids:
+                rep.error(f"[dataModel] 实体 id `{eid}` 重复")
+            ent_ids.add(eid)
+            nm = en.get("name")
+            if not nm:
+                rep.error(f"[dataModel] 实体 `{eid}` 缺少 name（建议用大驼峰实体名）")
+            elif nm in ent_names:
+                rep.warn(f"[dataModel] 实体 name `{nm}` 重复")
+            else:
+                ent_names.add(nm)
+            if not en.get("table"):
+                rep.warn(f"[dataModel] 实体 `{eid}` 缺少 table（物理表名），AI 生成接口契约时会自行猜测")
+            flds = en.get("fields") or []
+            if not flds:
+                rep.error(f"[dataModel] 实体 `{eid}` 缺少 fields")
+            fnames = set()
+            pk = 0
+            for f in flds:
+                fn = f.get("name")
+                if not fn:
+                    rep.error(f"[dataModel] 实体 `{eid}` 有字段缺少 name")
+                    continue
+                if fn in fnames:
+                    rep.error(f"[dataModel] 实体 `{eid}` 字段 `{fn}` 重复")
+                fnames.add(fn)
+                if not f.get("type"):
+                    rep.warn(f"[dataModel] `{eid}.{fn}` 缺少 type")
+                if f.get("key") == "pk":
+                    pk += 1
+            if pk == 0:
+                rep.warn(f"[dataModel] 实体 `{eid}` 没有标 key:\"pk\" 的主键字段")
+            elif pk > 1:
+                rep.error(f"[dataModel] 实体 `{eid}` 标了 {pk} 个主键")
+            for pid3 in en.get("pageIds") or []:
+                if pid3 not in page_ids:
+                    rep.error(f"[dataModel] 实体 `{eid}` pageIds 含不存在的页面 `{pid3}`")
+        # 关系目标必须存在
+        for en in ents:
+            for rel in en.get("relations") or []:
+                tgt = rel.get("target")
+                if tgt not in ent_ids:
+                    rep.error(f"[dataModel] 实体 `{en.get('id')}` 的关系 target `{tgt}` 不存在")
+                if not rel.get("type"):
+                    rep.warn(f"[dataModel] 实体 `{en.get('id')}` 的关系缺少 type（belongs_to/has_many/…）")
+        for d in derived:
+            if not d.get("name"):
+                rep.error("[dataModel.derived] 存在缺少 name 的派生字段")
+                continue
+            if not (d.get("expr") or "").strip():
+                rep.warn(f"[dataModel.derived] `{d.get('name')}` 缺少 expr")
+            if not (d.get("fallback") or "").strip():
+                rep.warn(f"[dataModel.derived] `{d.get('name')}` 建议写 fallback（除零 / 空值时的展示）")
+            for pid4 in d.get("usedBy") or []:
+                if pid4 not in page_ids:
+                    rep.error(f"[dataModel.derived] `{d.get('name')}` usedBy 含不存在的页面 `{pid4}`")
+            if d.get("reqId") and d["reqId"] not in req_ids:
+                rep.error(f"[dataModel.derived] `{d.get('name')}` reqId `{d['reqId']}` 不存在")
+        if ents:
+            rep.info(f"dataModel：{len(ents)} 个实体 / {sum(len(e.get('fields') or []) for e in ents)} 个字段"
+                     f" / {len(derived)} 个派生字段")
+
+    # 11. 机器可读性总检：AI 开发所需的最小信息是否齐备
+    missing = []
+    if not (data.get("pages") or []):
+        missing.append("pages")
+    if not (data.get("requirements") or []):
+        missing.append("requirements(EARS)")
+    if not (data.get("modules") or []):
+        missing.append("modules")
+    if dm is None:
+        missing.append("dataModel")
+    if missing:
+        rep.warn(f"机器可读性：缺少 {missing}，AI 据此开发会自行补全（建议补齐）")
+
+    # 统计
+    roots = [p for p in (data.get("pages") or []) if not p.get("parentId")]
+    nested = len(data.get("pages") or []) - len(roots)
+    rep.info(f"导航树：{len(data.get('modules') or [])} 个模块 / "
+             f"{len(roots)} 个顶级页面 / {nested} 个子页面")
+    rep.info(f"pages={len(data.get('pages') or [])} "
+             f"modules={len(data.get('modules') or [])} "
+             f"requirements={len(data.get('requirements') or [])} "
+             f"stateMachines={len(data.get('stateMachines') or [])} "
+             f"nodes={len(node_ids)}")
+
+
+def run(paths, as_json=False):
+    results = []
+    worst = 0
+    for p in paths:
+        if not os.path.exists(p):
+            rep = Report(p)
+            rep.error("文件不存在")
+            results.append(rep)
+            worst = 1
+            continue
+        rep = Report(p)
+        try:
+            data = load_data(p)
+        except Exception as e:
+            rep.error(f"解析失败：{e}")
+            results.append(rep)
+            worst = 1
+            continue
+        try:
+            validate(data, rep)
+        except Exception as e:
+            rep.error(f"校验过程异常：{e}")
+        if rep.errors:
+            worst = 1
+        results.append(rep)
+
+    if as_json:
+        out = [{"target": r.target, "errors": r.errors, "warns": r.warns, "infos": r.infos}
+               for r in results]
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return worst
+
+    for r in results:
+        print("=" * 68)
+        print(f"目标：{r.target}")
+        for i in r.infos:
+            print(f"  · {i}")
+        for w in r.warns:
+            print(f"  WARN  {w}")
+        for e in r.errors:
+            print(f"  ERROR {e}")
+        status = "FAIL" if r.errors else ("PASS(with warnings)" if r.warns else "PASS")
+        print(f"  => {status}  (errors={len(r.errors)}, warnings={len(r.warns)})")
+    print("=" * 68)
+    print("结论：" + ("存在 ERROR，必须修复后交付" if worst else "全部通过结构校验"))
+    return worst
+
+
+if __name__ == "__main__":
+    args = [a for a in sys.argv[1:] if a != "--json"]
+    as_json = "--json" in sys.argv
+    if not args:
+        print(__doc__)
+        sys.exit(2)
+    sys.exit(run(args, as_json))

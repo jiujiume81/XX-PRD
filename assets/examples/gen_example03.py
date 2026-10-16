@@ -1,0 +1,935 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""生成 example-03：多模块 + 多级页面（电商运营后台），用于验证左侧树形导航。"""
+import json, io, os
+
+MENU = [
+    {"key": "dash", "label": "概览", "icon": "dashboard"},
+    {"key": "goods", "label": "商品", "icon": "shopping"},
+    {"key": "order", "label": "订单", "icon": "list"},
+    {"key": "market", "label": "营销", "icon": "gift"},
+    {"key": "sys", "label": "设置", "icon": "setting"},
+]
+
+
+def header(title, back=False):
+    n = {"id": "n-header", "type": "Header", "props": {"title": title, "logo": not back}}
+    if back:
+        n["props"]["back"] = True
+    n["slots"] = {"extra": [{"id": "n-bell", "type": "Badge", "props": {"count": 5}},
+                            {"id": "n-avatar", "type": "Avatar", "props": {"text": "运"}}]}
+    return n
+
+
+def sider(sel):
+    return {"id": "n-sider", "type": "Sider", "props": {"width": 200},
+            "children": [{"id": "n-menu", "type": "Menu",
+                          "props": {"mode": "inline", "selectedKey": sel, "items": MENU}}]}
+
+
+def alert(msg="数据加载失败，请稍后重试"):
+    return {"id": "n-alert", "type": "Alert",
+            "props": {"type": "error", "message": msg, "showIcon": True, "visible": False}}
+
+
+def content(children):
+    return {"id": "n-content", "type": "Content", "children": children}
+
+
+def layout_sider(sel, children, title="电商运营后台"):
+    return {"id": "n-root", "type": "Layout", "props": {"layout": "header-sider-content"},
+            "children": [header(title), sider(sel), content(children)]}
+
+
+def layout_plain(children, title, back=True):
+    return {"id": "n-root", "type": "Layout", "props": {"layout": "header-content"},
+            "children": [header(title, back=back), content(children)]}
+
+
+def crumb(items):
+    return {"id": "n-crumb", "type": "Breadcrumb", "props": {"items": [{"label": x} for x in items]}}
+
+
+def states(load_tgt="n-table", err="数据加载失败，请稍后重试", empty_text="暂无数据", with_empty=True,
+           default_vars=None):
+    """default_vars 用于给「从别处带参跳转过来」的页面提供默认值：
+    页面初始态先铺默认值，navigate 的 params 再覆盖，所以 {{goodsName}} 永远有内容可显示。"""
+    dv = {"loading": False, "empty": False, "error": False}
+    if default_vars:
+        dv.update(default_vars)
+    st = [
+        {"id": "s-default", "name": "默认态", "description": "有数据，无筛选条件",
+         "vars": dv,
+         "overrides": [{"target": "n-alert", "prop": "visible", "value": False}]},
+        {"id": "s-loading", "name": "加载态", "description": "首次进入页面，数据请求中",
+         "vars": {"loading": True},
+         "overrides": [{"target": load_tgt, "prop": "loading", "value": True}]},
+    ]
+    if with_empty:
+        st.append({"id": "s-empty", "name": "空态", "description": "当前筛选条件下没有任何记录",
+                   "vars": {"loading": False, "empty": True},
+                   "overrides": [{"target": load_tgt, "prop": "empty", "value": True},
+                                 {"target": load_tgt, "prop": "emptyText", "value": empty_text}]})
+    st.append({"id": "s-error", "name": "异常态", "description": "数据请求失败或网络异常",
+               "vars": {"error": True},
+               "overrides": [{"target": "n-alert", "prop": "visible", "value": True},
+                             {"target": "n-alert", "prop": "type", "value": "error"},
+                             {"target": "n-alert", "prop": "message", "value": err}]})
+    return st
+
+
+def prd(goal, struct, ix, rules, st_txt, edge, req_ids, flow=None):
+    """flow: 可选。形如 {"id","heading","caption","dir","nodes":[...],"edges":[...]}
+    容器会把 type="flow" 的小节渲染成内嵌 SVG 流程图（复用画布的分层布局引擎）。"""
+    secs = [
+        {"id": "sec-goal", "heading": "页面目标", "body": goal},
+        {"id": "sec-struct", "heading": "页面结构", "body": struct},
+        {"id": "sec-ix", "heading": "交互说明", "body": ix},
+        {"id": "sec-rules", "heading": "业务规则", "body": rules},
+        {"id": "sec-states", "heading": "页面状态", "body": st_txt},
+        {"id": "sec-edge", "heading": "数据与边界", "body": edge},
+    ]
+    if flow:
+        secs.append(flow)
+    return {"summary": goal, "reqIds": req_ids, "sections": secs}
+
+
+def flow_sec(sec_id, heading, caption, nodes, edges, body=None, direction="LR"):
+    d = {"id": sec_id, "heading": heading, "type": "flow", "caption": caption,
+         "dir": direction, "nodes": nodes, "edges": edges}
+    if body:
+        d["body"] = body
+    return d
+
+
+# ---------------------------------------------------------------- pages
+pages = []
+
+# 1. 概览页
+pages.append({
+    "id": "page-overview", "moduleId": "m-dash", "name": "数据概览", "route": "/dashboard",
+    "goal": "让运营在进入后台的第一屏看到当日核心指标与待处理事项",
+    "entryFrom": [], "exitTo": ["page-goods-list", "page-order-list"],
+    "layout": "header-sider-content", "defaultStateId": "s-default",
+    "componentTree": layout_sider("dash", [
+        crumb(["首页", "数据概览"]),
+        alert(),
+        {"id": "n-stat-row", "type": "Row", "props": {"gutter": 16}, "children": [
+            {"id": "n-c1", "type": "Col", "props": {"span": 6}, "children": [
+                {"id": "n-s1", "type": "Card", "props": {"size": True}, "children": [
+                    {"id": "n-t1", "type": "Statistic", "props": {"title": "今日成交额", "value": "¥ 128,430", "trend": "up"}}]}]},
+            {"id": "n-c2", "type": "Col", "props": {"span": 6}, "children": [
+                {"id": "n-s2", "type": "Card", "props": {"size": True}, "children": [
+                    {"id": "n-t2", "type": "Statistic", "props": {"title": "待发货订单", "value": "36"}}]}]},
+            {"id": "n-c3", "type": "Col", "props": {"span": 6}, "children": [
+                {"id": "n-s3", "type": "Card", "props": {"size": True}, "children": [
+                    {"id": "n-t3", "type": "Statistic", "props": {"title": "库存预警商品", "value": "7", "trend": "down"}}]}]},
+            {"id": "n-c4", "type": "Col", "props": {"span": 6}, "children": [
+                {"id": "n-s4", "type": "Card", "props": {"size": True}, "children": [
+                    {"id": "n-t4", "type": "Statistic", "props": {"title": "退款处理中", "value": "3"}}]}]}]},
+        {"id": "n-chart-card", "type": "Card", "props": {"title": "近 7 日成交趋势"}, "children": [
+            {"id": "n-chart", "type": "Chart", "props": {"type": "line", "height": 200, "data": [
+                {"label": "10-09", "value": 82000}, {"label": "10-10", "value": 91000},
+                {"label": "10-11", "value": 76000}, {"label": "10-12", "value": 108000},
+                {"label": "10-13", "value": 96000}, {"label": "10-14", "value": 117000},
+                {"label": "10-15", "value": 128430}]}}]},
+        {"id": "n-todo-card", "type": "Card", "props": {"title": "待处理事项"}, "children": [
+            {"id": "n-todo", "type": "List", "props": {
+                "data": [
+                    {"t": "3 笔退款申请待审核", "w": "退款"}, {"t": "7 个商品库存低于安全线", "w": "库存"},
+                    {"t": "2 张优惠券今日到期", "w": "营销"}],
+                # renderItem 必须写在 props 内；模板占位用 {{item.字段}}，不是 {{字段}}
+                "renderItem": {"id": "n-todo-item", "type": "Paragraph",
+                               "props": {"text": "[{{item.w}}] {{item.t}}"}}}}]},
+    ]),
+    "states": states(load_tgt="n-todo-card", empty_text="今天没有待处理事项"),
+    "interactions": [
+        {"id": "ix-ov-goods", "name": "查看商品管理", "on": {"event": "click", "target": "n-c3"},
+         "actions": [{"type": "navigate", "pageId": "page-goods-list"}]},
+        {"id": "ix-ov-orders", "name": "查看订单管理", "on": {"event": "click", "target": "n-c2"},
+         "actions": [{"type": "navigate", "pageId": "page-order-list"}]},
+        {"id": "ix-ov-refresh", "name": "刷新指标", "on": {"event": "click", "target": "n-crumb"},
+         "actions": [{"type": "message", "level": "success", "text": "指标已刷新"}]},
+    ],
+    "annotations": [
+        {"id": "an-ov-1", "pageId": "page-overview", "anchor": {"nodeId": "n-c3", "x": 0.5, "y": 0.5},
+         "text": "「库存预警商品」卡片希望点进去直接是筛选好的商品列表，而不是商品列表首页。",
+         "category": "interaction", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T09:20:00+08:00", "replies": []},
+        {"id": "an-ov-2", "pageId": "page-overview", "anchor": {"nodeId": "n-chart", "x": 0.5, "y": 0.4},
+         "text": "趋势图希望默认展示近 7 日，并且能切换成近 30 日。",
+         "category": "ui", "author": "PM", "status": "resolved",
+         "createdAt": "2026-10-15T09:05:00+08:00",
+         "replies": [{"author": "AI", "text": "已在 n-chart-card 增加时间范围切换，默认近 7 日。",
+                      "createdAt": "2026-10-15T09:12:00+08:00"}]},
+    ],
+    "prd": prd(
+        "让运营在进入后台的第一屏看到当日核心指标与待处理事项，不需要跳转即可判断今天要做什么。",
+        "顶部为全局导航（Header + Sider）；内容区自上而下为：面包屑 → 异常提示条 → 四张指标卡 → 成交趋势图 → 待处理事项列表。",
+        "1. 点击「库存预警商品」卡片跳转到商品列表并预置「库存低于安全线」筛选。\n2. 点击「待发货订单」卡片跳转到订单列表并预置「待发货」筛选。\n3. 趋势图默认展示近 7 日，可切换为近 30 日。",
+        "- 指标口径为自然日，统计区间为当日 00:00 至当前时刻。\n- 成交额不含已取消与已关闭订单。\n- 库存低于安全线指可售库存小于该商品设定的安全库存值。",
+        "覆盖四态：默认态（有指标数据）、加载态（待处理列表骨架屏）、空态（无待处理事项引导文案）、异常态（顶部错误提示条）。",
+        "指标数据按 60 秒缓存；切换时间范围重新拉取；单次趋势图最多返回 90 个数据点。",
+        ["REQ-DASH-001", "REQ-DASH-002"]),
+})
+
+# 2. 商品列表
+pages.append({
+    "id": "page-goods-list", "moduleId": "m-goods", "name": "商品列表", "route": "/goods",
+    "goal": "让运营按状态与关键词快速定位商品并进入编辑",
+    "entryFrom": ["page-overview"], "exitTo": ["page-goods-detail", "page-goods-edit"],
+    "layout": "header-sider-content", "defaultStateId": "s-default",
+    "componentTree": layout_sider("goods", [
+        crumb(["首页", "商品管理", "商品列表"]),
+        alert(),
+        {"id": "n-toolbar", "type": "Space", "props": {"size": 8, "wrap": True}, "children": [
+            {"id": "n-search", "type": "Input", "props": {"placeholder": "搜索商品名称或编码", "prefix": "search", "allowClear": True}},
+            {"id": "n-status", "type": "Select", "props": {"placeholder": "全部状态", "options": [
+                {"label": "草稿", "value": "draft"}, {"label": "待上架", "value": "pending"},
+                {"label": "已上架", "value": "on_shelf"}, {"label": "已下架", "value": "off_shelf"}]}},
+            {"id": "n-cat", "type": "Select", "props": {"placeholder": "全部分类", "options": [
+                {"label": "服饰", "value": "cloth"}, {"label": "数码", "value": "digital"}]}},
+            {"id": "n-btn-new", "type": "Button", "props": {"text": "新建商品", "type": "primary", "icon": "plus"}}]},
+        {"id": "n-table", "type": "Table", "props": {
+            "rowSelection": True, "bordered": False, "rowClick": True,
+            "columns": [{"title": "商品名称", "dataIndex": "name"}, {"title": "编码", "dataIndex": "sku"},
+                        {"title": "状态", "dataIndex": "status", "type": "tag"}, {"title": "可售库存", "dataIndex": "stock"},
+                        {"title": "售价", "dataIndex": "price"},
+                        {"title": "操作", "type": "action", "actions": [
+                            {"key": "off", "label": "下架", "type": "danger"}]}],
+            "data": [{"name": "轻量羽绒外套", "sku": "GD-1001", "status": "已上架", "stock": "128", "price": "¥ 599"},
+                     {"name": "无线降噪耳机", "sku": "GD-1002", "status": "待上架", "stock": "0", "price": "¥ 899"},
+                     {"name": "便携咖啡杯", "sku": "GD-1003", "status": "草稿", "stock": "56", "price": "¥ 129"},
+                     {"name": "轻薄双肩包", "sku": "GD-1004", "status": "已下架", "stock": "12", "price": "¥ 359"}]}},
+        {"id": "n-page", "type": "Pagination", "props": {"total": 128, "current": 1, "pageSize": 10}},
+    ]),
+    "states": states(empty_text="还没有商品，点击右上角「新建商品」开始"),
+    "interactions": [
+        {"id": "ix-goods-new", "name": "新建商品", "on": {"event": "click", "target": "n-btn-new"},
+         "actions": [{"type": "navigate", "pageId": "page-goods-edit"}]},
+        # —— 行级跳转：Table 开启 props.rowClick 后，每行得到合成 id `<tableId>__row_<i>`。
+        #    用 `*` 通配让**一条** interaction 服务所有行；params 里写 {{row.字段}}，
+        #    容器在「源页」求值后再写入 RT.vars，所以详情页能按行显示不同商品。
+        {"id": "ix-goods-row", "name": "点行查看商品详情",
+         "on": {"event": "click", "target": "n-table__row_*"},
+         "actions": [{"type": "navigate", "pageId": "page-goods-detail",
+                      "params": {"goodsName": "{{row.name}}", "goodsSku": "{{row.sku}}",
+                                 "goodsStatus": "{{row.status}}"}}]},
+        # —— 操作列按钮：合成 id 为 `<tableId>__act_<i>_<key>`。点击按钮时「就近命中」按钮而非整行，
+        #    所以点「下架」只提示，不会误跳到详情页；文案里的 {{row.name}} 也来自该行。
+        {"id": "ix-goods-off", "name": "下架商品",
+         "on": {"event": "click", "target": "n-table__act_*_off"},
+         "actions": [{"type": "message", "level": "warning", "text": "已下架：{{row.name}}"}]},
+        {"id": "ix-goods-batch-off", "name": "批量下架", "on": {"event": "click", "target": "n-cat"},
+         "actions": [{"type": "message", "level": "warning", "text": "已下架 0 个商品：请先勾选商品"}]},
+    ],
+    "annotations": [
+        {"id": "an-goods-1", "pageId": "page-goods-list", "anchor": {"nodeId": "n-table", "x": 0.3, "y": 0.6},
+         "text": "库存为 0 的商品希望在「可售库存」列显示红色，而不是普通文字。",
+         "category": "ui", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T09:40:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营按状态与关键词在两次操作内定位到目标商品，并进入编辑或详情。",
+        "顶部为全局导航；内容区自上而下为：面包屑 → 异常提示条 → 工具栏（搜索 / 状态 / 分类 / 新建商品） → 商品表格 → 分页。",
+        "1. 点击「新建商品」进入商品编辑页。\n2. 点击表格任意行进入该商品的详情页，并把该行商品名带到详情页。\n3. 点击行内「下架」按钮只下架该商品，不进入详情页。\n4. 未勾选商品时点击「批量下架」提示先勾选。",
+        "- 商品编码全站唯一，创建后不可修改。\n- 可售库存为 0 时不允许上架。\n- 列表默认按「更新时间倒序」排列。",
+        "覆盖四态：默认态（有商品）、加载态（表格骨架屏）、空态（无商品引导文案）、异常态（顶部错误提示条）。",
+        "单页最多返回 200 条；搜索关键词长度上限 50 字；状态与分类筛选可叠加。",
+        ["REQ-GOODS-001"],
+        flow=flow_sec("sec-flow", "页面主流程", "商品列表：从筛选到进入详情 / 编辑", [
+            {"id": "n1", "label": "进入商品列表", "sub": "/goods", "kind": "start"},
+            {"id": "n2", "label": "筛选 / 搜索", "sub": "状态 + 关键词"},
+            {"id": "n3", "label": "命中商品？", "kind": "decision"},
+            {"id": "n4", "label": "空态引导", "sub": "新建商品", "kind": "warn"},
+            {"id": "n5", "label": "点击行 → 详情", "sub": "/goods/:id"},
+            {"id": "n6", "label": "点击「下架」", "sub": "只作用于该行"},
+            {"id": "n7", "label": "结束", "kind": "end"},
+        ], [
+            {"from": "n1", "to": "n2"},
+            {"from": "n2", "to": "n3"},
+            {"from": "n3", "to": "n4", "label": "否"},
+            {"from": "n3", "to": "n5", "label": "是"},
+            {"from": "n4", "to": "n2", "label": "改条件"},
+            {"from": "n5", "to": "n7"},
+            {"from": "n5", "to": "n6", "label": "操作列"},
+            {"from": "n6", "to": "n7"},
+        ])),
+})
+
+# 3. 商品详情（子页面）
+pages.append({
+    "id": "page-goods-detail", "moduleId": "m-goods", "parentId": "page-goods-list",
+    "name": "商品详情", "route": "/goods/:id",
+    "goal": "让运营在一个页面内看清商品全貌、规格与上下架记录",
+    "entryFrom": ["page-goods-list"], "exitTo": ["page-goods-edit"],
+    "layout": "header-content", "defaultStateId": "s-default",
+    "componentTree": layout_plain([
+        crumb(["首页", "商品管理", "商品列表", "商品详情"]),
+        alert(),
+        {"id": "n-desc", "type": "Descriptions", "props": {"title": "基本信息", "column": 3, "items": [
+            {"label": "商品名称", "value": "{{goodsName}}"}, {"label": "商品编码", "value": "{{goodsSku}}"},
+            {"label": "状态", "value": "{{goodsStatus}}"}, {"label": "分类", "value": "服饰 / 外套"},
+            {"label": "售价", "value": "¥ 599"}, {"label": "可售库存", "value": "128"}]}},
+        {"id": "n-tabs", "type": "Tabs", "props": {"activeKey": "sku", "items": [
+            {"key": "sku", "label": "规格库存"}, {"key": "log", "label": "上下架记录"},
+            {"key": "stat", "label": "销量统计"}]}},
+        {"id": "n-table", "type": "Table", "props": {"size": "small", "columns": [
+            {"title": "规格", "dataIndex": "spec"}, {"title": "编码", "dataIndex": "sku"},
+            {"title": "库存", "dataIndex": "stock"}, {"title": "操作", "type": "action"}],
+            "data": [{"spec": "黑色 / M", "sku": "GD-1001-BM", "stock": "42"},
+                     {"spec": "黑色 / L", "sku": "GD-1001-BL", "stock": "36"},
+                     {"spec": "白色 / M", "sku": "GD-1001-WM", "stock": "50"}]}},
+        {"id": "n-tl", "type": "Timeline", "props": {"items": [
+            {"content": "由 运营小周 上架", "time": "2026-10-14 10:20"},
+            {"content": "由 运营小周 修改售价 ¥ 649 → ¥ 599", "time": "2026-10-12 16:05"},
+            {"content": "由 运营小赵 创建商品", "time": "2026-10-10 09:30"}]}},
+        {"id": "n-actions", "type": "Space", "props": {"size": 8}, "children": [
+            {"id": "n-btn-edit", "type": "Button", "props": {"text": "编辑商品", "type": "primary", "icon": "edit"}},
+            {"id": "n-btn-off", "type": "Button", "props": {"text": "下架商品"}}]},
+    ], "商品详情"),
+    "states": states(empty_text="商品不存在或已被删除",
+                    default_vars={"goodsName": "轻量羽绒外套", "goodsSku": "GD-1001", "goodsStatus": "已上架"}),
+    "interactions": [
+        {"id": "ix-gd-edit", "name": "进入编辑", "on": {"event": "click", "target": "n-btn-edit"},
+         "actions": [{"type": "navigate", "pageId": "page-goods-edit",
+                      "params": {"goodsName": "{{goodsName}}"}}]},
+        {"id": "ix-gd-off", "name": "下架商品", "on": {"event": "click", "target": "n-btn-off"},
+         "actions": [{"type": "message", "level": "success", "text": "商品已下架"}]},
+    ],
+    "annotations": [
+        {"id": "an-gd-1", "pageId": "page-goods-detail", "anchor": {"nodeId": "n-tl", "x": 0.4, "y": 0.4},
+         "text": "上下架记录希望带上操作人角色，方便追溯。",
+         "category": "content", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T09:52:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营在一个页面内看清商品全貌、规格库存与上下架记录，并能直接进入编辑。",
+        "顶部为返回式导航栏；内容区自上而下为：面包屑 → 异常提示条 → 基本信息描述列表 → 选项卡（规格库存 / 上下架记录 / 销量统计） → 规格表格 → 操作记录时间线 → 底部操作按钮。",
+        "1. 点击「编辑商品」进入商品编辑页。\n2. 点击「下架商品」后顶部提示「商品已下架」并回到列表。\n3. 选项卡切换不刷新页面。",
+        "- 商品不存在或已被删除时展示空态引导返回列表。\n- 已下架商品不展示「下架商品」按钮。",
+        "覆盖四态：默认态、加载态（规格表格骨架屏）、空态（商品不存在）、异常态（顶部错误提示条）。",
+        "规格数量上限 200 条；操作记录保留最近 90 天。",
+        ["REQ-GOODS-002"]),
+})
+
+# 4. 商品编辑（子页面）
+pages.append({
+    "id": "page-goods-edit", "moduleId": "m-goods", "parentId": "page-goods-list",
+    "name": "商品编辑", "route": "/goods/:id/edit",
+    "goal": "让运营在一次表单填写中完成商品信息与规格的维护",
+    "entryFrom": ["page-goods-list", "page-goods-detail"], "exitTo": ["page-goods-list"],
+    "layout": "header-content", "defaultStateId": "s-default",
+    "componentTree": layout_plain([
+        crumb(["首页", "商品管理", "商品列表", "商品编辑"]),
+        alert(),
+        {"id": "n-steps", "type": "Steps", "props": {"current": 1, "items": [
+            {"title": "基本信息"}, {"title": "规格库存"}, {"title": "确认提交"}]}},
+        {"id": "n-card-form", "type": "Card", "props": {"title": "基本信息"}, "children": [
+            {"id": "n-form", "type": "Form", "props": {"layout": "vertical"}, "children": [
+                {"id": "n-fi-name", "type": "FormItem", "props": {"label": "商品名称", "required": True}, "children": [
+                    {"id": "n-in-name", "type": "Input", "props": {"placeholder": "不超过 60 字", "value": "轻量羽绒外套"}}]},
+                {"id": "n-fi-cat", "type": "FormItem", "props": {"label": "商品分类", "required": True}, "children": [
+                    {"id": "n-in-cat", "type": "Cascader", "props": {"value": "服饰 / 外套"}}]},
+                {"id": "n-fi-price", "type": "FormItem", "props": {"label": "售价（元）", "required": True}, "children": [
+                    {"id": "n-in-price", "type": "InputNumber", "props": {"value": 599}}]},
+                {"id": "n-fi-shelf", "type": "FormItem", "props": {"label": "创建后立即上架"}, "children": [
+                    {"id": "n-in-shelf", "type": "Switch", "props": {"checked": False}}]}]}]},
+        {"id": "n-card-sku", "type": "Card", "props": {"title": "规格库存"}, "children": [
+            {"id": "n-table", "type": "Table", "props": {"size": "small", "columns": [
+                {"title": "规格", "dataIndex": "spec"}, {"title": "库存", "dataIndex": "stock"},
+                {"title": "操作", "type": "action"}],
+                "data": [{"spec": "黑色 / M", "stock": "42"}, {"spec": "黑色 / L", "stock": "36"}]}},
+            {"id": "n-btn-addsku", "type": "Button", "props": {"text": "添加规格", "icon": "plus"}}]},
+        {"id": "n-actions", "type": "Space", "props": {"size": 8}, "children": [
+            {"id": "n-btn-cancel", "type": "Button", "props": {"text": "取消"}},
+            {"id": "n-btn-save", "type": "Button", "props": {"text": "保存并返回", "type": "primary"}}]},
+    ], "商品编辑"),
+    "states": states(load_tgt="n-card-form", err="商品信息加载失败，请返回重试", with_empty=False),
+    "notApplicableStates": ["empty"],
+    "interactions": [
+        {"id": "ix-ge-save", "name": "保存商品", "on": {"event": "click", "target": "n-btn-save"},
+         "conditions": ["loading !== true"],
+         "actions": [{"type": "setNode", "target": "n-btn-save", "prop": "loading", "value": True},
+                     {"type": "delay", "ms": 500},
+                     {"type": "message", "level": "success", "text": "商品已保存"},
+                     {"type": "navigate", "pageId": "page-goods-list"}]},
+        {"id": "ix-ge-cancel", "name": "取消编辑", "on": {"event": "click", "target": "n-btn-cancel"},
+         "actions": [{"type": "navigate", "pageId": "page-goods-list"}]},
+        {"id": "ix-ge-addsku", "name": "添加规格", "on": {"event": "click", "target": "n-btn-addsku"},
+         "actions": [{"type": "message", "level": "info", "text": "已新增一行规格，请填写库存"}]},
+    ],
+    "annotations": [
+        {"id": "an-ge-1", "pageId": "page-goods-edit", "anchor": {"nodeId": "n-in-price", "x": 0.4, "y": 0.5},
+         "text": "售价输入框希望带两位小数校验，避免填成 599.999。",
+         "category": "validation", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T10:05:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营在一次表单填写中完成商品信息与规格维护，保存后回到列表并看到最新状态。",
+        "顶部为返回式导航栏；内容区自上而下为：面包屑 → 异常提示条 → 步骤条 → 基本信息表单卡 → 规格库存卡 → 底部操作按钮。",
+        "1. 点击「保存并返回」按钮进入加载态，成功后提示「商品已保存」并跳回商品列表。\n2. 点击「取消」直接返回商品列表且不保存。\n3. 点击「添加规格」在规格表格追加一行。",
+        "- 商品名称必填且不超过 60 字。\n- 售价必填，最多两位小数，且必须大于 0。\n- 已上架商品的规格数量不可少于 1 条。",
+        "覆盖三态：默认态、加载态（表单卡骨架屏）、异常态（顶部错误提示条）。本页不涉及列表，空态不适用。",
+        "表单草稿在离开页面时丢弃；规格行上限 200 行；保存接口幂等，重复提交不产生重复商品。",
+        ["REQ-GOODS-003"]),
+})
+
+# 5. 订单列表
+pages.append({
+    "id": "page-order-list", "moduleId": "m-order", "name": "订单列表", "route": "/orders",
+    "goal": "让运营按状态与时间范围筛选订单并进入处理",
+    "entryFrom": ["page-overview"], "exitTo": ["page-order-detail"],
+    "layout": "header-sider-content", "defaultStateId": "s-default",
+    "componentTree": layout_sider("order", [
+        crumb(["首页", "订单管理", "订单列表"]),
+        alert(),
+        {"id": "n-toolbar", "type": "Space", "props": {"size": 8, "wrap": True}, "children": [
+            {"id": "n-search", "type": "Input", "props": {"placeholder": "搜索订单号或买家昵称", "prefix": "search", "allowClear": True}},
+            {"id": "n-ostatus", "type": "Select", "props": {"placeholder": "全部状态", "options": [
+                {"label": "待付款", "value": "created"}, {"label": "已付款", "value": "paid"},
+                {"label": "已发货", "value": "shipped"}, {"label": "已完成", "value": "done"},
+                {"label": "已关闭", "value": "closed"}]}},
+            {"id": "n-range", "type": "DatePicker", "props": {"placeholder": "下单时间"}},
+            {"id": "n-btn-export", "type": "Button", "props": {"text": "导出订单"}}]},
+        {"id": "n-table", "type": "Table", "props": {
+            "rowClick": True,
+            "columns": [{"title": "订单号", "dataIndex": "no"}, {"title": "买家", "dataIndex": "buyer"},
+                        {"title": "状态", "dataIndex": "status", "type": "tag"}, {"title": "金额", "dataIndex": "amount"},
+                        {"title": "下单时间", "dataIndex": "time"}],
+            "data": [{"no": "SO-20261015-001", "buyer": "林可", "status": "已付款", "amount": "¥ 1,198", "time": "10-15 09:12"},
+                     {"no": "SO-20261015-002", "buyer": "陈默", "status": "待付款", "amount": "¥ 359", "time": "10-15 09:40"},
+                     {"no": "SO-20261014-118", "buyer": "苏禾", "status": "已发货", "amount": "¥ 899", "time": "10-14 21:05"},
+                     {"no": "SO-20261014-096", "buyer": "周樾", "status": "已完成", "amount": "¥ 129", "time": "10-14 15:22"}]}},
+        {"id": "n-page", "type": "Pagination", "props": {"total": 486, "current": 1, "pageSize": 10}},
+    ]),
+    "states": states(empty_text="当前筛选条件下没有订单"),
+    "interactions": [
+        # 一条通配覆盖所有行：{{row.no}} / {{row.buyer}} 在源页按行求值
+        {"id": "ix-ol-row", "name": "点行查看订单详情",
+         "on": {"event": "click", "target": "n-table__row_*"},
+         "actions": [{"type": "navigate", "pageId": "page-order-detail",
+                      "params": {"orderNo": "{{row.no}}", "orderBuyer": "{{row.buyer}}"}}]},
+        {"id": "ix-ol-export", "name": "导出订单", "on": {"event": "click", "target": "n-btn-export"},
+         "actions": [{"type": "message", "level": "success", "text": "导出任务已提交，完成后将通知你"}]},
+    ],
+    "annotations": [
+        {"id": "an-ol-1", "pageId": "page-order-list", "anchor": {"nodeId": "n-btn-export", "x": 0.5, "y": 0.5},
+         "text": "导出按钮希望支持按当前筛选条件导出，而不是导出全部。",
+         "category": "interaction", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T10:22:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营按状态与下单时间范围筛选订单，并在两次操作内进入订单处理。",
+        "顶部为全局导航；内容区自上而下为：面包屑 → 异常提示条 → 工具栏（搜索 / 状态 / 下单时间 / 导出） → 订单表格 → 分页。",
+        "1. 点击表格任意行进入订单详情页。\n2. 点击「导出订单」后顶部提示导出任务已提交。\n3. 状态与时间范围可叠加筛选。",
+        "- 订单号全站唯一，生成后不可修改。\n- 已关闭订单不计入成交额统计。\n- 列表默认按下单时间倒序排列。",
+        "覆盖四态：默认态（有订单）、加载态（表格骨架屏）、空态（无匹配订单）、异常态（顶部错误提示条）。",
+        "导出单次上限 10000 条；时间范围最长跨 90 天；分页每页 10 / 20 / 50 可选。",
+        ["REQ-ORDER-001"]),
+})
+
+# 6. 订单详情（子页面）
+pages.append({
+    "id": "page-order-detail", "moduleId": "m-order", "parentId": "page-order-list",
+    "name": "订单详情", "route": "/orders/:id",
+    "goal": "让运营在一个页面内完成订单核对、发货与备注",
+    "entryFrom": ["page-order-list"], "exitTo": ["page-order-list"],
+    "layout": "header-content", "defaultStateId": "s-default",
+    "componentTree": layout_plain([
+        crumb(["首页", "订单管理", "订单列表", "订单详情"]),
+        alert(),
+        {"id": "n-flow", "type": "Steps", "props": {"current": 1, "items": [
+            {"title": "创建订单"}, {"title": "买家付款"}, {"title": "商家发货"}, {"title": "交易完成"}]}},
+        {"id": "n-desc", "type": "Descriptions", "props": {"title": "订单信息", "column": 3, "items": [
+            # 订单号/买家来自订单列表的行级跳转 params（{{expr}} 在源页求值）
+            {"label": "订单号", "value": "{{orderNo}}"}, {"label": "买家", "value": "{{orderBuyer}}"},
+            {"label": "订单状态", "value": "已付款"}, {"label": "订单金额", "value": "¥ 1,198"},
+            {"label": "下单时间", "value": "2026-10-15 09:12"}, {"label": "收货地址", "value": "上海市徐汇区…", "span": 2}]}},
+        {"id": "n-table", "type": "Table", "props": {"size": "small", "columns": [
+            {"title": "商品", "dataIndex": "name"}, {"title": "规格", "dataIndex": "spec"},
+            {"title": "单价", "dataIndex": "price"}, {"title": "数量", "dataIndex": "qty"}],
+            "data": [{"name": "轻量羽绒外套", "spec": "黑色 / M", "price": "¥ 599", "qty": "2"}]}},
+        {"id": "n-actions", "type": "Space", "props": {"size": 8}, "children": [
+            {"id": "n-btn-ship", "type": "Button", "props": {"text": "确认发货", "type": "primary"}},
+            {"id": "n-btn-remark", "type": "Button", "props": {"text": "添加备注"}},
+            {"id": "n-btn-close", "type": "Button", "props": {"text": "关闭订单"}}]},
+    ], "订单详情"),
+    "states": states(load_tgt="n-table", empty_text="订单不存在或已被删除",
+                    default_vars={"orderNo": "SO-20261015-001", "orderBuyer": "林可"}),
+    "interactions": [
+        {"id": "ix-od-ship", "name": "确认发货", "on": {"event": "click", "target": "n-btn-ship"},
+         "conditions": ["loading !== true"],
+         "actions": [{"type": "setNode", "target": "n-btn-ship", "prop": "loading", "value": True},
+                     {"type": "delay", "ms": 500},
+                     {"type": "message", "level": "success", "text": "订单已发货"}]},
+        {"id": "ix-od-close", "name": "关闭订单", "on": {"event": "click", "target": "n-btn-close"},
+         "actions": [{"type": "message", "level": "warning", "text": "已付款订单不可直接关闭，请先退款"}]},
+        {"id": "ix-od-remark", "name": "添加备注", "on": {"event": "click", "target": "n-btn-remark"},
+         "actions": [{"type": "message", "level": "info", "text": "备注已保存"}]},
+    ],
+    "annotations": [
+        {"id": "an-od-1", "pageId": "page-order-detail", "anchor": {"nodeId": "n-btn-close", "x": 0.5, "y": 0.5},
+         "text": "「关闭订单」在已付款状态下希望直接置灰，而不是点了才提示。",
+         "category": "state", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T10:31:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营在一个页面内完成订单核对、发货与备注，并能判断哪些操作在当前状态下不可用。",
+        "顶部为返回式导航栏；内容区自上而下为：面包屑 → 异常提示条 → 订单流转步骤条 → 订单信息描述列表 → 商品明细表格 → 底部操作按钮。",
+        "1. 点击「确认发货」按钮进入加载态，成功后提示「订单已发货」且步骤条推进到「商家发货」。\n2. 已付款状态下「关闭订单」按钮置灰不可点击。\n3. 点击「添加备注」保存备注并提示。",
+        "- 仅「已付款」状态允许发货。\n- 仅「待付款」状态允许关闭订单。\n- 已发货订单不允许修改收货地址。",
+        "覆盖四态：默认态、加载态（明细表格骨架屏）、空态（订单不存在）、异常态（顶部错误提示条）。",
+        "订单流转记录保留 180 天；备注上限 200 字；同一订单重复发货请求只生效一次。",
+        ["REQ-ORDER-002"],
+        flow=flow_sec("sec-flow", "订单发货流程", "已付款 → 确认发货 → 已发货", [
+            {"id": "o1", "label": "订单详情", "sub": "/orders/:id", "kind": "start"},
+            {"id": "o2", "label": "状态是「已付款」？", "kind": "decision"},
+            {"id": "o3", "label": "确认发货", "sub": "按钮进入 loading"},
+            {"id": "o4", "label": "「关闭订单」置灰", "sub": "点了才提示属反例", "kind": "warn"},
+            {"id": "o5", "label": "订单已发货", "sub": "步骤条推进到「商家发货」", "kind": "end"},
+        ], [
+            {"from": "o1", "to": "o2"},
+            {"from": "o2", "to": "o3", "label": "是"},
+            {"from": "o2", "to": "o4", "label": "否"},
+            {"from": "o3", "to": "o5"},
+        ])),
+})
+
+# 7. 优惠券列表
+pages.append({
+    "id": "page-coupon-list", "moduleId": "m-marketing", "name": "优惠券列表", "route": "/marketing/coupons",
+    "goal": "让运营掌握每张优惠券的领取与核销情况并进入编辑",
+    "entryFrom": [], "exitTo": ["page-coupon-edit"],
+    "layout": "header-sider-content", "defaultStateId": "s-default",
+    "componentTree": layout_sider("market", [
+        crumb(["首页", "营销中心", "优惠券列表"]),
+        alert(),
+        {"id": "n-toolbar", "type": "Space", "props": {"size": 8, "wrap": True}, "children": [
+            {"id": "n-search", "type": "Input", "props": {"placeholder": "搜索优惠券名称", "prefix": "search", "allowClear": True}},
+            {"id": "n-cstatus", "type": "Segmented", "props": {"value": "全部", "options": ["全部", "进行中", "已结束"]}},
+            {"id": "n-btn-new", "type": "Button", "props": {"text": "新建优惠券", "type": "primary", "icon": "plus"}}]},
+        {"id": "n-table", "type": "Table", "props": {
+            "rowClick": True,
+            "columns": [{"title": "券名称", "dataIndex": "name"}, {"title": "类型", "dataIndex": "type", "type": "tag"},
+                        {"title": "面额", "dataIndex": "amount"}, {"title": "已领取", "dataIndex": "taken"},
+                        {"title": "已核销", "dataIndex": "used"},
+                        {"title": "操作", "type": "action", "actions": [
+                            {"key": "edit", "label": "编辑"},
+                            {"key": "delete", "label": "删除", "type": "danger"}]}],
+            "data": [{"name": "新客立减 20 元", "type": "满减", "amount": "¥ 20", "taken": "1,204", "used": "842"},
+                     {"name": "服饰品类 9 折", "type": "折扣", "amount": "9 折", "taken": "356", "used": "120"},
+                     {"name": "满 299 减 50", "type": "满减", "amount": "¥ 50", "taken": "88", "used": "12"}]}},
+        {"id": "n-page", "type": "Pagination", "props": {"total": 36, "current": 1, "pageSize": 10}},
+        {"id": "n-modal-del", "type": "Modal", "props": {
+            "modalId": "m-del", "title": "删除优惠券", "open": False,
+            "content": "删除后已领取的券不可用，确定删除？", "okText": "确定删除", "cancelText": "取消"}},
+    ]),
+    "states": states(empty_text="还没有优惠券，点击右上角「新建优惠券」开始"),
+    "interactions": [
+        {"id": "ix-cl-new", "name": "新建优惠券", "on": {"event": "click", "target": "n-btn-new"},
+         "actions": [{"type": "navigate", "pageId": "page-coupon-edit"}]},
+        # 行可点 + 操作列按钮：都用 `*` 通配，一条覆盖所有行
+        {"id": "ix-cl-row", "name": "点行编辑优惠券",
+         "on": {"event": "click", "target": "n-table__row_*"},
+         "actions": [{"type": "navigate", "pageId": "page-coupon-edit",
+                      "params": {"couponName": "{{row.name}}"}}]},
+        {"id": "ix-cl-edit", "name": "编辑优惠券",
+         "on": {"event": "click", "target": "n-table__act_*_edit"},
+         "actions": [{"type": "navigate", "pageId": "page-coupon-edit",
+                      "params": {"couponName": "{{row.name}}"}}]},
+        {"id": "ix-cl-del", "name": "删除优惠券（先确认）",
+         "on": {"event": "click", "target": "n-table__act_*_delete"},
+         "actions": [{"type": "setState", "key": "deletingCoupon", "value": "{{row.name}}"},
+                     {"type": "showModal", "modalId": "m-del"}]},
+        # 弹窗底部按钮走合成 id `<Modal 节点 id>__ok / __cancel`
+        {"id": "ix-cl-del-ok", "name": "确认删除", "on": {"event": "click", "target": "n-modal-del__ok"},
+         "actions": [{"type": "hideModal", "modalId": "m-del"},
+                     {"type": "message", "level": "success", "text": "已删除：{{deletingCoupon}}"}]},
+        {"id": "ix-cl-del-cancel", "name": "取消删除", "on": {"event": "click", "target": "n-modal-del__cancel"},
+         "actions": [{"type": "hideModal", "modalId": "m-del"}]},
+    ],
+    "annotations": [
+        {"id": "an-cl-1", "pageId": "page-coupon-list", "anchor": {"nodeId": "n-table", "x": 0.7, "y": 0.5},
+         "text": "希望增加「核销率」列，直接用已核销除以已领取。",
+         "category": "content", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T10:44:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营掌握每张优惠券的领取与核销情况，并能进入编辑调整规则。",
+        "顶部为全局导航；内容区自上而下为：面包屑 → 异常提示条 → 工具栏（搜索 / 状态分段器 / 新建优惠券） → 优惠券表格 → 分页。",
+        "1. 点击「新建优惠券」进入优惠券编辑页。\n2. 点击表格任意行进入该优惠券的编辑页。\n3. 状态分段器切换后列表按对应状态重新筛选。",
+        "- 券名称不超过 30 字且不可重复。\n- 已结束的优惠券不可再次编辑规则，只能复制新建。\n- 核销率 = 已核销数量 / 已领取数量。",
+        "覆盖四态：默认态（有优惠券）、加载态（表格骨架屏）、空态（无优惠券引导文案）、异常态（顶部错误提示条）。",
+        "单页最多返回 100 条；已领取数量为累计值，不随时间范围变化。",
+        ["REQ-MKT-001"],
+        flow=flow_sec("sec-flow", "删除优惠券流程", "行内删除 → 二次确认 → 结果反馈", [
+            {"id": "a", "label": "优惠券列表", "sub": "/marketing/coupons", "kind": "start"},
+            {"id": "b", "label": "点击行内「删除」", "sub": "n-table__act_*_delete"},
+            {"id": "c", "label": "弹出确认弹窗", "sub": "m-del"},
+            {"id": "d", "label": "确认删除？", "kind": "decision"},
+            {"id": "e", "label": "取消", "sub": "关闭弹窗不动数据"},
+            {"id": "f", "label": "提示已删除", "sub": "{{deletingCoupon}}", "kind": "end"},
+        ], [
+            {"from": "a", "to": "b"},
+            {"from": "b", "to": "c"},
+            {"from": "c", "to": "d"},
+            {"from": "d", "to": "e", "label": "取消"},
+            {"from": "d", "to": "f", "label": "确定"},
+            {"from": "e", "to": "a", "label": "返回列表"},
+        ])),
+})
+
+# 8. 优惠券编辑（子页面）
+pages.append({
+    "id": "page-coupon-edit", "moduleId": "m-marketing", "parentId": "page-coupon-list",
+    "name": "优惠券编辑", "route": "/marketing/coupons/:id/edit",
+    "goal": "让运营配置优惠券的面额、门槛与生效时间",
+    "entryFrom": ["page-coupon-list"], "exitTo": ["page-coupon-list"],
+    "layout": "header-content", "defaultStateId": "s-default",
+    "componentTree": layout_plain([
+        crumb(["首页", "营销中心", "优惠券列表", "优惠券编辑"]),
+        alert(),
+        {"id": "n-card-form", "type": "Card", "props": {"title": "券规则"}, "children": [
+            {"id": "n-form", "type": "Form", "props": {"layout": "vertical"}, "children": [
+                {"id": "n-fi-name", "type": "FormItem", "props": {"label": "券名称", "required": True}, "children": [
+                    {"id": "n-in-name", "type": "Input", "props": {"placeholder": "不超过 30 字", "value": "{{couponName}}"}}]},
+                {"id": "n-fi-type", "type": "FormItem", "props": {"label": "券类型", "required": True}, "children": [
+                    {"id": "n-in-type", "type": "RadioGroup", "props": {"value": "满减", "options": ["满减", "折扣", "无门槛"]}}]},
+                {"id": "n-fi-amount", "type": "FormItem", "props": {"label": "面额 / 折扣", "required": True}, "children": [
+                    {"id": "n-in-amount", "type": "InputNumber", "props": {"value": 20}}]},
+                {"id": "n-fi-threshold", "type": "FormItem", "props": {"label": "使用门槛（元）"}, "children": [
+                    {"id": "n-in-threshold", "type": "InputNumber", "props": {"value": 99}}]},
+                {"id": "n-fi-range", "type": "FormItem", "props": {"label": "生效时间", "required": True}, "children": [
+                    {"id": "n-in-range", "type": "DatePicker", "props": {"placeholder": "选择开始与结束时间"}}]},
+                {"id": "n-fi-total", "type": "FormItem", "props": {"label": "发放总量", "required": True,
+                    "help": "发放总量不可小于已领取数量", "validateStatus": "warning"}, "children": [
+                    {"id": "n-in-total", "type": "InputNumber", "props": {"value": 2000}}]}]}]},
+        {"id": "n-preview", "type": "Card", "props": {"title": "预览"}, "children": [
+            {"id": "n-pv-tag", "type": "Tag", "props": {"text": "{{couponName}}", "color": "blue"}},
+            {"id": "n-pv-prog", "type": "Progress", "props": {"percent": 42, "status": "normal"}},
+            {"id": "n-pv-tip", "type": "Text", "props": {"text": "已领取 842 / 2000"}}]},
+        {"id": "n-actions", "type": "Space", "props": {"size": 8}, "children": [
+            {"id": "n-btn-cancel", "type": "Button", "props": {"text": "取消"}},
+            {"id": "n-btn-save", "type": "Button", "props": {"text": "保存并返回", "type": "primary"}}]},
+    ], "优惠券编辑"),
+    "states": states(load_tgt="n-card-form", err="优惠券信息加载失败，请返回重试", with_empty=False,
+                    default_vars={"couponName": "新客立减 20 元"}),
+    "notApplicableStates": ["empty"],
+    "interactions": [
+        {"id": "ix-ce-save", "name": "保存优惠券", "on": {"event": "click", "target": "n-btn-save"},
+         "conditions": ["loading !== true"],
+         "actions": [{"type": "setNode", "target": "n-btn-save", "prop": "loading", "value": True},
+                     {"type": "delay", "ms": 500},
+                     {"type": "message", "level": "success", "text": "优惠券已保存"},
+                     {"type": "navigate", "pageId": "page-coupon-list"}]},
+        {"id": "ix-ce-cancel", "name": "取消编辑", "on": {"event": "click", "target": "n-btn-cancel"},
+         "actions": [{"type": "navigate", "pageId": "page-coupon-list"}]},
+    ],
+    "annotations": [
+        {"id": "an-ce-1", "pageId": "page-coupon-edit", "anchor": {"nodeId": "n-in-total", "x": 0.4, "y": 0.5},
+         "text": "发放总量希望直接提示「不可小于已领取的 842」，而不是只给一句通用说明。",
+         "category": "validation", "author": "PM", "status": "open",
+         "createdAt": "2026-10-15T10:58:00+08:00", "replies": []},
+    ],
+    "prd": prd(
+        "让运营配置优惠券的面额、门槛与生效时间，并在保存前看到券的最终形态。",
+        "顶部为返回式导航栏；内容区自上而下为：面包屑 → 异常提示条 → 券规则表单卡 → 预览卡 → 底部操作按钮。",
+        "1. 点击「保存并返回」按钮进入加载态，成功后提示「优惠券已保存」并跳回优惠券列表。\n2. 点击「取消」直接返回列表且不保存。\n3. 修改面额或门槛后预览卡实时更新券面文案。",
+        "- 券名称必填且不超过 30 字。\n- 满减券的面额必须小于使用门槛。\n- 发放总量不可小于已领取数量。\n- 生效结束时间必须晚于开始时间。",
+        "覆盖三态：默认态、加载态（规则卡骨架屏）、异常态（顶部错误提示条）。本页不涉及列表，空态不适用。",
+        "券规则保存后立即生效；已结束的券不可编辑；同一活动下券名称唯一。",
+        ["REQ-MKT-002"]),
+})
+
+# ---------------------------------------------------------------- top level
+data = {
+    "meta": {"schemaVersion": "1.0", "product": "电商运营后台", "version": "0.3.0",
+             "createdAt": "2026-10-15T09:00:00+08:00", "updatedAt": "2026-10-15T11:20:00+08:00",
+             "reviewMode": False, "currentPageId": "page-overview", "defaultPanel": "both"},
+    "product": {"name": "电商运营后台", "oneLiner": "让 20 人以内的运营团队在一个后台完成商品、订单与营销的日常操作",
+                "positioning": "面向中小电商自营团队的运营工作台，覆盖商品上架、订单处理、优惠券配置三条主线。",
+                "targetUsers": ["运营专员", "运营主管", "系统管理员"], "coreValue": "减少跨系统切换带来的操作成本",
+                "nonGoals": ["不做面向买家的前台商城", "不做自建物流调度"],
+                "metrics": [{"name": "商品上架耗时", "target": "< 3 分钟", "type": "leading"},
+                            {"name": "订单发货及时率", "target": ">= 95%", "type": "lagging"}]},
+    "users": [
+        {"id": "u-ops", "name": "运营专员", "description": "负责商品维护与订单处理",
+         "goals": ["快速上架商品", "及时处理待发货订单"], "painPoints": ["商品信息散落在多个表格"]},
+        {"id": "u-mgr", "name": "运营主管", "description": "负责营销活动与数据复盘",
+         "goals": ["掌握券的核销情况", "调整营销策略"], "painPoints": ["缺少核销率等派生指标"]},
+        {"id": "u-admin", "name": "系统管理员", "description": "负责账号与权限",
+         "goals": ["管理账号与角色"], "painPoints": ["权限变更依赖人工登记"]},
+    ],
+    "userFlows": [
+        {"id": "flow-goods-new", "name": "新建并上架商品", "role": "u-ops", "goal": "把新品录入并上架",
+         "steps": [{"id": "st1", "name": "进入商品列表", "pageId": "page-goods-list", "note": ""},
+                   {"id": "st2", "name": "点击新建商品", "pageId": "page-goods-edit", "note": "进入编辑页"},
+                   {"id": "st3", "name": "填写并保存", "pageId": "page-goods-edit", "note": "保存后回到列表"},
+                   {"id": "st4", "name": "在列表确认状态", "pageId": "page-goods-list", "note": ""}]},
+        {"id": "flow-order-ship", "name": "处理待发货订单", "role": "u-ops", "goal": "把已付款订单发出去",
+         "steps": [{"id": "st1", "name": "进入订单列表", "pageId": "page-order-list", "note": "筛选已付款"},
+                   {"id": "st2", "name": "打开订单详情", "pageId": "page-order-detail", "note": ""},
+                   {"id": "st3", "name": "点击确认发货", "pageId": "page-order-detail", "note": ""}]},
+        {"id": "flow-coupon-new", "name": "创建优惠券", "role": "u-mgr", "goal": "配置一张新券",
+         "steps": [{"id": "st1", "name": "进入优惠券列表", "pageId": "page-coupon-list", "note": ""},
+                   {"id": "st2", "name": "点击新建优惠券", "pageId": "page-coupon-edit", "note": ""},
+                   {"id": "st3", "name": "保存并返回", "pageId": "page-coupon-list", "note": ""}]},
+    ],
+    "modules": [
+        {"id": "m-dash", "name": "数据概览", "goal": "汇总当日核心指标与待处理事项", "priority": "P0",
+         "pageIds": ["page-overview"], "dependsOn": []},
+        {"id": "m-goods", "name": "商品管理", "goal": "承载商品的创建、编辑、上下架", "priority": "P0",
+         "pageIds": ["page-goods-list", "page-goods-detail", "page-goods-edit"], "dependsOn": []},
+        {"id": "m-order", "name": "订单管理", "goal": "承载订单的查询、发货与关闭", "priority": "P0",
+         "pageIds": ["page-order-list", "page-order-detail"], "dependsOn": ["m-goods"]},
+        {"id": "m-marketing", "name": "营销中心", "goal": "承载优惠券的配置与效果跟踪", "priority": "P1",
+         "pageIds": ["page-coupon-list", "page-coupon-edit"], "dependsOn": ["m-goods"]},
+    ],
+    "pages": pages,
+    # dataModel：机器可读的数据实体定义。容器会在 PRD 里渲染成「数据模型」小节，
+    # 并原样进 devspec.json，供 AI 生成 TS 类型 / mock / 接口契约。
+    "dataModel": {
+        "entities": [
+            {"id": "e-goods", "name": "Goods", "table": "goods",
+             "description": "商品主档，一个商品可有多条规格",
+             "pageIds": ["page-goods-list", "page-goods-detail", "page-goods-edit"],
+             "fields": [
+                 {"name": "id", "type": "string", "required": True, "key": "pk", "note": "ULID，创建时生成"},
+                 {"name": "name", "type": "string", "required": True, "constraint": "≤ 60 字", "note": "商品名称"},
+                 {"name": "sku", "type": "string", "required": True, "unique": True, "note": "商品编码，创建后不可改"},
+                 {"name": "category", "type": "string", "required": True, "note": "分类路径，如 服饰/外套"},
+                 {"name": "price", "type": "number", "required": True, "constraint": "> 0，最多 2 位小数", "note": "售价（元）"},
+                 {"name": "stock", "type": "integer", "required": True, "constraint": ">= 0", "note": "可售库存合计"},
+                 {"name": "safeStock", "type": "integer", "required": False, "note": "安全库存，低于即预警"},
+                 {"name": "status", "type": "enum", "required": True,
+                  "constraint": "draft|pending|on_shelf|off_shelf", "note": "见 sm-goods 状态机"},
+                 {"name": "createdAt", "type": "datetime", "required": True, "note": "创建时间"},
+                 {"name": "updatedAt", "type": "datetime", "required": True, "note": "列表默认按其倒序"}],
+             "relations": [
+                 {"type": "has_many", "target": "e-sku", "via": "goodsId", "note": "一个商品多条规格"}],
+             "indexes": ["sku", "status", "updatedAt"]},
+            {"id": "e-sku", "name": "Sku", "table": "goods_sku",
+             "description": "商品规格与库存",
+             "pageIds": ["page-goods-detail", "page-goods-edit"],
+             "fields": [
+                 {"name": "id", "type": "string", "required": True, "key": "pk", "note": ""},
+                 {"name": "goodsId", "type": "string", "required": True, "key": "fk", "note": "→ goods.id"},
+                 {"name": "spec", "type": "string", "required": True, "note": "如 黑色 / M"},
+                 {"name": "sku", "type": "string", "required": True, "unique": True, "note": "规格级编码"},
+                 {"name": "stock", "type": "integer", "required": True, "constraint": ">= 0", "note": "该规格可售库存"}],
+             "relations": [
+                 {"type": "belongs_to", "target": "e-goods", "via": "goodsId", "note": ""}],
+             "indexes": ["goodsId"]},
+            {"id": "e-order", "name": "Order", "table": "orders",
+             "description": "订单主档",
+             "pageIds": ["page-order-list", "page-order-detail", "page-overview"],
+             "fields": [
+                 {"name": "id", "type": "string", "required": True, "key": "pk", "note": ""},
+                 {"name": "no", "type": "string", "required": True, "unique": True, "note": "订单号 SO-YYYYMMDD-NNN，生成后不可改"},
+                 {"name": "buyer", "type": "string", "required": True, "note": "买家昵称"},
+                 {"name": "status", "type": "enum", "required": True,
+                  "constraint": "created|paid|shipped|done|closed", "note": "见 sm-order 状态机"},
+                 {"name": "amount", "type": "number", "required": True, "constraint": ">= 0", "note": "订单金额（元）"},
+                 {"name": "address", "type": "string", "required": True, "note": "收货地址；已发货后不可修改"},
+                 {"name": "createdAt", "type": "datetime", "required": True, "note": "下单时间，列表默认按其倒序"},
+                 {"name": "shippedAt", "type": "datetime", "required": False, "note": "发货时间"}],
+             "relations": [
+                 {"type": "has_many", "target": "e-order-item", "via": "orderId", "note": ""}],
+             "indexes": ["no", "status", "createdAt"]},
+            {"id": "e-order-item", "name": "OrderItem", "table": "order_items",
+             "description": "订单商品明细",
+             "pageIds": ["page-order-detail"],
+             "fields": [
+                 {"name": "id", "type": "string", "required": True, "key": "pk", "note": ""},
+                 {"name": "orderId", "type": "string", "required": True, "key": "fk", "note": "→ orders.id"},
+                 {"name": "skuId", "type": "string", "required": True, "key": "fk", "note": "→ goods_sku.id"},
+                 {"name": "price", "type": "number", "required": True, "note": "下单时单价（快照）"},
+                 {"name": "qty", "type": "integer", "required": True, "constraint": ">= 1", "note": "数量"}],
+             "relations": [
+                 {"type": "belongs_to", "target": "e-order", "via": "orderId", "note": ""},
+                 {"type": "belongs_to", "target": "e-sku", "via": "skuId", "note": ""}],
+             "indexes": ["orderId"]},
+            {"id": "e-coupon", "name": "Coupon", "table": "coupons",
+             "description": "优惠券规则与效果数据",
+             "pageIds": ["page-coupon-list", "page-coupon-edit"],
+             "fields": [
+                 {"name": "id", "type": "string", "required": True, "key": "pk", "note": ""},
+                 {"name": "name", "type": "string", "required": True, "unique": True, "constraint": "≤ 30 字", "note": "同活动下唯一"},
+                 {"name": "type", "type": "enum", "required": True, "constraint": "full_reduce|discount|no_threshold", "note": "满减 / 折扣 / 无门槛"},
+                 {"name": "amount", "type": "number", "required": True, "note": "满减为面额（元），折扣为折数"},
+                 {"name": "threshold", "type": "number", "required": False, "note": "使用门槛；满减券需 amount < threshold"},
+                 {"name": "total", "type": "integer", "required": True, "constraint": ">= taken", "note": "发放总量，不可小于已领取"},
+                 {"name": "taken", "type": "integer", "required": True, "note": "已领取（累计值，不随时间范围变化）"},
+                 {"name": "used", "type": "integer", "required": True, "note": "已核销"},
+                 {"name": "startAt", "type": "datetime", "required": True, "note": ""},
+                 {"name": "endAt", "type": "datetime", "required": True, "constraint": "> startAt", "note": ""}],
+             "relations": [],
+             "indexes": ["name", "type"]},
+        ],
+        "derived": [
+            {"name": "核销率", "expr": "used / taken", "fallback": "taken = 0 时展示「—」",
+             "usedBy": ["page-coupon-list"], "reqId": "REQ-MKT-001"},
+            {"name": "库存预警商品数", "expr": "count(goods where stock < safeStock)",
+             "fallback": "safeStock 为空时视为不预警", "usedBy": ["page-overview"], "reqId": "REQ-DASH-001"},
+            {"name": "当日成交额", "expr": "sum(order.amount where status in [paid, shipped] and createdAt >= today)",
+             "fallback": "不含已关闭订单", "usedBy": ["page-overview"], "reqId": "REQ-DASH-002"},
+        ],
+    },
+    "components": [
+        {"id": "c-order-status", "name": "订单状态标签", "antd": "Tag",
+         "description": "订单状态在全站的统一视觉表达", "anatomy": ["色块背景", "状态文字"],
+         "variants": [{"name": "待付款", "description": "默认灰", "token": "default"},
+                      {"name": "已付款", "description": "主色蓝", "token": "processing"},
+                      {"name": "已发货", "description": "紫色", "token": "purple"},
+                      {"name": "已完成", "description": "成功绿", "token": "success"},
+                      {"name": "已关闭", "description": "中性灰", "token": "default"}],
+         "states": ["normal"], "tokens": {"fontSize": "12px", "height": "22px"}},
+        {"id": "c-metric-card", "name": "指标卡", "antd": "Card + Statistic",
+         "description": "概览页承载单个核心指标的最小单元", "anatomy": ["标题", "数值", "涨跌标识"],
+         "variants": [{"name": "上升", "description": "数值红色", "token": "up"},
+                      {"name": "下降", "description": "数值绿色", "token": "down"}],
+         "states": ["normal", "loading"], "tokens": {"padding": "16px", "radius": "8px"}},
+    ],
+    "stateMachines": [
+        {"id": "sm-goods", "name": "商品状态机", "entity": "Goods", "initial": "draft",
+         "states": [{"id": "draft", "name": "草稿", "type": "normal"},
+                    {"id": "pending", "name": "待上架", "type": "warning"},
+                    {"id": "on_shelf", "name": "已上架", "type": "success"},
+                    {"id": "off_shelf", "name": "已下架", "type": "default"}],
+         "transitions": [
+             {"id": "t-1", "from": "draft", "to": "pending", "trigger": "运营提交商品资料", "role": "u-ops",
+              "guard": "商品名称、分类、售价、至少一条规格均已填写", "action": "记录提交时间"},
+             {"id": "t-2", "from": "pending", "to": "on_shelf", "trigger": "运营点击上架", "role": "u-ops",
+              "guard": "可售库存大于 0", "action": "记录上架时间"},
+             {"id": "t-3", "from": "on_shelf", "to": "off_shelf", "trigger": "运营点击下架", "role": "u-ops",
+              "guard": "", "action": "记录下架时间"},
+             {"id": "t-4", "from": "off_shelf", "to": "on_shelf", "trigger": "运营重新上架", "role": "u-ops",
+              "guard": "可售库存大于 0", "action": ""},
+             {"id": "t-5", "from": "pending", "to": "draft", "trigger": "运营撤回提交", "role": "u-ops",
+              "guard": "", "action": ""}]},
+        {"id": "sm-order", "name": "订单状态机", "entity": "Order", "initial": "created",
+         "states": [{"id": "created", "name": "待付款", "type": "normal"},
+                    {"id": "paid", "name": "已付款", "type": "processing"},
+                    {"id": "shipped", "name": "已发货", "type": "purple"},
+                    {"id": "done", "name": "已完成", "type": "success"},
+                    {"id": "closed", "name": "已关闭", "type": "default"}],
+         "transitions": [
+             {"id": "t-1", "from": "created", "to": "paid", "trigger": "买家完成支付", "role": "system",
+              "guard": "订单未超时", "action": "通知商家发货"},
+             {"id": "t-2", "from": "created", "to": "closed", "trigger": "买家取消或支付超时", "role": "system",
+              "guard": "", "action": "释放库存"},
+             {"id": "t-3", "from": "paid", "to": "shipped", "trigger": "运营点击确认发货", "role": "u-ops",
+              "guard": "收货地址已填写", "action": "记录发货时间"},
+             {"id": "t-4", "from": "shipped", "to": "done", "trigger": "买家确认收货或自动确认", "role": "system",
+              "guard": "发货后满 7 天或买家主动确认", "action": "结算货款"},
+             {"id": "t-5", "from": "paid", "to": "closed", "trigger": "买家申请退款并审核通过", "role": "u-mgr",
+              "guard": "订单未发货", "action": "原路退款，释放库存"}]},
+    ],
+    "requirements": [
+        {"id": "REQ-DASH-001", "moduleId": "m-dash", "pageId": "page-overview", "pattern": "event-driven",
+         "title": "概览指标卡跳转带筛选", "role": "u-ops", "trigger": "在数据概览页点击「库存预警商品」指标卡",
+         "rule": "跳转到商品列表并预置「库存低于安全线」筛选条件",
+         "stateMachine": "", "expected": "进入商品列表页，筛选区显示「库存低于安全线」且列表仅展示命中商品",
+         "acceptance": ["点击指标卡后地址栏路径为 /goods", "筛选区出现「库存低于安全线」标签且可一键清除",
+                        "列表结果数量与指标卡显示的数字一致"],
+         "priority": "P0", "source": "user", "status": "confirmed"},
+        {"id": "REQ-DASH-002", "moduleId": "m-dash", "pageId": "page-overview", "pattern": "ubiquitous",
+         "title": "概览指标口径", "role": "system", "trigger": "",
+         "rule": "成交额统计当日 00:00 至当前时刻的已付款与已发货订单金额，不含已关闭订单",
+         "stateMachine": "", "expected": "指标卡展示的成交额与订单列表按同一口径筛选后的金额合计一致",
+         "acceptance": ["订单列表筛选当日已付款订单，金额合计与指标卡一致",
+                        "存在已关闭订单时，其金额不计入成交额"],
+         "priority": "P0", "source": "user", "status": "confirmed"},
+        {"id": "REQ-GOODS-001", "moduleId": "m-goods", "pageId": "page-goods-list", "pattern": "event-driven",
+         "title": "按状态与关键词筛选商品", "role": "u-ops", "trigger": "在商品列表页选择状态或输入关键词",
+         "rule": "状态与关键词筛选条件叠加生效，列表默认按更新时间倒序",
+         "stateMachine": "", "expected": "列表刷新为同时满足状态与关键词的商品，并显示命中条数",
+         "acceptance": ["仅选状态时列表只含该状态商品", "关键词为空时忽略该条件不报错",
+                        "同时设置两个条件时结果为两个条件的交集"],
+         "priority": "P0", "source": "user", "status": "confirmed"},
+        {"id": "REQ-GOODS-002", "moduleId": "m-goods", "pageId": "page-goods-detail", "pattern": "event-driven",
+         "title": "商品详情进入编辑", "role": "u-ops", "trigger": "在商品详情页点击「编辑商品」",
+         "rule": "已下架商品同样允许进入编辑页修改资料",
+         "stateMachine": "sm-goods", "expected": "进入该商品的编辑页，表单预填当前商品资料",
+         "acceptance": ["点击后路径为 /goods/:id/edit", "表单中的商品名称与详情页展示一致",
+                        "已下架商品点击编辑时按钮可点击，不置灰"],
+         "priority": "P0", "source": "user", "status": "confirmed"},
+        {"id": "REQ-GOODS-003", "moduleId": "m-goods", "pageId": "page-goods-edit", "pattern": "unwanted",
+         "title": "售价非法输入被拦截", "role": "u-ops", "trigger": "在商品编辑页提交售价非法或缺失的表单",
+         "rule": "售价必须大于 0 且最多两位小数，商品名称必填",
+         "stateMachine": "sm-goods", "expected": "表单不提交，非法字段下方显示红色提示",
+         "acceptance": ["售价为空时点击保存不发起提交，字段下方提示「售价必填」",
+                        "售价输入 0 或负数时保存被拒绝", "售价输入三位小数时提示最多两位小数且不可保存"],
+         "priority": "P0", "source": "user", "status": "confirmed"},
+        {"id": "REQ-ORDER-001", "moduleId": "m-order", "pageId": "page-order-list", "pattern": "event-driven",
+         "title": "订单列表筛选与导出", "role": "u-ops", "trigger": "在订单列表页点击「导出订单」",
+         "rule": "导出内容与当前筛选条件一致，单次导出上限 10000 条",
+         "stateMachine": "", "expected": "生成导出任务并提示已提交，导出文件行数与当前筛选结果一致",
+         "acceptance": ["设置状态为「已付款」后导出，文件仅含已付款订单",
+                        "筛选结果超过 10000 条时提示需缩小时间范围",
+                        "未设置任何筛选时导出全部订单"],
+         "priority": "P1", "source": "user", "status": "confirmed"},
+        {"id": "REQ-ORDER-002", "moduleId": "m-order", "pageId": "page-order-detail", "pattern": "event-driven",
+         "title": "订单发货与非法关闭拦截", "role": "u-ops", "trigger": "在订单详情页点击「确认发货」或「关闭订单」",
+         "rule": "仅已付款状态允许发货；仅待付款状态允许关闭订单",
+         "stateMachine": "sm-order", "expected": "发货成功后订单状态变为已发货；非待付款状态下关闭订单被拒绝",
+         "acceptance": ["已付款订单点击发货后状态标签变为「已发货」",
+                        "已付款订单的「关闭订单」按钮置灰不可点击",
+                        "重复点击发货只产生一次状态变更"],
+         "priority": "P0", "source": "user", "status": "confirmed"},
+        {"id": "REQ-MKT-001", "moduleId": "m-marketing", "pageId": "page-coupon-list", "pattern": "event-driven",
+         "title": "优惠券核销率展示", "role": "u-mgr", "trigger": "打开优惠券列表页",
+         "rule": "核销率 = 已核销数量 / 已领取数量，已领取为 0 时核销率显示为「—」",
+         "stateMachine": "", "expected": "列表中每张券展示核销率，数值保留一位小数",
+         "acceptance": ["已领取 1000、已核销 250 的券显示 25.0%",
+                        "已领取为 0 的券核销率显示「—」且不报错"],
+         "priority": "P1", "source": "user", "status": "confirmed"},
+        {"id": "REQ-MKT-002", "moduleId": "m-marketing", "pageId": "page-coupon-edit", "pattern": "state-driven",
+         "title": "发放总量下限校验", "role": "u-mgr", "trigger": "在优惠券编辑页填写发放总量",
+         "rule": "发放总量不可小于已领取数量，满减券面额必须小于使用门槛",
+         "stateMachine": "", "expected": "低于下限时字段下方显示红色提示且保存按钮不可用",
+         "acceptance": ["已领取 842 时输入发放总量 800，提示不可小于已领取数量且不可保存",
+                        "满减券面额 100、门槛 50 时提示面额需小于门槛",
+                        "修正为合法值后保存按钮恢复可用"],
+         "priority": "P1", "source": "inferred", "status": "draft"},
+    ],
+    "boardPlan": [
+        {"id": "bp-1", "order": 1, "name": "数据概览", "pageId": "page-overview", "moduleId": "m-dash",
+         "status": "done", "reqIds": ["REQ-DASH-001", "REQ-DASH-002"]},
+        {"id": "bp-2", "order": 2, "name": "商品列表", "pageId": "page-goods-list", "moduleId": "m-goods",
+         "status": "done", "reqIds": ["REQ-GOODS-001"]},
+        {"id": "bp-3", "order": 3, "name": "商品详情", "pageId": "page-goods-detail", "moduleId": "m-goods",
+         "status": "doing", "reqIds": ["REQ-GOODS-002"]},
+        {"id": "bp-4", "order": 4, "name": "商品编辑", "pageId": "page-goods-edit", "moduleId": "m-goods",
+         "status": "doing", "reqIds": ["REQ-GOODS-003"]},
+        {"id": "bp-5", "order": 5, "name": "订单列表", "pageId": "page-order-list", "moduleId": "m-order",
+         "status": "doing", "reqIds": ["REQ-ORDER-001"]},
+        {"id": "bp-6", "order": 6, "name": "订单详情", "pageId": "page-order-detail", "moduleId": "m-order",
+         "status": "todo", "reqIds": ["REQ-ORDER-002"]},
+        {"id": "bp-7", "order": 7, "name": "优惠券列表", "pageId": "page-coupon-list", "moduleId": "m-marketing",
+         "status": "todo", "reqIds": ["REQ-MKT-001"]},
+        {"id": "bp-8", "order": 8, "name": "优惠券编辑", "pageId": "page-coupon-edit", "moduleId": "m-marketing",
+         "status": "todo", "reqIds": ["REQ-MKT-002"]},
+    ],
+    "glossary": [
+        {"term": "可售库存", "definition": "商品规格中可供下单的库存数量，不含已锁定未发货部分"},
+        {"term": "核销率", "definition": "已核销数量除以已领取数量，衡量优惠券的实际使用比例"},
+        {"term": "安全库存", "definition": "为商品设定的库存下限，可售库存低于该值即触发预警"},
+        {"term": "订单关闭", "definition": "订单进入不可再流转的终态，已关闭订单不计入成交额"},
+    ],
+    "openQuestions": [
+        {"id": "q-1", "question": "商品编辑是否支持批量导入规格（影响 REQ-GOODS-003 的边界处理）",
+         "owner": "PM", "status": "open", "answer": ""},
+        {"id": "q-2", "question": "发放总量下限校验为 AI 推断（REQ-MKT-002），是否确认为硬约束",
+         "owner": "AI", "status": "assumed", "answer": "暂按硬约束处理，待 PM 确认"},
+        {"id": "q-3", "question": "订单发货后是否允许修改收货地址",
+         "owner": "PM", "status": "open", "answer": ""},
+    ],
+}
+
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "example-03-nav-tree.json")
+io.open(out, "w", encoding="utf-8").write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+print("written", out)
+print("pages=%d modules=%d reqs=%d sm=%d" % (len(data["pages"]), len(data["modules"]),
+                                             len(data["requirements"]), len(data["stateMachines"])))

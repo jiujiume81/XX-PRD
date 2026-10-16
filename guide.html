@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>XX-PRD · Skill 说明指南</title>
+<style>
+/* ============ Design Tokens (与容器同一套 Ant Design 5 视觉语言) ============ */
+:root{
+  --ant-primary:#1677ff; --ant-primary-hover:#4096ff; --ant-primary-active:#0958d9; --ant-primary-bg:#e6f4ff;
+  --ant-success:#52c41a; --ant-success-bg:#f6ffed; --ant-warning:#faad14; --ant-warning-bg:#fffbe6;
+  --ant-error:#ff4d4f; --ant-error-bg:#fff2f0;
+  --ant-text:rgba(0,0,0,.88); --ant-text-2:rgba(0,0,0,.65); --ant-text-3:rgba(0,0,0,.45); --ant-text-4:rgba(0,0,0,.25);
+  --ant-border:#d9d9d9; --ant-border-2:#f0f0f0; --ant-bg-layout:#f5f5f5; --ant-bg-container:#fff; --ant-fill:rgba(0,0,0,.04);
+  --ant-radius:6px; --ant-radius-lg:8px; --ant-fs:14px; --ant-fs-sm:12px;
+  --ant-shadow-1:0 1px 2px 0 rgba(0,0,0,.03),0 1px 6px -1px rgba(0,0,0,.02);
+  --ant-shadow-2:0 6px 16px 0 rgba(0,0,0,.08),0 3px 6px -4px rgba(0,0,0,.12),0 9px 28px 8px rgba(0,0,0,.05);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.7;color:var(--ant-text);background:var(--ant-bg-layout);
+  -webkit-font-smoothing:antialiased}
+a{color:var(--ant-primary);text-decoration:none}
+a:hover{color:var(--ant-primary-hover)}
+code{font-family:var(--mono);font-size:.9em;background:rgba(0,0,0,.045);border:1px solid rgba(0,0,0,.04);
+  border-radius:4px;padding:1px 5px;color:#c41d7f;white-space:nowrap}
+pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.75;background:#fafafa;
+  border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);padding:14px 16px;overflow:auto;color:var(--ant-text)}
+pre code{background:none;border:none;padding:0;color:inherit;font-size:inherit;white-space:pre}
+
+/* ============ Layout ============ */
+.shell{display:flex;align-items:flex-start;max-width:1280px;margin:0 auto;gap:28px;padding:0 24px 80px}
+
+/* 左侧目录 */
+.toc{position:sticky;top:24px;flex:0 0 232px;width:232px;max-height:calc(100vh - 48px);overflow:auto;
+  padding:16px 0 16px;font-size:13px}
+.toc-brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;margin:0 0 4px 10px;letter-spacing:.2px}
+.toc-brand .dot{width:10px;height:10px;border-radius:3px;background:linear-gradient(135deg,#1677ff,#52c41a);flex:0 0 auto}
+.toc-sub{margin:0 0 16px 10px;font-size:12px;color:var(--ant-text-3);line-height:1.5}
+.toc a{display:block;padding:5px 10px;border-radius:var(--ant-radius);color:var(--ant-text-2);
+  border-left:2px solid transparent;transition:background .15s,color .15s}
+.toc a:hover{background:var(--ant-fill);color:var(--ant-text)}
+.toc a.lv1{font-weight:600;color:var(--ant-text);margin-top:8px}
+.toc a.lv2{padding-left:22px;font-size:12.5px}
+.toc a.active{background:var(--ant-primary-bg);color:var(--ant-primary);border-left-color:var(--ant-primary);font-weight:500}
+.toc-sep{height:1px;background:var(--ant-border-2);margin:10px 10px}
+
+/* 主内容 */
+.doc{flex:1 1 auto;min-width:0;padding-top:24px}
+.hero{background:#fff;border:1px solid var(--ant-border-2);border-radius:12px;padding:28px 30px;
+  box-shadow:var(--ant-shadow-1);margin-bottom:24px;position:relative;overflow:hidden}
+.hero::after{content:'';position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;
+  background:radial-gradient(circle at 30% 30%,rgba(22,119,255,.10),rgba(82,196,26,.06) 60%,transparent 72%)}
+.hero h1{margin:0 0 6px;font-size:30px;letter-spacing:.4px}
+.hero .tag{margin:0 0 14px;font-size:13px;color:var(--ant-text-3);letter-spacing:.3px}
+.hero p{margin:0;max-width:74ch;color:var(--ant-text-2);font-size:14.5px;position:relative;z-index:1}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:22px;position:relative;z-index:1}
+.stat{background:#fafafa;border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);padding:12px 14px}
+.stat b{display:block;font-size:22px;line-height:1.25;color:var(--ant-primary);font-weight:700}
+.stat span{font-size:12px;color:var(--ant-text-3)}
+
+section{background:#fff;border:1px solid var(--ant-border-2);border-radius:12px;padding:6px 30px 30px;
+  box-shadow:var(--ant-shadow-1);margin-bottom:24px;scroll-margin-top:20px}
+h2{font-size:21px;margin:26px 0 6px;padding-bottom:10px;border-bottom:1px solid var(--ant-border-2);
+  display:flex;align-items:center;gap:10px;scroll-margin-top:20px}
+h2 .num{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+  border-radius:7px;background:var(--ant-primary);color:#fff;font-size:13px;font-weight:700}
+h3{font-size:16px;margin:26px 0 8px;scroll-margin-top:20px}
+h3::before{content:'';display:inline-block;width:3px;height:14px;background:var(--ant-primary);
+  border-radius:2px;margin-right:8px;vertical-align:-1px}
+h4{font-size:13.5px;margin:18px 0 6px;color:var(--ant-text)}
+p{margin:8px 0;color:var(--ant-text-2)}
+ul,ol{margin:8px 0;padding-left:22px;color:var(--ant-text-2)}
+li{margin:4px 0}
+li>b,li>strong{color:var(--ant-text)}
+.lead{color:var(--ant-text-2);font-size:14px;margin:12px 0 4px}
+hr{border:none;border-top:1px solid var(--ant-border-2);margin:22px 0}
+
+/* 表格 */
+.tw{overflow:auto;margin:12px 0;border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg)}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--ant-border-2);vertical-align:top;line-height:1.6}
+th{background:#fafafa;font-weight:600;color:var(--ant-text);white-space:nowrap;font-size:12.5px}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#fafcff}
+td code{white-space:normal;overflow-wrap:anywhere}
+.nowrap{white-space:nowrap}
+
+/* 卡片 / 提示块 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
+.card{border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);padding:14px 16px;background:#fff}
+.card h4{margin:0 0 6px;font-size:14px}
+.card p{margin:4px 0 0;font-size:13px;color:var(--ant-text-2)}
+.card .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-bottom:8px;font-weight:600}
+.card.dlg{border-top:3px solid #1677ff}
+.card.drw{border-top:3px solid #52c41a}
+.card.pg{border-top:3px solid #722ed1}
+.card.md{border-top:3px solid #fa8c16}
+.b-blue{background:var(--ant-primary-bg);color:#0958d9}
+.b-green{background:var(--ant-success-bg);color:#389e0d}
+.b-purple{background:#f9f0ff;color:#531dab}
+.b-orange{background:#fff7e6;color:#d46b08}
+
+/* 设计原则卡 */
+.pcard{border:1px solid var(--ant-border-2);border-left:3px solid var(--ant-primary);
+  border-radius:var(--ant-radius-lg);padding:14px 16px;background:#fff}
+.pcard h4{margin:0 0 5px;font-size:14px;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.pcard h4 .en{font-size:11.5px;color:var(--ant-text-3);font-weight:400;letter-spacing:.4px}
+.pcard .one{margin:0 0 9px;font-size:13px;color:var(--ant-text);font-weight:500;line-height:1.6}
+.pcard .src{margin:0;font-size:11.5px;color:var(--ant-text-3);line-height:1.6;
+  padding-bottom:8px;border-bottom:1px dashed var(--ant-border-2)}
+.pcard .app{margin:8px 0 0;font-size:12.5px;color:var(--ant-text-2);line-height:1.68}
+.pcard .app b{color:var(--ant-text);font-weight:600}
+.pcard .app code{white-space:normal}
+.pcard.p1{border-left-color:#1677ff}
+.pcard.p2{border-left-color:#2f54eb}
+.pcard.p3{border-left-color:#722ed1}
+.pcard.p4{border-left-color:#52c41a}
+.pcard.p5{border-left-color:#fa8c16}
+.pcard.p6{border-left-color:#eb2f96}
+.pcard.p7{border-left-color:#13c2c2}
+
+.tip{border-radius:var(--ant-radius-lg);padding:12px 16px;margin:14px 0;font-size:13.5px;
+  border:1px solid;display:flex;gap:10px;align-items:flex-start}
+.tip .ic{flex:0 0 auto;font-weight:700;font-size:13px;line-height:1.7}
+.tip.info{background:var(--ant-primary-bg);border-color:#91caff;color:#003eb3}
+.tip.ok{background:var(--ant-success-bg);border-color:#b7eb8f;color:#135200}
+.tip.warn{background:var(--ant-warning-bg);border-color:#ffe58f;color:#613400}
+.tip.err{background:var(--ant-error-bg);border-color:#ffccc7;color:#a8071a}
+.tip p{margin:0;color:inherit}
+.tip code{background:rgba(0,0,0,.06);border-color:transparent;color:inherit}
+
+/* 阶段流程：3 列网格，任何宽度下都稳定（不会挤出「一字一行」） */
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin:18px 0;
+  border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);overflow:hidden;
+  background:var(--ant-border-2)}
+.stage{padding:14px 15px;background:#fff;min-height:104px}
+.stage .sn{font-size:11px;font-weight:700;color:var(--ant-primary);letter-spacing:.6px}
+.stage .st{font-size:13.5px;font-weight:600;margin:3px 0 4px;line-height:1.35}
+.stage .sd{font-size:11.5px;color:var(--ant-text-3);line-height:1.5}
+.stage.gate{background:var(--ant-warning-bg)}
+.stage.gate .st{color:#613400}
+.stage.gate .sn{color:#d46b08}
+.stage.gate .sd{color:#8c5a00}
+
+/* 决策树 */
+.tree{margin:14px 0;font-size:13px}
+.tnode{border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);background:#fff;padding:12px 14px}
+.tnode .q{font-weight:600;color:var(--ant-text);font-size:13px}
+.tbranch{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.tres{border-radius:var(--ant-radius);padding:9px 12px;font-size:12.5px;line-height:1.55}
+.tres .yn{font-weight:700;font-size:11.5px;display:block;margin-bottom:2px}
+.tres.y{background:var(--ant-success-bg);border:1px solid #b7eb8f}
+.tres.n{background:#fafafa;border:1px solid var(--ant-border-2)}
+.tres b{color:var(--ant-text)}
+
+/* 四层结构 */
+.layers{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.layer{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;border:1px solid var(--ant-border-2);
+  border-radius:var(--ant-radius-lg);padding:11px 14px;background:#fff}
+.layer .ln{font-size:12.5px;font-weight:700;color:#fff;background:var(--ant-primary);border-radius:var(--ant-radius);
+  padding:4px 8px;text-align:center;line-height:1.4}
+.layer:nth-child(2) .ln{background:#13c2c2}
+.layer:nth-child(3) .ln{background:#fa8c16}
+.layer:nth-child(4) .ln{background:#722ed1}
+.layer .ld{font-size:12.8px;color:var(--ant-text-2);line-height:1.6}
+.layer .ld b{color:var(--ant-text)}
+
+/* 编号大纲 */
+.outline{counter-reset:ch;margin:14px 0;border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);overflow:hidden}
+.outline .ch{display:grid;grid-template-columns:56px 1fr;gap:12px;padding:9px 14px;border-bottom:1px solid var(--ant-border-2);
+  background:#fff;font-size:13px}
+.outline .ch:last-child{border-bottom:none}
+.outline .ch:nth-child(even){background:#fcfcfc}
+.outline .ch .cn{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--ant-primary)}
+.outline .ch .ct{color:var(--ant-text-2)}
+.outline .ch .ct b{color:var(--ant-text);font-weight:600}
+.outline .ch .ct .mini{font-size:11.5px;color:var(--ant-text-3);display:block;margin-top:1px}
+
+/* 产物卡 */
+.prod{border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);padding:0;overflow:hidden;margin:14px 0}
+.prod .ph{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fafafa;border-bottom:1px solid var(--ant-border-2)}
+.prod .ph .pn{font-weight:600;font-size:13.5px;font-family:var(--mono);color:var(--ant-text)}
+.prod .ph .pt{margin-left:auto;font-size:11.5px;color:var(--ant-text-3)}
+.prod .pb{padding:12px 16px;font-size:13px;color:var(--ant-text-2)}
+.prod .pb ul{margin:0;padding-left:20px}
+
+/* 自检 */
+.check{list-style:none;padding:0;margin:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:6px 22px}
+.check li{position:relative;padding-left:24px;font-size:13px;color:var(--ant-text-2);margin:0}
+.check li::before{content:'';position:absolute;left:0;top:6px;width:13px;height:13px;border:1.5px solid var(--ant-border);
+  border-radius:3px;background:#fff}
+
+/* 页脚 */
+.foot{text-align:center;color:var(--ant-text-3);font-size:12.5px;padding:8px 0 0}
+.foot .kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--ant-border);border-bottom-width:2px;
+  border-radius:4px;padding:0 5px;background:#fff;color:var(--ant-text-2)}
+
+@media (max-width:1000px){
+  .shell{flex-direction:column;padding:0 16px 60px}
+  .toc{position:static;width:100%;flex:none;max-height:none;border-bottom:1px solid var(--ant-border-2)}
+  .toc .toc-body{display:none}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .grid2,.grid3,.tbranch,.check{grid-template-columns:1fr}
+  .flow{grid-template-columns:1fr}
+  section{padding:6px 18px 22px}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ============ 左侧目录 ============ -->
+  <aside class="toc">
+    <div class="toc-brand"><span class="dot"></span>XX-PRD</div>
+    <div class="toc-sub">Skill 说明指南<br>工作流 · 设计准则 · PRD 结构 · 产物功能</div>
+    <nav class="toc-body">
+      <a class="lv1" href="#workflow">1 · 工作流</a>
+      <a class="lv2" href="#wf-flow">七阶段与三个卡点</a>
+      <a class="lv2" href="#wf-table">阶段速查表</a>
+      <a class="lv2" href="#wf-reverse">Demo 逆向通道</a>
+      <div class="toc-sep"></div>
+      <a class="lv1" href="#rules">2 · 设计准则</a>
+      <a class="lv2" href="#rule-base">2.1 设计基线 · Ant Design 5</a>
+      <a class="lv2" href="#rule-principles">2.2 七条设计原则</a>
+      <a class="lv2" href="#rule-container">2.3 容器选型</a>
+      <a class="lv2" href="#rule-md">2.4 主子表</a>
+      <a class="lv2" href="#rule-nav">2.5 跳转与页面关系</a>
+      <a class="lv2" href="#rule-view">2.6 画布交互</a>
+      <a class="lv2" href="#rule-visual">2.7 视觉语言</a>
+      <div class="toc-sep"></div>
+      <a class="lv1" href="#structure">3 · PRD 内容结构</a>
+      <a class="lv2" href="#st-four">四层结构</a>
+      <a class="lv2" href="#st-outline">12 章大纲</a>
+      <a class="lv2" href="#st-ears">EARS 与门禁</a>
+      <div class="toc-sep"></div>
+      <a class="lv1" href="#product">4 · 产物功能说明</a>
+      <a class="lv2" href="#pd-list">产物清单</a>
+      <a class="lv2" href="#pd-ui">容器操作速查</a>
+      <a class="lv2" href="#pd-export">导出物说明</a>
+      <a class="lv2" href="#pd-check">交付前自检</a>
+      <div class="toc-sep"></div>
+      <a class="lv1" href="#files">5 · 文件索引</a>
+    </nav>
+  </aside>
+
+  <!-- ============ 主内容 ============ -->
+  <main class="doc">
+
+    <!-- ===== Hero ===== -->
+    <header class="hero" id="top">
+      <h1>XX-PRD</h1>
+      <div class="tag">需求分析与原型设计工作台 · Skill 说明指南</div>
+      <p>
+        把「一句话想法 / 模糊需求 / Vibe-Coding Demo」收敛成
+        <b>可交互原型 + EARS 规范 PRD + 标注对齐</b> 三合一的<b>单文件 HTML 容器</b>；
+        <b>基于 Ant Design 5</b> 做设计（容器内置压缩版 AntD token 与组件语义），
+        并据此产出可直接交给 AI 开工的<b>开发交接包</b>。
+        本文是 skill 的自解释文档 —— 讲清它<b>怎么跑</b>、<b>遵从哪些设计原则</b>、<b>产出什么结构</b>、<b>产物怎么用</b>。
+      </p>
+      <div class="stats">
+        <div class="stat"><b>7</b><span>阶段工作流</span></div>
+        <div class="stat"><b>3</b><span>人工确认卡点</span></div>
+        <div class="stat"><b>68</b><span>组件白名单</span></div>
+        <div class="stat"><b>8</b><span>参考文档 + 4 示例</span></div>
+      </div>
+    </header>
+
+    <!-- ================================================================
+         1 · 工作流
+    ================================================================= -->
+    <section id="workflow">
+      <h2><span class="num">1</span>工作流</h2>
+      <p class="lead">
+        从「用户开口」到「可交付 PRD」，走七个阶段。<b>三个阶段之间设了人工确认卡点</b> —— 卡点未确认不往下走，
+        这是本 skill 与「一口气生成一份文档」最大的区别：需求与板块是产研对齐的锚，锚歪了后面全是返工。
+      </p>
+
+      <h3 id="wf-flow">七阶段与三个卡点</h3>
+      <div class="flow">
+        <div class="stage">
+          <div class="sn">STAGE 01</div>
+          <div class="st">需求澄清</div>
+          <div class="sd">8 维度提问，每轮 5~7 问；产出 4 份 shaping 文档</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 02</div>
+          <div class="st">需求分析 EARS</div>
+          <div class="sd">逐条 EARS 条目 + 状态机 + 质量门禁</div>
+        </div>
+        <div class="stage gate">
+          <div class="sn">卡点 A</div>
+          <div class="st">确认需求</div>
+          <div class="sd">需求清单 + 状态机 + 待澄清问题</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 03</div>
+          <div class="st">板块计划</div>
+          <div class="sd">按模块/页面拆板块，写 boardPlan</div>
+        </div>
+        <div class="stage gate">
+          <div class="sn">卡点 B</div>
+          <div class="st">确认板块</div>
+          <div class="sd">顺序 + 颗粒度</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 04</div>
+          <div class="st">逐板块生成</div>
+          <div class="sd">原型 + PRD 同步产出，每批 1~2 个板块</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 05</div>
+          <div class="st">标注评审迭代</div>
+          <div class="sd">用户在原型上打标注 → AI 按指令改</div>
+        </div>
+        <div class="stage gate">
+          <div class="sn">卡点 C</div>
+          <div class="st">原型定稿</div>
+          <div class="sd">走查四态 / 关系图连通 / 审核模式</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 07</div>
+          <div class="st">PRD + 导出</div>
+          <div class="sd">组装完整 PRD、跑校验、出交接包</div>
+        </div>
+      </div>
+
+      <div class="tip info">
+        <span class="ic">i</span>
+        <p>卡点是<b>停下来等用户确认</b>，不是「自动跳过」。卡点 A 确认需求语义，卡点 B 确认工作颗粒度，
+          卡点 C 确认原型可交付 —— 三次确认把返工挡在生成之前。</p>
+      </div>
+
+      <h3 id="wf-table">阶段速查表</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr><th style="width:76px">阶段</th><th style="width:31%">做什么</th><th style="width:22%">读哪份参考</th><th>产出</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="nowrap"><b>① 澄清</b></td>
+              <td>按 8 个维度提问（定位/范围/角色/用户流/功能规则/状态生命周期/数据集成/体验交付），能给选项就不给开放题</td>
+              <td><code>01-clarification.md</code></td>
+              <td>4 份 shaping 文档：产品定位 / 用户流 / 模块清单 / 页面清单；<code>openQuestions</code>（P0 必须有答案或默认值）</td>
+            </tr>
+            <tr>
+              <td class="nowrap"><b>② 需求分析</b></td>
+              <td>逐条产出 EARS 条目（角色/触发/规则/状态机/预期/验收），建状态机，过质量门禁</td>
+              <td><code>02-ears-spec.md</code></td>
+              <td><code>requirements[]</code> + <code>stateMachines[]</code></td>
+            </tr>
+            <tr style="background:var(--ant-warning-bg)">
+              <td class="nowrap"><b>卡点 A</b></td>
+              <td colspan="3">把需求清单 + 状态机 + 待澄清问题交给用户确认。<b>未确认不进下一阶段。</b></td>
+            </tr>
+            <tr>
+              <td class="nowrap"><b>③ 板块计划</b></td>
+              <td>按模块/页面拆成 PRD 板块，排 <code>order</code> 与 <code>status</code></td>
+              <td><code>03-prd-structure.md</code> §2</td>
+              <td><code>boardPlan[]</code></td>
+            </tr>
+            <tr style="background:var(--ant-warning-bg)">
+              <td class="nowrap"><b>卡点 B</b></td>
+              <td colspan="3">用户确认板块顺序与颗粒度。</td>
+            </tr>
+            <tr>
+              <td class="nowrap"><b>④ 逐板块生成</b></td>
+              <td>每页产出组件树 + ≥4 态 + 交互 + PRD 小节；同步维护组件定义与数据模型。<br>
+                  <b>数据层级多 → 主子表</b>；<b>表单/详情 → 先选对容器</b>。</td>
+              <td><code>04-container-schema.md</code><br><code>05-component-states.md</code><br><code>08-container-choice.md</code></td>
+              <td><code>pages[].componentTree / states / interactions / prd.sections</code>；<code>components[]</code>；<code>dataModel</code></td>
+            </tr>
+            <tr>
+              <td class="nowrap"><b>⑤ 标注评审</b></td>
+              <td>用户点原型打标注 → 点顶部「⇪ 标注指令」生成结构化 prompt → AI 逐条判断影响面并修改</td>
+              <td><code>04</code> §6.4 标注层</td>
+              <td>标注置 <code>resolved</code> + <code>replies[]</code> 记录改了什么；影响 EARS 则同步 <code>requirements</code></td>
+            </tr>
+            <tr>
+              <td class="nowrap"><b>⑥ 原型定稿</b></td>
+              <td>走查：组件树与 PRD 一致、状态机在原型可见、四态齐全；关系图无孤岛页；开「审核模式」检查自洽</td>
+              <td><code>07-quality-and-examples.md</code></td>
+              <td>定稿原型</td>
+            </tr>
+            <tr>
+              <td class="nowrap"><b>⑦ 最终 PRD + 导出</b></td>
+              <td>按 12 章大纲组装完整 PRD；导出 Markdown / 关键页 PNG / 关系图全图；跑校验器；出开发交接包</td>
+              <td><code>03</code> §2、<code>07</code>、<code>scripts/validate_prd_json.py</code></td>
+              <td><code>{产品}-PRD-v{版本}.md</code>、PNG、<code>{产品}.devspec.json</code> + <code>AGENT.md</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="wf-reverse">Demo 逆向通道（输入是代码时走这条）</h3>
+      <p>如果用户给的是 Vibe-Coding Demo 源码而不是文字需求，<b>不直接开始写 PRD</b>，先按三条规则把代码逆向成结构：</p>
+      <div class="grid3">
+        <div class="card"><span class="badge b-blue">规则 1</span><h4>路由抽模块</h4><p>从路由表抽模块与页面清单，页面 <code>route</code> 原样保留。</p></div>
+        <div class="card"><span class="badge b-blue">规则 2</span><h4>分支抽规则</h4><p>从条件判断抽业务规则，转成 EARS 的 <code>rule</code> 字段。</p></div>
+        <div class="card"><span class="badge b-blue">规则 3</span><h4>状态变化抽状态机</h4><p>从状态赋值抽状态机，覆盖实体生命周期。</p></div>
+      </div>
+      <p>逆向结果再回到 ① 澄清流程与用户对齐 —— 代码是「压缩的 PRD」，本 skill 的工作就是把它展开。详见 <code>references/06-demo-reverse.md</code>。</p>
+    </section>
+
+    <!-- ================================================================
+         2 · 设计准则
+    ================================================================= -->
+    <section id="rules">
+      <h2><span class="num">2</span>设计准则</h2>
+      <p class="lead">
+        这个 skill 不自己发明设计语言 —— 它<b>基于 Ant Design 5 做设计</b>：颜色、间距、圆角、字号、组件形态
+        全部直接复用 AntD 的 token 与组件语义，容器内置一套压缩版 AntD 5 实现，不引 CDN、不引图标库。
+        在这条基线上推导出 <b>7 条可执行的设计原则</b>（2.2），再把原则落到四个具体维度
+        —— <b>容器选型</b>、<b>主子表</b>、<b>跳转关系</b>、<b>画布与视觉</b>。
+      </p>
+      <div class="tip info"><span class="ic">i</span>
+        <p>换句话说：<b>「容器选型」「主子表」这些不是并列的另一套规矩，而是 7 条原则推导出来的结果。</b>
+          所以它们能被校验器检查、能被容器运行期兜底，而不是靠评审时「记得要这样做」。</p>
+      </div>
+
+      <!-- 2.1 设计基线 -->
+      <h3 id="rule-base">2.1 设计基线 · 为什么是 Ant Design 5</h3>
+      <p>先回答一个前提问题：这个 skill 生成的原型，视觉与交互从哪里来？答案是<b>整套继承 AntD</b>，而不是自由发挥。</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>Token 直接复用</h4>
+          <p>容器内置 <code>--ant-primary:#1677ff</code> 等一整套变量，取值与 AntD 5 官方 token 一致。
+             原型与真实中后台<b>同色同形</b>，评审时不会被「配色不像我们的系统」打断。</p>
+        </div>
+        <div class="card">
+          <h4>组件语义一一对应</h4>
+          <p>68 个白名单组件全部对应 AntD 真实组件（Table / Form / Descriptions / Timeline / Steps / Tabs …）。
+             原型里看到的每个控件，在实现阶段都能落到<b>同名 AntD 组件</b>，不存在「原型有、实现没有」的落差。</p>
+        </div>
+        <div class="card">
+          <h4>交互反馈成套继承</h4>
+          <p>hover / active / disabled / loading / 选中 / 空态 / 告警，全部按 AntD 默认行为实现。
+             PRD 里因此<b>不需要</b>逐条写「按钮按下要变深」这类无效描述。</p>
+        </div>
+        <div class="card">
+          <h4>信息密度即行业默认</h4>
+          <p>32px 控件高、14px 正文、6px 圆角、8px 卡片圆角 —— 这就是 B2B 中后台的默认密度。
+             skill 不为「更紧凑 / 更炫」做二次设计，<b>密度本身就是共识</b>。</p>
+        </div>
+      </div>
+      <div class="tip ok"><span class="ic">记</span>
+        <p>产物不是「像 AntD 的示意图」，而是<b>直接跑在 AntD token 与组件语义上的可交互原型</b>
+          —— 这也是它能把原型直接转成开发交接包的前提。</p>
+      </div>
+
+      <!-- 2.2 七条设计原则 -->
+      <h3 id="rule-principles">2.2 七条设计原则</h3>
+      <p>
+        AntD 的四大设计价值观（<b>自然 / 确定 / 意义 / 生长</b>）与十条设计原则，在这个 skill 里被收敛成
+        <b>7 条可执行原则</b>：每一条都能指到容器里的一段实现、或校验器里的一条规则 —— 不是写在文档里的口号。
+      </p>
+      <div class="grid2">
+        <div class="pcard p1">
+          <h4>P1 自然 <span class="en">Nature</span></h4>
+          <p class="one">交互隐喻贴合物理直觉与用户预期。</p>
+          <p class="src">AntD 价值观「自然」· 原则「提供邀请 / 巧用过渡」</p>
+          <p class="app"><b>落实：</b>抽屉从<b>右侧</b>滑出、对话框<b>居中 + 遮罩</b>、滚轮缩放<b>以光标为锚点</b>（不是画布中心）、
+             拖拽平移跟手、子表在主表<b>下方</b>（视觉上从属）。</p>
+        </div>
+        <div class="pcard p2">
+          <h4>P2 确定 <span class="en">Certainty</span></h4>
+          <p class="one">相同语义永远用相同组件、相同颜色、相同容器。</p>
+          <p class="src">AntD 价值观「确定」· 原则「重复」</p>
+          <p class="app"><b>落实：</b>四态固定映射 <code>success / warning / error / processing</code>；
+             按钮层级固定 <b>primary(主) / default(次) / danger(危险) / text(轻)</b>；
+             容器选型有<b>唯一决策树</b> —— 同一场景在任何页面都得到同一结果。</p>
+        </div>
+        <div class="pcard p3">
+          <h4>P3 意义 <span class="en">Meaning</span></h4>
+          <p class="one">信息分层靠字号、颜色、间距，不靠装饰。</p>
+          <p class="src">AntD 价值观「意义」· 原则「对比」</p>
+          <p class="app"><b>落实：</b>文字四档色（.88 / .65 / .45 / .25）+ 字号三档（16 / 14 / 12）；
+             两级阴影只给「卡片」与「浮层」；不引入渐变、发光、拟物 —— 中后台的第一诉求是<b>扫读效率</b>。</p>
+        </div>
+        <div class="pcard p4">
+          <h4>P4 亲密性 <span class="en">Proximity</span></h4>
+          <p class="one">相关的靠拢成组，无关的拉开距离。</p>
+          <p class="src">AntD 原则「亲密性 / 对齐」</p>
+          <p class="app"><b>落实：</b>表单按业务分组、Descriptions 成对排列、列表页把「查询条 / 操作条 / 表格 / 分页脚」
+             垂直贴合成一体。<b>主子表就是这么来的</b> —— 主表与子表必须共享选中态、贴合在同一容器里，
+             而不是平铺成两个兄弟模块（见 2.4）。</p>
+        </div>
+        <div class="pcard p5">
+          <h4>P5 直截了当 <span class="en">Straightforward</span></h4>
+          <p class="one">减少一次操作所需的跳转与步骤。</p>
+          <p class="src">AntD 原则「直截了当 / 足不出户」</p>
+          <p class="app"><b>落实：</b>列表页三件套同屏（查询 / 操作 / 分页不跳页）；<b>抽屉</b>承载编辑（保留父页上下文）、
+             <b>对话框</b>承载强模态确认、只有「复杂长程 / 需独立 URL / 需长期停留」才升级<b>新页面</b>。
+             <b>容器选型就是这么来的</b>（见 2.3）。</p>
+        </div>
+        <div class="pcard p6">
+          <h4>P6 即时反应 <span class="en">Instant Feedback</span></h4>
+          <p class="one">每个操作都有可见结果，状态永远不藏在系统里。</p>
+          <p class="src">AntD 原则「即时反应 / 提供邀请」</p>
+          <p class="app"><b>落实：</b>主表选中行浅蓝高亮 + 单选圆点点亮；操作列按钮不误触发选行；分页脚显示「共 N 条」；
+             子表标题显示「· 共 N 条」；<b>bind/bindTo 匹配不到时容器运行期告警</b>
+             —— 把「静默失败」变成「可见告警」。</p>
+        </div>
+        <div class="pcard p7">
+          <h4>P7 可生长 <span class="en">Growth</span></h4>
+          <p class="one">结构可扩展，产物可被机器消费。</p>
+          <p class="src">AntD 价值观「生长」· 原则「简化交互」</p>
+          <p class="app"><b>落实：</b>渲染器注册表 <code>R.&lt;Type&gt;</code> 可扩展（加组件不改引擎）；
+             组件白名单由校验器守门；<b>一份 JSON 同时产出人看的原型和 AI 看的开发交接包</b>
+             （<code>devspec.json</code> / <code>AGENT.md</code>）—— 原型与文档不会漂移。</p>
+        </div>
+      </div>
+
+      <h4>原则 → 场景准则：四个维度分别推导自哪一条</h4>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:190px">场景准则（下面各节）</th><th style="width:230px">推导自</th><th>落地形式</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>2.3 容器选型</b></td>
+              <td>P5 直截了当 + P6 即时反应</td>
+              <td>唯一决策树 + 五维矩阵 + 校验器硬规则（Modal &gt; 15 字段 <b style="color:var(--ant-error)">ERROR</b>、dialogception <b style="color:var(--ant-error)">ERROR</b>）</td>
+            </tr>
+            <tr>
+              <td><b>2.4 主子表</b></td>
+              <td>P4 亲密性 + P6 即时反应</td>
+              <td><code>MasterDetail</code> 渲染器 + 选行联动 + 运行期 bindTo 自检</td>
+            </tr>
+            <tr>
+              <td><b>2.5 跳转与页面关系</b></td>
+              <td>P5 直截了当</td>
+              <td>合成节点 id + 目标页可独立渲染 + <code>navigate</code> 自动抽关系图</td>
+            </tr>
+            <tr>
+              <td><b>2.6 画布交互</b></td>
+              <td>P1 自然</td>
+              <td>光标锚点缩放、跟手平移、平移与标注互斥、标注坐标与倍率无关</td>
+            </tr>
+            <tr>
+              <td><b>2.7 视觉语言</b></td>
+              <td>P2 确定 + P3 意义</td>
+              <td>AntD token 固定取值；涨红跌绿</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tip warn"><span class="ic">!</span>
+        <p>评审时如果对某条规则有异议，<b>先讨论原则</b> —— 原则变了规则才跟着变。这样规则不会各说各话。</p>
+      </div>
+
+      <!-- 2.3 容器选型 -->
+      <h3 id="rule-container">2.3 容器选型（对话框 / 抽屉 / 新页面）</h3>
+      <p>
+        这是 <b>P5 直截了当</b>与 <b>P6 即时反应</b>在<b>容器维度</b>的应用：能用「并排」解决的就不「进入」，
+        能用「打断」解决的就不「并排」—— 三种容器的本质定位完全不同，混用是 B2B 最常见的体验债。
+      </p>
+      <div class="grid3">
+        <div class="card dlg"><span class="badge b-blue">打断式 · 强模态</span>
+          <h4>对话框 Dialog</h4>
+          <p>完全脱离上下文，处理完即回。宽度 400–560px。<br><b>用于</b>：轻量确认、危险操作、≤3 字段快速编辑。</p></div>
+        <div class="card drw"><span class="badge b-green">并排式 · 半模态</span>
+          <h4>抽屉 Drawer</h4>
+          <p>保留父页上下文，侧边滑出。480–720px。<br><b>用于</b>：多字段编辑、<b>详情主从</b>、边看边操作。</p></div>
+        <div class="card pg"><span class="badge b-purple">进入式 · 无模态</span>
+          <h4>新页面 Page</h4>
+          <p>整屏切换、独立 URL。<br><b>用于</b>：复杂长程表单、详情工作台、多步向导。</p></div>
+      </div>
+      <div class="tip ok"><span class="ic">记</span>
+        <p>一句话：对话框是<b>「打断」</b>，抽屉是<b>「并排」</b>，新页面是<b>「进入」</b>。</p>
+      </div>
+
+      <h4>决策树（按顺序判断，命中即停）</h4>
+      <div class="tree">
+        <div class="tnode">
+          <div class="q">Q1 · 内容是否轻量、且需要快速返回？</div>
+          <div class="tbranch">
+            <div class="tres y"><span class="yn">是</span><b>对话框</b> —— ≤3 字段 / 纯确认 / 强耦合原流程</div>
+            <div class="tres n"><span class="yn">否</span>进入 Q2</div>
+          </div>
+        </div>
+        <div class="tnode" style="margin-top:10px">
+          <div class="q">Q2 · 是否需要对照父页面，且内容中等？</div>
+          <div class="tbranch">
+            <div class="tres y"><span class="yn">是</span><b>抽屉</b> —— 多字段单屏 / 详情主从 / 边看边操作</div>
+            <div class="tres n"><span class="yn">否</span><b>新页面</b> —— 复杂、多步、需独立 URL、需长期停留</div>
+          </div>
+        </div>
+      </div>
+      <p>拿不准时问自己三个问题：<b>要不要回头看原来的列表？</b>（要 → 抽屉）&nbsp;<b>会不会在这里待很久？</b>（会 → 新页面）&nbsp;<b>是不是只想点个确认？</b>（是 → 对话框）</p>
+
+      <h4>五维决策矩阵</h4>
+      <div class="tw">
+        <table>
+          <thead><tr><th>判断维度</th><th>对话框</th><th>抽屉</th><th>新页面</th></tr></thead>
+          <tbody>
+            <tr><td>内容量</td><td>1–3 字段</td><td>多字段单屏</td><td>多 section / 多步</td></tr>
+            <tr><td>上下文依赖</td><td>无需参照</td><td>需参照父页</td><td>自成体系</td></tr>
+            <tr><td>任务时长</td><td>秒级</td><td>分钟级</td><td>长时</td></tr>
+            <tr><td>需独立 URL / 可分享 / 刷新保留</td><td>否</td><td>通常否</td><td><b>是</b></td></tr>
+            <tr><td>与列表耦合</td><td>强（看完即回）</td><td>中</td><td>弱</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>B2B 特有准则</h4>
+      <ol>
+        <li><b>详情主从首选抽屉</b>，别用对话框 —— 对话框展不开关联信息与操作区。</li>
+        <li><b>禁止对话框套对话框（dialogception）</b>：第二层一律改用抽屉或新页面。</li>
+        <li><b>长表单（&gt;15 字段）禁用对话框</b>：滚动、校验、键盘体验都会崩。</li>
+        <li>需要全屏专注的复杂编辑用<b>新页面</b>，抽屉的半屏会限制信息密度。</li>
+        <li>危险操作 / 批量确认用<b>对话框</b>：利用强模态强制用户确认。</li>
+        <li><b>状态保持</b>：抽屉关闭保留父页筛选/页码/滚动；新页面要支持草稿保存 + 未提交离开提示；弹窗/抽屉默认丢弃未保存。</li>
+        <li><b>抽屉方向</b>：右滑用于详情 / 编辑，左滑常用于筛选面板或导航。</li>
+        <li>抽屉里塞 <b>≥3 个 tab</b> 的工作台要升级为新页面。</li>
+      </ol>
+
+      <h4>反模式速查（校验器会拦）</h4>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:32%">反模式</th><th style="width:30%">后果</th><th>应改为</th><th style="width:88px">校验器</th></tr></thead>
+          <tbody>
+            <tr><td>用对话框承载 20 个字段的长表单</td><td>滚动 / 校验 / 键盘体验灾难</td><td>抽屉或新页面</td><td><b style="color:var(--ant-error)">ERROR</b></td></tr>
+            <tr><td>对话框里再弹对话框处理二级流程</td><td>遮罩叠遮罩，用户迷路</td><td>抽屉或新页面</td><td><b style="color:var(--ant-error)">ERROR</b></td></tr>
+            <tr><td>详情用对话框</td><td>展不开关联信息、时间线、操作区</td><td>抽屉（主从）或新页面（工作台）</td><td><b style="color:var(--ant-warning)">WARN</b></td></tr>
+            <tr><td>对话框承载 9~15 字段的表单</td><td>体验已开始吃力</td><td>考虑抽屉</td><td><b style="color:var(--ant-warning)">WARN</b></td></tr>
+            <tr><td>抽屉里塞需要切多 tab 的复杂工作台</td><td>半屏装不下，横向挤压</td><td>新页面</td><td><b style="color:var(--ant-warning)">WARN</b></td></tr>
+            <tr><td>频繁切换新页面打断列表里的连续操作流</td><td>每次都丢失筛选与滚动位置</td><td>抽屉</td><td>人工判断</td></tr>
+            <tr><td>主子表把两张表平铺、点上行下行不动</td><td>用户以为页面卡了</td><td>用 <code>MasterDetail</code> 做联动</td><td>人工判断</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>落到 JSON 怎么写</h4>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:88px">容器</th><th>节点写法</th><th style="width:36%">打开 / 关闭与按钮 id</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>对话框</b></td>
+              <td><code>{ "id":"n-modal-del", "type":"Modal", "props":{ "modalId":"m-del", ... } }</code></td>
+              <td><code>showModal</code>/<code>hideModal</code>（键名 <code>modalId</code>）；底部按钮合成 id 是 <code>&lt;Modal 节点 id&gt;__ok</code> / <code>__cancel</code>，<b>不是</b> <code>props.modalId</code>；<code>__cancel</code> 内建关闭</td>
+            </tr>
+            <tr>
+              <td><b>抽屉</b></td>
+              <td><code>{ "id":"n-dr-edit", "type":"Drawer", "props":{ "modalId":"dr-edit", "placement":"right", "width":520 } }</code></td>
+              <td><code>showDrawer</code>/<code>hideDrawer</code>（键名 <code>drawerId</code>）；抽屉里的按钮是<b>普通节点 id</b>，要自己写 interaction</td>
+            </tr>
+            <tr>
+              <td><b>新页面</b></td>
+              <td><code>{ "id":"page-xxx-detail", "route":"/xxx/:id", "parentId":"page-xxx", "states":[{"vars":{"id":"…"}}] }</code></td>
+              <td><code>navigate</code> + <code>params</code>；<b>目标页必须能用 <code>states[].vars</code> 默认值独立渲染</b>，否则刷新白屏；返回用 <code>Header.props.back</code> 或 <code>{"type":"back"}</code></td>
+            </tr>
+            <tr>
+              <td><b>主子表</b></td>
+              <td><code>{ "id":"n-md-task", "type":"MasterDetail", "props":{ "bind":"no", "bindTo":"taskNo" }, "children":[主表,子表] }</code></td>
+              <td>见下一节 2.4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 2.4 主子表 -->
+      <h3 id="rule-md">2.4 主子表（单页数据层级多时）</h3>
+      <p>
+        这是 <b>P4 亲密性</b>与 <b>P6 即时反应</b>在<b>数据层级维度</b>的应用：主记录与它的明细在业务上是一体，
+        视觉与交互上就必须贴合在一起、共享选中态。
+        <b>判断标准</b>：同一条主记录下挂着若干明细，且用户需要<b>边扫主表、边看某一条的明细</b>。
+        典型场景：一条巡检任务 → 若干巡检项；一张订单 → 若干商品行；一台设备 → 若干保养记录。
+      </p>
+
+      <div class="tip err"><span class="ic">!</span>
+        <p><b>不要</b>把两张表平铺成兄弟节点 —— 那样点上行、下行不会动，用户会以为页面卡了。
+          必须用 <code>MasterDetail</code> 把两张表包起来做联动。</p>
+      </div>
+
+      <h4>结构约定</h4>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:150px">位置</th><th>要求</th></tr></thead>
+          <tbody>
+            <tr><td><code>children[0]</code></td><td><b>主表</b> <code>Table</code>：<code>props.radio: true</code> 显示单选圆点标出当前行；<b>不要</b>设 <code>props.rowClick</code>（点行 = 选中行，校验器会 ERROR）</td></tr>
+            <tr><td><code>children[1]</code></td><td><b>子表</b> <code>Table</code>：<code>data</code> 写<b>全量</b>明细，容器按 <code>bind</code> 过滤；可展开收起，标题显示「共 N 条」</td></tr>
+            <tr><td><code>props.bind</code></td><td>主表上的关联字段名（如 <code>no</code>），必须是主表数据里存在的字段</td></tr>
+            <tr><td><code>props.bindTo</code></td><td>子表上的关联字段名（如 <code>taskNo</code>）。<b>两表字段不同名时必须显式写</b>，否则默认 <code>bindTo = bind</code>，一条都匹配不到</td></tr>
+            <tr><td>跳页</td><td>用主表 <code>columns[].actions</code> 里的按钮（<code>n-table__act_*_detail</code>）—— 点按钮<b>不会</b>误触发选行</td></tr>
+            <tr><td>列表页三件套</td><td>主表可配 <code>query</code>（查询条）/ <code>toolbar</code>（操作条）/ <code>pagination</code>（分页脚）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>运行期自检（容器会替你兜底）</h4>
+      <p>
+        主表选中行的 <code>bind</code> 值在子表 <code>bindTo</code> 字段里<b>一条都匹配不到</b>、而子表本身有数据时，
+        容器会输出一条告警：
+      </p>
+      <pre><code>主子表 n-md-task：主表 `no` 的值（ONSETE-20261016-0043）在子表字段 `taskNo`
+中匹配不到任何行，请检查 bind / bindTo 是否写对</code></pre>
+      <p>这类「bind/bindTo 写错导致子表永远为空」的错误肉眼极难发现，所以做成了运行期告警，并在校验器里对应一条反例。</p>
+
+      <p>契约详见 <code>04-container-schema.md</code> §6.7，可运行示例见 <code>assets/examples/example-04-master-detail.json</code>，页面骨架见 <code>05-component-states.md</code> §6.4。</p>
+
+      <!-- 2.5 跳转 -->
+      <h3 id="rule-nav">2.5 跳转与页面关系</h3>
+      <p>
+        这是 <b>P5 直截了当</b>在<b>页面维度</b>的应用：原型不能是一堆孤岛，但也不该为了「完整」到处加跳转。
+        列表 → 详情的跳转成本很低，而<b>「跳转写全 = 关系图自动成立」</b> —— 跳转本身就是页面关系的声明。
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:210px">合成节点 id（容器内建）</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;节点 id&gt;__row_&lt;i&gt;</code></td><td>表格第 <i>i</i> 行的行点击（需 <code>props.rowClick: true</code>）</td></tr>
+            <tr><td><code>&lt;节点 id&gt;__act_&lt;i&gt;_&lt;key&gt;</code></td><td>表格第 <i>i</i> 行、操作列里 <code>key</code> 按钮的点击</td></tr>
+            <tr><td><code>&lt;节点 id&gt;__back</code></td><td>页面返回（<code>Header.props.back</code>）</td></tr>
+            <tr><td><code>&lt;节点 id&gt;__ok</code> / <code>__cancel</code></td><td>Modal 的确认 / 取消（用 <b>Modal 节点 id</b>，不是 <code>props.modalId</code>；<code>__cancel</code> 内建关闭）</td></tr>
+            <tr><td><code>n-table__row_*</code> / <code>n-table__act_*_&lt;key&gt;</code></td><td><b>通配目标</b>：一条 interaction 覆盖所有行</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><code>navigate.params</code> 里用 <code>{{row.字段}}</code> 按行带参（在源页求值），目标页用 <code>{{变量名}}</code> 渲染。</li>
+        <li>目标页在 <code>states[].vars</code> 里留默认值，这样<b>单独打开它也正常</b>。</li>
+        <li>URL hash（<code>#/page-id</code>）即当前页，可分享、可浏览器前进后退；页面内「返回」不会跳出容器。</li>
+        <li>所有 <code>navigate</code> 会自动抽成 <code>pageGraph</code>，渲染成顶部「关系图」。</li>
+      </ul>
+
+      <!-- 2.6 画布交互 -->
+      <h3 id="rule-view">2.6 画布交互（缩放 / 平移 / 标注）</h3>
+      <p>
+        这是 <b>P1 自然</b>在<b>评审工具维度</b>的应用：原型被左栏、右栏挤压是常态，
+        <b>不要靠缩小浏览器窗口或删页面来腾空间</b> —— 中栏自带缩放与平移，且手势要跟手、可预期。
+      </p>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:150px">操作</th><th>方式</th><th style="width:34%">说明</th></tr></thead>
+          <tbody>
+            <tr><td>缩放</td><td><code>⌘/Ctrl</code> + 滚轮（以光标为锚点）；<code>⌘/Ctrl</code> + <code>0</code>/<code>+</code>/<code>-</code> 复位/放大/缩小；工具条 <code>−  100%  +</code></td><td>范围 25%–300%</td></tr>
+            <tr><td>适应宽度</td><td>工具条「适应宽度」</td><td>把原型压回中栏可视宽（等价 100%），不产生横向滚动条</td></tr>
+            <tr><td>平移</td><td>拖拽画布；<code>空格</code>拖拽；鼠标中键拖拽；「✋ 平移」常驻模式</td><td>平移模式与标注模式<b>互斥</b>（开一个自动关另一个）</td></tr>
+            <tr><td>标注</td><td>「✍ 标注」模式点原型任意位置加气泡；点气泡看/改/删</td><td>气泡严格贴合锚定节点</td></tr>
+            <tr><td>标注指令</td><td>顶部「⇪ 标注指令」</td><td>把标注导出为可直接交给 AI 的修改指令，含锚定节点、节点类型、属性摘要、渲染条件</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tip info"><span class="ic">i</span>
+        <p>标注锚定用<b>归一化坐标 + 画布盒基准</b>，与缩放倍率无关：评审时可以先 <code>⌘</code>+滚轮放大看细节、再「适应宽度」缩回纵览，
+          气泡始终贴在锚定节点上（回归测试跨 100%~152% 偏差 &lt; 0.8%）。</p>
+      </div>
+
+      <!-- 2.7 视觉语言 -->
+      <h3 id="rule-visual">2.7 视觉语言（AntD token 的具体取值）</h3>
+      <p>
+        这是 <b>P2 确定</b>与 <b>P3 意义</b>在<b>视觉维度</b>的应用。取值全部固定、不外扩 ——
+        原型页面风格统一走一套压缩版 AntD 5 token，不引 CDN、不引图标库，
+        视觉与真实中后台一致，评审时不会被「配色不像我们的系统」打断。
+      </p>
+      <div class="grid2">
+        <div class="card">
+          <h4>颜色 token</h4>
+          <p><code>--ant-primary:#1677ff</code> · <code>--ant-primary-bg:#e6f4ff</code><br>
+             <code>--ant-success:#52c41a</code> · <code>--ant-warning:#faad14</code> · <code>--ant-error:#ff4d4f</code><br>
+             <code>--ant-text</code> 四档（.88 / .65 / .45 / .25）· <code>--ant-border:#d9d9d9</code></p>
+        </div>
+        <div class="card">
+          <h4>尺寸与形态</h4>
+          <p><code>--ant-radius:6px</code> · <code>--ant-radius-lg:8px</code> · <code>--ant-h:32px</code><br>
+             字号 12 / 14 / 16 · 两级阴影（卡片 / 浮层）</p>
+        </div>
+      </div>
+      <div class="tip warn"><span class="ic">!</span>
+        <p><b>涨红跌绿</b>：涉及涨跌、收益的展示，涨用<b>红色</b>、跌用<b>绿色</b>（中国市场惯例）。</p>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         3 · PRD 内容结构
+    ================================================================= -->
+    <section id="structure">
+      <h2><span class="num">3</span>PRD 内容结构</h2>
+      <p class="lead">
+        PRD 的<b>结构必须与原型、标注、状态机一一对应</b> —— 这是「研发拿去能直接转技术文档」的前提。
+        整份产物按四层组织，最终交付的文档按 12 章组装。
+      </p>
+
+      <h3 id="st-four">四层结构</h3>
+      <div class="layers">
+        <div class="layer"><div class="ln">① 文档层</div>
+          <div class="ld"><b>PRD 板块 <code>boardPlan</code> → 页面 <code>page.prd</code></b><br>目标 / 交互说明 / 业务规则 / 页面状态 / 验收</div></div>
+        <div class="layer"><div class="ln">② 原型层</div>
+          <div class="ld"><b>组件树 <code>componentTree</code> + 交互 <code>interactions</code> + 页面状态 <code>states</code></b><br>递归 Node、事件 → 动作序列、状态变量与覆写</div></div>
+        <div class="layer"><div class="ln">③ 标注层</div>
+          <div class="ld"><b><code>page.annotations</code></b><br>锚定节点（推荐）+ 归一化坐标兜底、分类、状态流转、处理记录</div></div>
+        <div class="layer"><div class="ln">④ 状态机层</div>
+          <div class="ld"><b><code>requirements[]</code> + <code>stateMachines[]</code></b><br>EARS 条目（角色/触发/规则/状态机/预期/验收）+ 实体生命周期</div></div>
+      </div>
+
+      <h4>对应铁律（校验器会检查）</h4>
+      <ol>
+        <li><code>page.prd.sections</code> 里的每条「交互说明」，在 <code>page.interactions</code> 里必须有对应交互。</li>
+        <li><code>page.prd.reqIds</code> 必须能在 <code>requirements</code> 里找到，且这些需求的 <code>pageId</code> 指向本页。</li>
+        <li><code>page.states</code> 的每个状态，在 PRD 的「页面状态」小节里必须有说明。</li>
+        <li>状态机里的每个状态，在原型里必须<b>可见</b>（Tag / Badge / 状态条）。</li>
+      </ol>
+
+      <h3 id="st-outline">12 章大纲（最终交付的 PRD）</h3>
+      <div class="outline">
+        <div class="ch"><div class="cn">0</div><div class="ct"><b>文档信息</b><span class="mini">版本 / 日期 / 作者 / 变更记录 / 关联文档（原型链接、澄清文档）</span></div></div>
+        <div class="ch"><div class="cn">1</div><div class="ct"><b>产品定位</b><span class="mini">引用阶段①的产品定位文档（一句话定位 / 定位陈述 / 目标用户 / 核心价值 / 非目标 / 成功指标）</span></div></div>
+        <div class="ch"><div class="cn">2</div><div class="ct"><b>范围说明</b><span class="mini">本期范围 In Scope / 非目标 Out of Scope / 依赖与约束</span></div></div>
+        <div class="ch"><div class="cn">3</div><div class="ct"><b>用户与角色</b><span class="mini">角色表 + 权限矩阵</span></div></div>
+        <div class="ch"><div class="cn">4</div><div class="ct"><b>用户流</b><span class="mini">每条流的主路径 + 分支 + 异常</span></div></div>
+        <div class="ch"><div class="cn">5</div><div class="ct"><b>模块与页面总览</b><span class="mini">模块清单 + 页面清单 + 页面关系图（容器顶部「关系图」；对应 devspec.json 的 pageGraph）</span></div></div>
+        <div class="ch"><div class="cn">6</div><div class="ct"><b>关键组件与状态定义</b><span class="mini">组件清单（引用 components[]）+ 业务状态色板</span></div></div>
+        <div class="ch"><div class="cn">6.5</div><div class="ct"><b>数据模型 dataModel</b><span class="mini">实体清单 + 字段表（类型/约束/说明）+ 关系 + 索引 + 派生字段（口径与除零兜底）</span></div></div>
+        <div class="ch"><div class="cn">7</div><div class="ct"><b>状态机</b><span class="mini">每个实体的状态图（states + transitions 表）</span></div></div>
+        <div class="ch"><div class="cn">8</div><div class="ct"><b>需求条目（EARS）</b><span class="mini">按模块分组，每条含 角色 / 触发 / 规则 / 状态机 / 预期 / 验收</span></div></div>
+        <div class="ch"><div class="cn">9</div><div class="ct"><b>页面详述（按板块逐个）</b><span class="mini">页面目标 · 页面结构 · <b>主流程图</b> · 交互说明 · <b>容器选型说明</b> · <b>跳转关系</b> · 页面状态 · 业务规则 · 数据模型 · 关联需求 · 原型 · 标注记录</span></div></div>
+        <div class="ch"><div class="cn">10</div><div class="ct"><b>待澄清问题</b><span class="mini">openQuestions，未确认的东西不藏</span></div></div>
+        <div class="ch"><div class="cn">11</div><div class="ct"><b>术语表</b><span class="mini">业务术语与口径统一</span></div></div>
+        <div class="ch"><div class="cn">12</div><div class="ct"><b>附录：验收清单汇总</b><span class="mini">所有 EARS 条目的 acceptance 汇总成可勾选清单</span></div></div>
+      </div>
+
+      <h3 id="st-ears">EARS 与质量门禁</h3>
+      <p>需求条目走 EARS 句式（五种：Ubiquitous / Event-driven / State-driven / Unwanted / Optional），字段固定 6 个：</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:120px">字段</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td><code>role</code></td><td>谁（角色）</td></tr>
+            <tr><td><code>trigger</code></td><td>什么条件下（触发）</td></tr>
+            <tr><td><code>rule</code></td><td>系统必须做什么（规则，单一响应）</td></tr>
+            <tr><td><code>stateMachine</code></td><td>涉及哪个状态机 / 状态</td></tr>
+            <tr><td><code>expected</code></td><td>预期结果（可观测）</td></tr>
+            <tr><td><code>acceptance</code></td><td>验收条件（可勾选、可测试）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tip ok"><span class="ic">门禁</span>
+        <p><b>无主观词</b>（「友好」「快速」「尽量」）、<b>无实现细节</b>（技术栈 / 表结构）、<b>单一响应</b>（一条需求一件事）、<b>可验收</b>（能写成测试用例）。四条不过则重写。</p>
+      </div>
+      <p>另外三条硬约定：<b>推断必标</b>（AI 推断的内容 <code>source: "inferred"</code> 并写进 <code>openQuestions</code>）；
+        <b>数据模型不能只在正文里</b>（实体/字段/主外键进顶层 <code>dataModel</code>，派生指标进 <code>derived[]</code> 且必须有 <code>fallback</code>）；
+        <b>每页要有流程图</b>（<code>prd.sections</code> 里至少一个 <code>type:"flow"</code> 小节，有 <code>start</code>/<code>end</code>、判定出边带 <code>label</code>、无孤岛节点）。</p>
+    </section>
+
+    <!-- ================================================================
+         4 · 产物功能说明
+    ================================================================= -->
+    <section id="product">
+      <h2><span class="num">4</span>产物功能说明</h2>
+      <p class="lead">一次完整跑完，产出 7 类东西。<b>数据契约是唯一真源</b>，其余都是它的渲染、校验或导出形态。</p>
+
+      <h3 id="pd-list">产物清单</h3>
+      <div class="prod">
+        <div class="ph"><span class="pn">XX-PRD.data.json</span><span class="pt">唯一真源</span></div>
+        <div class="pb">数据契约。容器渲染、校验器校验、Markdown/PNG/devspec 导出<b>全部基于它</b>。改了数据 = 改了全部产物。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">XX-PRD.html</span><span class="pt">交付容器 · 单文件</span></div>
+        <div class="pb">复制 <code>assets/container/index.html</code>，把数据内联进 <code>&lt;script id="iprd-data"&gt;</code>。
+          双击即开，无需服务器、无需联网、无 CDN 依赖。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">PRD 文档</span><span class="pt">容器右栏 · 可编辑 · 可导出 .md</span></div>
+        <div class="pb">
+          <ul>
+            <li>EARS 规范正文，直接在容器里编辑，自动存 localStorage，可「重置为 AI 版本」。</li>
+            <li>正文里的 <code>type:"flow"</code> 小节渲染成<b>内嵌 SVG 流程图</b>（原尺寸、可横向滚动，点「⤢ 放大」全屏看整体）。</li>
+            <li><code>dataModel</code> 渲染成「数据模型」小节。</li>
+            <li>面板头「›」或原型栏「PRD ‹」可折叠；拖分割条调宽，双击分割条复位。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">可交互原型</span><span class="pt">容器中栏</span></div>
+        <div class="pb">JSON→UI 实时渲染（68 个组件渲染器）。支持：<b>页面间跳转 / 带参 / 返回</b>、四态切换、<b>主子表联动</b>、列表页三件套、缩放平移。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">页面关系图</span><span class="pt">容器顶部「关系图」</span></div>
+        <div class="pb">全局展开的分层有向图，一眼看清页面父子与跳转关系。可拖卡片、切纵横布局、缩放、适应、<b>导出全图 PNG</b>；点卡片直接进入该页。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">{产品}.devspec.json + AGENT.md</span><span class="pt">开发交接包 · 机器可读</span></div>
+        <div class="pb">供 AI / 研发直接开工。含 <code>pageGraph</code>、<code>dataModel</code>、<code>modules</code>、<code>requirements</code>、
+          <code>devNotes</code>（汇总所有未确认项）。交付前确认 <code>devNotes</code> 里没有 <code>missing</code> 项。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">标注气泡 + 标注指令</span><span class="pt">评审闭环</span></div>
+        <div class="pb">用户在原型上提意见（<code>status: open</code>）→ 点「⇪ 标注指令」一键生成结构化 prompt（含锚定节点上下文）→ AI 逐条改 → 标注置 <code>resolved</code> 并追加 <code>replies[]</code>。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">guide.html</span><span class="pt">本指南</span></div>
+        <div class="pb">skill 的自解释文档 —— 工作流 / 设计准则 / PRD 内容结构 / 产物功能说明。</div>
+      </div>
+
+      <h3 id="pd-ui">容器操作速查（交付给用户后怎么用）</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:170px">区域 / 按钮</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td><b>左栏 · 页面导航</b></td><td>树形目录：模块 → 页面 → 子页面（多模块/多级页面时用它切换，不用顶部页签）</td></tr>
+            <tr><td>导航筛选</td><td>按模块名 / 页面名 / 路由 / 页面 id 过滤，自动保留命中项的祖先链路</td></tr>
+            <tr><td>导航角标</td><td>页面行右侧显示该页待处理（<code>open</code>）标注数量</td></tr>
+            <tr><td>顶栏面包屑</td><td>显示「模块 / 父页面 / … / 当前页 + 路由」，模块名与页面名相同时去重</td></tr>
+            <tr><td>☰ / ‹</td><td>收起 / 展开左栏；左栏宽度可拖拽，均记入 localStorage</td></tr>
+            <tr><td><b>中栏</b></td><td>可交互原型（页面间可跳转、可带参、可返回；单页数据层级多时用主子表）</td></tr>
+            <tr><td>中栏 · 缩放</td><td>工具条 <code>−  100%  +</code> / <code>适应宽度</code>；原型被左右栏挤压时用它放大细节或缩略纵览</td></tr>
+            <tr><td>中栏 · 平移</td><td>拖拽画布即可平移；也可开「✋ 平移」模式、按住空格、或鼠标中键拖拽</td></tr>
+            <tr><td>中栏 · 跳转</td><td>点表格行 / 行内按钮 / 页面按钮按 <code>interactions</code> 跳页；URL hash 即当前页，可分享、可前进后退</td></tr>
+            <tr><td><b>右栏</b></td><td>PRD 文档（可编辑，自动存 localStorage；含内嵌流程图与数据模型小节）</td></tr>
+            <tr><td>右栏 · 折叠</td><td>面板头「›」或原型栏「PRD ‹」收起，右侧出现竖向「PRD」把手可展开；双击分割条复位</td></tr>
+            <tr><td>状态切换</td><td>一键切 默认 / 加载 / 空 / 异常 态</td></tr>
+            <tr><td><b>关系图</b></td><td>全局展开的页面关系图：分层布局 + 带跳转标签的有向连线（回边/入口虚线、当前页高亮）；可拖卡片、切纵横、缩放、适应、导出全图 PNG；点卡片进入该页</td></tr>
+            <tr><td><b>标注模式</b></td><td>点原型任意位置加气泡；点气泡看 / 改 / 删</td></tr>
+            <tr><td><b>⇪ 标注指令</b></td><td>把标注导出为一段可直接交给 AI 的修改指令（含锚定节点上下文），支持复制 / 下载 .md / 范围与筛选切换</td></tr>
+            <tr><td><b>⬇ 开发交接</b></td><td>导出 <code>{产品}.devspec.json</code> + <code>AGENT.md</code> + 可复制的「AI 交接指令」</td></tr>
+            <tr><td>审核模式</td><td>隐藏过程产物（shaping 文档），只留 PRD + 原型，检查两者是否自洽</td></tr>
+            <tr><td>导出</td><td>当前页截图 PNG / 关系图全图 PNG / 整份 Markdown</td></tr>
+            <tr><td>保存</td><td>自动存 localStorage，可「重置为 AI 版本」</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="pd-export">导出物说明</h3>
+      <div class="grid3">
+        <div class="card"><span class="badge b-blue">文档</span><h4>Markdown PRD</h4>
+          <p><code>{产品名}-PRD-v{版本}.md</code>。12 章完整大纲；内嵌流程图降级为箭头链路文本。</p></div>
+        <div class="card"><span class="badge b-blue">图片</span><h4>PNG 截图</h4>
+          <p>当前页截图 + 关系图全图。用于评审材料与需求附件。</p></div>
+        <div class="card"><span class="badge b-orange">机器可读</span><h4>开发交接包</h4>
+          <p><code>{产品}.devspec.json</code>（唯一真源）+ <code>AGENT.md</code>（实现约定）+ AI 交接指令。</p></div>
+      </div>
+
+      <h3 id="pd-check">交付前自检</h3>
+      <ul class="check">
+        <li>跑过 <code>validate_prd_json.py</code>，0 ERROR</li>
+        <li>每页四态齐全（或显式 <code>notApplicableStates</code>）</li>
+        <li>所有 <code>on.target</code> 指向存在的节点 id 或合法合成 id</li>
+        <li>主路径页面互相可达，关系图无孤岛</li>
+        <li>带参跳转的目标页有 <code>states[].vars</code> 默认值</li>
+        <li>主从结构用了 <code>MasterDetail</code>，主表没设 <code>rowClick</code></li>
+        <li>每个 Modal 字段 ≤ 15，无 Modal 嵌套 Modal</li>
+        <li>详情没用 Modal 承载；抽屉里没有 ≥3 tab 工作台</li>
+        <li>每页至少一条 <code>type:"flow"</code> 流程图小节</li>
+        <li><code>dataModel</code> 写了实体/字段/主外键，派生字段有 <code>fallback</code></li>
+        <li>推断内容标了 <code>source:"inferred"</code> 并进 <code>openQuestions</code></li>
+        <li><code>devNotes</code> 里没有 <code>missing</code> 项</li>
+      </ul>
+    </section>
+
+    <!-- ================================================================
+         5 · 文件索引
+    ================================================================= -->
+    <section id="files">
+      <h2><span class="num">5</span>文件索引</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:34%">文件</th><th>何时读</th></tr></thead>
+          <tbody>
+            <tr><td><code>SKILL.md</code></td><td>总入口：核心产物、7 阶段工作流、容器使用表、19 条关键约定</td></tr>
+            <tr><td><code>references/01-clarification.md</code></td><td>阶段①：8 维度澄清提问、4 份文档模板、澄清完成判据</td></tr>
+            <tr><td><code>references/02-ears-spec.md</code></td><td>阶段②：五种 EARS 句式、条目字段逐项说明、质量门禁</td></tr>
+            <tr><td><code>references/03-prd-structure.md</code></td><td>阶段④⑦：四层结构对应关系、12 章大纲、原型层与标注层规范</td></tr>
+            <tr><td><code>references/04-container-schema.md</code></td><td><b>全程：数据契约（先读这个）</b>。含 <code>MasterDetail</code> §6.7 与容器选型 §0.5</td></tr>
+            <tr><td><code>references/05-component-states.md</code></td><td>阶段④：68 个组件白名单、状态矩阵、6 个页面骨架模板</td></tr>
+            <tr><td><code>references/06-demo-reverse.md</code></td><td>Demo 逆向：三条抽取规则 + 对齐规则</td></tr>
+            <tr><td><code>references/07-quality-and-examples.md</code></td><td>全程：验收标准、21 条反例、交付话术</td></tr>
+            <tr><td><code>references/08-container-choice.md</code></td><td>阶段④：<b>容器选型准则</b>（对话框 / 抽屉 / 新页面 / 主子表）+ 反模式</td></tr>
+            <tr><td><code>assets/container/index.html</code></td><td>阶段④：复制为交付容器（单文件渲染引擎）</td></tr>
+            <tr><td><code>assets/examples/*.json</code></td><td>阶段④：4 个全链路 few-shot 示例，照着写</td></tr>
+            <tr><td><code>scripts/validate_prd_json.py</code></td><td>每次产出后：结构校验（支持 <code>.json</code> 与容器产物 <code>.html</code>）</td></tr>
+            <tr><td><code>guide.html</code></td><td>本指南：工作流 / 设计准则 / PRD 结构 / 产物功能</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h4>4 个全链路示例</h4>
+      <div class="grid2">
+        <div class="card"><h4><code>example-01-task-board.json</code></h4><p>任务看板 · 列表页 + 四态 + 状态机</p></div>
+        <div class="card"><h4><code>example-02-refund-flow.json</code></h4><p>退款流程 · 多步表单 + 内嵌流程图</p></div>
+        <div class="card"><h4><code>example-03-nav-tree.json</code></h4><p>多模块多级页面 · 左栏树形导航 + 关系图</p></div>
+        <div class="card"><h4><code>example-04-master-detail.json</code></h4><p>设备巡检 · <b>主子表联动</b> + 列表页三件套 + 容器选型</p></div>
+      </div>
+    </section>
+
+    <div class="foot">
+      XX-PRD · Skill 说明指南 &nbsp;·&nbsp; 单文件、零依赖、离线可用 &nbsp;·&nbsp;
+      按 <span class="kbd">⌘</span>/<span class="kbd">Ctrl</span> + <span class="kbd">P</span> 可导出 PDF
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+  var links = [].slice.call(document.querySelectorAll('.toc a'));
+  var targets = links.map(function(a){
+    var id = a.getAttribute('href').slice(1);
+    return { a:a, el:document.getElementById(id) };
+  }).filter(function(t){ return t.el; });
+
+  function onScroll(){
+    var y = window.scrollY + 90, cur = null;
+    for(var i=0;i<targets.length;i++){
+      if(targets[i].el.offsetTop <= y) cur = targets[i];
+    }
+    if(!cur && targets.length) cur = targets[0];
+    links.forEach(function(a){ a.classList.remove('active'); });
+    if(cur) cur.a.classList.add('active');
+  }
+  window.addEventListener('scroll', onScroll, { passive:true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  // 移动端：点击目录项后收起（此处目录常驻，仅滚动定位）
+  links.forEach(function(a){
+    a.addEventListener('click', function(){
+      links.forEach(function(b){ b.classList.remove('active'); });
+      a.classList.add('active');
+    });
+  });
+})();
+</script>
+</body>
+</html>

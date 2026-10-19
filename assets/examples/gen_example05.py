@@ -210,12 +210,12 @@ def page_detail():
                      "children": [
                          {"id": "n-d-no", "type": "Typography",
                           "props": {"text": "{{poNo}}", "level": 4}},
-                         {"id": "n-d-tag", "type": "Tag", "props": {"text": "草稿", "color": "default"}},
+                         {"id": "n-d-tag", "type": "Tag", "props": {"text": "{{__entState}}", "color": "default"}},
                          {"id": "n-d-tag-amt", "type": "Tag", "props": {"text": "¥128,400.00", "color": "purple"}},
                      ]},
                     {"id": "n-d-alert", "type": "Alert", "props": {
                         "type": "info", "showIcon": True,
-                        "message": "本单当前为「草稿」",
+                        "message": "本单当前为「{{__entState}}」",
                         "description": "可修改明细或提交审批；提交后进入审批流，不能再直接编辑。"}},
                     {"id": "n-d-desc", "type": "Descriptions", "props": {
                         "column": 3, "size": "small",
@@ -249,7 +249,8 @@ def page_detail():
                     {"id": "n-d-actions", "type": "Space", "props": {"size": 8}, "children": [
                         btn("n-d-btn-submit", "提交审批", "primary", "cap-po-submit"),
                         btn("n-d-btn-edit", "编辑订单", None, "cap-po-edit"),
-                        btn("n-d-btn-cancel", "取消订单", None, "cap-po-cancel-approved", danger=True),
+                        btn("n-d-btn-cancel", "取消订单", None, "cap-po-cancel", danger=True),
+                        btn("n-d-btn-void", "撤销审批", None, "cap-po-cancel-approved"),
                         btn("n-d-btn-print", "打印", None, "cap-po-print"),
                     ]},
                     {"id": "n-dr-edit", "type": "Drawer", "props": {
@@ -312,7 +313,43 @@ def page_detail():
              "on": {"event": "click", "target": "n-d-btn-print"},
              "actions": [{"type": "message", "level": "info", "text": "已生成打印预览"}]},
         ],
-        "annotations": [],
+        "annotations":         [
+            {
+                "id": "an-po-1",
+                "pageId": "page-po-detail",
+                "anchor": {
+                    "nodeId": "n-d-btn-submit",
+                    "x": 0.5,
+                    "y": 0.5
+                },
+                "text": "「提交审批」在「待审批」及之后的状态下应置灰并说明原因，不要隐藏 —— 提交人需要看到「我确实提过了」，隐藏会让他以为操作没生效。",
+                "category": "rule",
+                "author": "PM",
+                "status": "resolved",
+                "createdAt": "2026-10-19T10:05:00+08:00",
+                "replies": [
+                    {
+                        "author": "AI",
+                        "text": "已改为 capability 驱动：n-d-btn-submit 绑定 cap-po-submit，from=[\"draft\"]、policy=\"disabled\"，悬停提示「仅草稿订单可以提交审批，当前状态：待审批」。",
+                        "createdAt": "2026-10-19T10:12:00+08:00"
+                    }
+                ]
+            },
+            {
+                "id": "an-po-2",
+                "pageId": "page-po-detail",
+                "anchor": {
+                    "nodeId": "n-d-actions",
+                    "x": 0.5,
+                    "y": 0.5
+                },
+                "text": "操作区按钮顺序建议：主操作（提交 / 审批）在左，危险操作（取消订单）最右并加二次确认。",
+                "category": "ui",
+                "author": "PM",
+                "status": "open",
+                "createdAt": "2026-10-19T10:20:00+08:00"
+            }
+        ],
         "entryFrom": ["page-po-list"],
         "exitTo": [],
         "prd": {"reqIds": ["REQ-PO-004", "REQ-PO-006"], "sections": [
@@ -321,9 +358,10 @@ def page_detail():
                      "通过状态与角色跳转到各自页面 —— 详情页不再是「什么都能干」的万能页。"},
             {"id": "sec-d-2", "heading": "动作可用性（由 capabilities 决定）",
              "body": "| 动作 | 允许状态 | 不可用时 |\n|---|---|---|\n"
-                     "| 提交审批 | 草稿 | 置灰，提示仅草稿可提交 |\n"
+                     "| 提交审批 | 草稿 | 置灰，悬停提示仅草稿可提交 |\n"
                      "| 编辑订单 | 草稿 | **隐藏**（已提交不可编辑，避免误导）|\n"
-                     "| 取消订单 | 已审批 | 允许点击，二次确认后拒绝（`reject`）|\n"
+                     "| 取消订单 | 草稿 / 待审批 | 置灰，提示当前状态不可取消 |\n"
+                     "| 撤销审批 | 已审批 | 允许点击，二次确认后拒绝（`reject`）|\n"
                      "| 打印 | 不限 | 始终可用 |\n\n"
                      "用顶部「单据状态」下拉切换，可当场验证上述行为。"},
         ]},
@@ -358,7 +396,7 @@ def page_approve():
                     {"id": "n-ap-title", "type": "Space", "props": {"size": 12, "align": "center"},
                      "children": [
                          {"id": "n-ap-no", "type": "Typography", "props": {"text": "PO-20261018-0006", "level": 4}},
-                         {"id": "n-ap-tag", "type": "Tag", "props": {"text": "待审批", "color": "processing"}},
+                         {"id": "n-ap-tag", "type": "Tag", "props": {"text": "{{__entState}}", "color": "processing"}},
                      ]},
                     {"id": "n-ap-alert", "type": "Alert", "props": {
                         "type": "warning", "showIcon": True,
@@ -451,7 +489,7 @@ def page_receive():
                     {"id": "n-rcv-title", "type": "Space", "props": {"size": 12, "align": "center"},
                      "children": [
                          {"id": "n-rcv-no", "type": "Typography", "props": {"text": "PO-20261017-0005", "level": 4}},
-                         {"id": "n-rcv-tag", "type": "Tag", "props": {"text": "已审批", "color": "success"}},
+                         {"id": "n-rcv-tag", "type": "Tag", "props": {"text": "{{__entState}}", "color": "success"}},
                      ]},
                     {"id": "n-rcv-desc", "type": "Descriptions", "props": {
                         "column": 3, "size": "small",

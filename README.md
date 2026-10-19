@@ -123,7 +123,8 @@ PRD 内容结构、产物功能四块，看完就知道怎么用。
 校验器同步升级为**语义校验**：状态机里每条人工转移必须有按钮入口（`system: true` 的自动流转除外）、
 一条命令不能被两个页面同时 `owns`、验收条件要覆盖非法路径，否则直接 ERROR。
 
-> 想看效果：打开 `demo-po-behavior.html`（采购订单 · 6 个状态 · 4 个角色 · 10 条命令策略），
+> 上图即切换「单据状态」后的按钮置灰 / 隐藏 / 虚线警告效果。
+> 想跑交互版：用容器加载 `assets/examples/example-05-behavior-model.json`（采购订单 · 6 个状态 · 4 个角色 · 10 条命令策略），
 > 在顶栏切换单据状态，观察详情页与审批页的按钮变化。
 
 ---
@@ -155,8 +156,10 @@ PRD 内容结构、产物功能四块，看完就知道怎么用。
 ```
 XX-PRD/
 ├── SKILL.md                      技能主文件（工作流 / 关键约定 / 参考索引）
+├── CHANGELOG.md                  版本变更记录（每条含 breaking 字段）
+├── LICENSE                       MIT 许可
 ├── guide.html                    自解释说明指南（工作流 · 设计准则 · PRD 结构 · 产物功能）
-├── references/                   10 份参考文档
+├── references/                   11 份参考文档
 │   ├── 01-clarification.md       澄清提问与 4 份 shaping 文档
 │   ├── 02-ears-spec.md           EARS 句式与门禁
 │   ├── 03-prd-structure.md       PRD 五层结构 + 12 章大纲
@@ -196,3 +199,12 @@ XX-PRD/
 - 支持 **Agent Skills** 约定的 AI 助手（一个目录 + `SKILL.md` 即可）
 - 跑校验器需要 Python 3（可选，不跑也能用）
 - 生成的 HTML 原型**零依赖**：不联网、不引 CDN、双击即开
+
+---
+
+## 许可
+
+本项目以 **MIT License** 发布，全文见 [`LICENSE`](LICENSE)。可自由使用、修改、分发（含商用），
+保留版权声明与许可声明即可。
+
+版本变更与兼容性说明见 [`CHANGELOG.md`](CHANGELOG.md)；当前版本 `0.5.0`。

@@ -1,0 +1,69 @@
+name: CI
+
+on: [push, pull_request]
+
+# 五个作业：
+#   1. examples-validate     5 个示例结构 + 语义校验
+#   2. py-syntax             scripts/ 与 tests/ 的 Python 语法
+#   3. docs-consistency      4 项最小检查（示例数 / README 引用 / references 计数 / 版本三处）
+#   4. tests-static          文件层静态检查：生成器与示例一致（XX-014）+ 无未填占位符（DoD #8）
+#   5. container-regression  757 条容器断言（harness 注入页内执行，不需要 CDP）
+#
+# 未验证项（首次 push 后才能确认）：
+#   - ubuntu-latest 上 /usr/bin/google-chrome 是否可用、版本是否够跑 --headless=new --dump-dom
+#   - 中文字体缺失是否会让依赖宽度/布局的断言漂移
+# 若第 5 个作业在 runner 上起不来：不要加 continue-on-error 掩盖，
+# 按偏差处理（回退到 4 个静态作业 + 本地回归），报 team-lead 裁决。
+
+jobs:
+  examples-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate 5 examples
+        run: |
+          for f in assets/examples/example-0*.json; do
+            echo "--- $f"
+            python3 scripts/validate_prd_json.py "$f"
+          done
+
+  py-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile scripts and tests
+        run: python3 -m compileall -q scripts tests
+
+  docs-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docs consistency (4 checks)
+        run: python3 tests/check_docs.py
+
+  tests-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generators match committed examples
+        run: python3 tests/check_generators.py
+      - name: No unfinished placeholders (DoD #8)
+        # 旧写法 `grep -rn "TODO\|TBD\|待补充"`：BSD grep 的 BRE 不支持 `\|`，恒 0 命中（假绿，见 E-02）。
+        # 现在用脚本显式匹配；命中要么改掉，要么进 ALLOW 并写明理由（文档说明类属后者，不得靠改写措辞规避）。
+        run: python3 tests/check_placeholders.py
+
+  container-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Chrome availability
+        run: |
+          if [ ! -x /usr/bin/google-chrome ]; then
+            echo "::error::runner 上没有 /usr/bin/google-chrome，container-regression 无法运行"
+            exit 1
+          fi
+          /usr/bin/google-chrome --version
+      - name: Run 6-case container regression
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: bash tests/run.sh

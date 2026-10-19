@@ -816,15 +816,127 @@ data = {
                     {"id": "closed", "name": "已关闭", "type": "default"}],
          "transitions": [
              {"id": "t-1", "from": "created", "to": "paid", "trigger": "买家完成支付", "role": "system",
-              "guard": "订单未超时", "action": "通知商家发货"},
+              "guard": "订单未超时", "action": "通知商家发货", "system": True},
              {"id": "t-2", "from": "created", "to": "closed", "trigger": "买家取消或支付超时", "role": "system",
-              "guard": "", "action": "释放库存"},
+              "guard": "", "action": "释放库存", "system": True},
              {"id": "t-3", "from": "paid", "to": "shipped", "trigger": "运营点击确认发货", "role": "u-ops",
               "guard": "收货地址已填写", "action": "记录发货时间"},
              {"id": "t-4", "from": "shipped", "to": "done", "trigger": "买家确认收货或自动确认", "role": "system",
-              "guard": "发货后满 7 天或买家主动确认", "action": "结算货款"},
+              "guard": "发货后满 7 天或买家主动确认", "action": "结算货款", "system": True},
              {"id": "t-5", "from": "paid", "to": "closed", "trigger": "买家申请退款并审核通过", "role": "u-mgr",
               "guard": "订单未发货", "action": "原路退款，释放库存"}]},
+    ],
+    "capabilities": [
+        {
+            "id": "cap-goods-submit",
+            "name": "提交商品资料",
+            "entity": "Goods",
+            "actor": [
+                "u-ops"
+            ],
+            "from": [
+                "draft"
+            ],
+            "guard": "名称、分类、售价、至少一条规格均已填写",
+            "policy": "disabled",
+            "reason": "仅「草稿」商品可以提交，当前不是该状态",
+            "to": "pending",
+            "effect": "记录提交时间",
+            "page": "page-goods-edit",
+            "requirement": "REQ-GOODS-002"
+        },
+        {
+            "id": "cap-goods-withdraw",
+            "name": "撤回提交",
+            "entity": "Goods",
+            "actor": [
+                "u-ops"
+            ],
+            "from": [
+                "pending"
+            ],
+            "guard": "尚未上架",
+            "policy": "disabled",
+            "reason": "仅「待上架」商品可以撤回，当前不是该状态",
+            "to": "draft",
+            "effect": "回到草稿并通知审核人",
+            "page": "page-goods-detail",
+            "requirement": "REQ-GOODS-002"
+        },
+        {
+            "id": "cap-goods-on",
+            "name": "上架",
+            "entity": "Goods",
+            "actor": [
+                "u-ops"
+            ],
+            "from": [
+                "pending",
+                "off_shelf"
+            ],
+            "guard": "可售库存大于 0",
+            "policy": "disabled",
+            "reason": "仅「待上架 / 已下架」商品可以上架，且库存需大于 0",
+            "to": "on_shelf",
+            "effect": "记录上架时间",
+            "page": "page-goods-detail",
+            "requirement": "REQ-GOODS-002"
+        },
+        {
+            "id": "cap-goods-off",
+            "name": "下架",
+            "entity": "Goods",
+            "actor": [
+                "u-ops"
+            ],
+            "from": [
+                "on_shelf"
+            ],
+            "guard": "无进行中订单占用",
+            "policy": "disabled",
+            "reason": "仅「已上架」商品可以下架，当前不是该状态",
+            "to": "off_shelf",
+            "effect": "记录下架时间",
+            "page": "page-goods-detail",
+            "requirement": "REQ-GOODS-002"
+        },
+        {
+            "id": "cap-order-ship",
+            "name": "确认发货",
+            "entity": "Order",
+            "actor": [
+                "u-ops"
+            ],
+            "from": [
+                "paid"
+            ],
+            "guard": "收货信息完整",
+            "policy": "disabled",
+            "reason": "仅「已支付」订单可以发货，当前不是该状态",
+            "to": "shipped",
+            "effect": "写入物流单号并通知买家",
+            "page": "page-order-detail",
+            "requirement": "REQ-ORDER-002"
+        },
+        {
+            "id": "cap-order-close",
+            "name": "关闭订单",
+            "entity": "Order",
+            "actor": [
+                "u-mgr"
+            ],
+            "from": [
+                "paid"
+            ],
+            "guard": "退款审核已通过",
+            "policy": "reject",
+            "reason": "仅「已支付」订单可以关闭，且需退款审核通过",
+            "to": "closed",
+            "effect": "释放库存并记录关闭原因",
+            "page": "page-order-detail",
+            "requirement": "REQ-ORDER-002",
+            "onFail": "未通过退款审核时提示先走退款流程"
+        }
     ],
     "requirements": [
         {"id": "REQ-DASH-001", "moduleId": "m-dash", "pageId": "page-overview", "pattern": "event-driven",

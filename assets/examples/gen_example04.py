@@ -602,6 +602,63 @@ data = {
               "role": "u-qm", "guard": "已填写作废原因", "action": "记录作废人与原因"},
          ]},
     ],
+    "capabilities": [
+        {
+            "id": "cap-inspect-start",
+            "name": "开始巡检",
+            "entity": "InspectTask",
+            "actor": [
+                "u-inspector"
+            ],
+            "from": [
+                "pending"
+            ],
+            "guard": "任务未被作废",
+            "policy": "disabled",
+            "reason": "仅「待巡检」任务可以开始，当前不是该状态",
+            "to": "doing",
+            "effect": "记录开始时间",
+            "page": "page-inspect-task",
+            "requirement": "REQ-INSPECT-003"
+        },
+        {
+            "id": "cap-inspect-done",
+            "name": "标记完成",
+            "entity": "InspectTask",
+            "actor": [
+                "u-inspector"
+            ],
+            "from": [
+                "doing"
+            ],
+            "guard": "所有巡检项状态不为「待巡检」",
+            "policy": "disabled",
+            "reason": "仅「巡检中」任务可以完成，且所有巡检项需已填写",
+            "to": "done",
+            "effect": "记录完成时间并汇总异常项",
+            "page": "page-inspect-task",
+            "requirement": "REQ-INSPECT-003"
+        },
+        {
+            "id": "cap-inspect-void",
+            "name": "作废任务",
+            "entity": "InspectTask",
+            "actor": [
+                "u-qm"
+            ],
+            "from": [
+                "pending",
+                "doing"
+            ],
+            "guard": "任务尚未完成",
+            "policy": "hidden",
+            "reason": "已完成的任务不可作废，如需处理请走异常流程",
+            "to": "void",
+            "effect": "记录作废人与原因",
+            "page": "page-inspect-task",
+            "requirement": "REQ-INSPECT-004"
+        }
+    ],
     "requirements": [
         {"id": "REQ-INSPECT-001", "pattern": "event-driven", "title": "选中主表行联动子表",
          "moduleId": "m-inspect", "pageId": "page-inspect-task", "role": "u-inspector",

@@ -1859,6 +1859,84 @@
       ]
     }
   ],
+  "capabilities": [
+    {
+      "id": "cap-task-start",
+      "name": "开始任务",
+      "entity": "Task",
+      "actor": [
+        "u-owner"
+      ],
+      "from": [
+        "todo"
+      ],
+      "guard": "任务已有负责人",
+      "policy": "disabled",
+      "reason": "仅「待办」任务可以开始，当前为「进行中 / 已完成」",
+      "to": "doing",
+      "effect": "记录开始时间",
+      "page": "page-task-list",
+      "requirement": "REQ-TASK-004",
+      "onFail": "无负责人时提示先指派负责人"
+    },
+    {
+      "id": "cap-task-block",
+      "name": "标记阻塞",
+      "entity": "Task",
+      "actor": [
+        "u-dev"
+      ],
+      "from": [
+        "doing"
+      ],
+      "guard": "已填写阻塞原因",
+      "policy": "disabled",
+      "reason": "仅「进行中」任务可以标记阻塞，当前不是该状态",
+      "to": "blocked",
+      "effect": "通知任务关注者",
+      "page": "page-task-list",
+      "requirement": "REQ-TASK-004",
+      "onFail": "未填原因时停留在弹窗并提示"
+    },
+    {
+      "id": "cap-task-unblock",
+      "name": "解除阻塞",
+      "entity": "Task",
+      "actor": [
+        "u-owner"
+      ],
+      "from": [
+        "blocked"
+      ],
+      "guard": "阻塞原因已处理",
+      "policy": "disabled",
+      "reason": "仅「阻塞」任务可以解除阻塞，当前不是该状态",
+      "to": "doing",
+      "effect": "记录解除时间",
+      "page": "page-task-detail",
+      "requirement": "REQ-TASK-004",
+      "onFail": "原因未处理时提示联系提出人"
+    },
+    {
+      "id": "cap-task-done",
+      "name": "标记完成",
+      "entity": "Task",
+      "actor": [
+        "u-owner"
+      ],
+      "from": [
+        "doing"
+      ],
+      "guard": "任务已产出可验收结果",
+      "policy": "disabled",
+      "reason": "仅「进行中」任务可以标记完成，当前不是该状态",
+      "to": "done",
+      "effect": "记录完成时间并通知关注者",
+      "page": "page-task-detail",
+      "requirement": "REQ-TASK-004",
+      "onFail": "无验收结果时提示补充"
+    }
+  ],
   "requirements": [
     {
       "id": "REQ-TASK-001",

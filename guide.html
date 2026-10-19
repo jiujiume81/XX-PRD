@@ -219,7 +219,7 @@ td code{white-space:normal;overflow-wrap:anywhere}
     <div class="toc-sub">Skill 说明指南<br>工作流 · 设计准则 · PRD 结构 · 产物功能</div>
     <nav class="toc-body">
       <a class="lv1" href="#workflow">1 · 工作流</a>
-      <a class="lv2" href="#wf-flow">七阶段与三个卡点</a>
+      <a class="lv2" href="#wf-flow">八阶段与两个卡点</a>
       <a class="lv2" href="#wf-table">阶段速查表</a>
       <a class="lv2" href="#wf-reverse">Demo 逆向通道</a>
       <div class="toc-sep"></div>
@@ -231,9 +231,10 @@ td code{white-space:normal;overflow-wrap:anywhere}
       <a class="lv2" href="#rule-nav">2.5 跳转与页面关系</a>
       <a class="lv2" href="#rule-view">2.6 画布交互</a>
       <a class="lv2" href="#rule-visual">2.7 视觉语言</a>
+      <a class="lv2" href="#rule-behavior">2.8 行为先于界面</a>
       <div class="toc-sep"></div>
       <a class="lv1" href="#structure">3 · PRD 内容结构</a>
-      <a class="lv2" href="#st-four">四层结构</a>
+      <a class="lv2" href="#st-four">五层结构</a>
       <a class="lv2" href="#st-outline">12 章大纲</a>
       <a class="lv2" href="#st-ears">EARS 与门禁</a>
       <div class="toc-sep"></div>
@@ -259,13 +260,14 @@ td code{white-space:normal;overflow-wrap:anywhere}
         <b>可交互原型 + EARS 规范 PRD + 标注对齐</b> 三合一的<b>单文件 HTML 容器</b>；
         <b>基于 Ant Design 5</b> 做设计（容器内置压缩版 AntD token 与组件语义），
         并据此产出可直接交给 AI 开工的<b>开发交接包</b>。
+        <b>画页面前先做行为建模</b> —— 定清「谁在什么状态下能做什么」，按钮可用性与页面切分都是它的推论，不是审美选择。
         本文是 skill 的自解释文档 —— 讲清它<b>怎么跑</b>、<b>遵从哪些设计原则</b>、<b>产出什么结构</b>、<b>产物怎么用</b>。
       </p>
       <div class="stats">
-        <div class="stat"><b>7</b><span>阶段工作流</span></div>
-        <div class="stat"><b>3</b><span>人工确认卡点</span></div>
+        <div class="stat"><b>8</b><span>阶段工作流</span></div>
+        <div class="stat"><b>2</b><span>人工确认卡点</span></div>
         <div class="stat"><b>68</b><span>组件白名单</span></div>
-        <div class="stat"><b>8</b><span>参考文档 + 4 示例</span></div>
+        <div class="stat"><b>10</b><span>参考文档 + 5 示例</span></div>
       </div>
     </header>
 
@@ -275,29 +277,35 @@ td code{white-space:normal;overflow-wrap:anywhere}
     <section id="workflow">
       <h2><span class="num">1</span>工作流</h2>
       <p class="lead">
-        从「用户开口」到「可交付 PRD」，走七个阶段。<b>三个阶段之间设了人工确认卡点</b> —— 卡点未确认不往下走，
+        从「用户开口」到「可交付 PRD」，走八个阶段。<b>两个关键位置设了人工确认卡点</b> —— 卡点未确认不往下走，
         这是本 skill 与「一口气生成一份文档」最大的区别：需求与板块是产研对齐的锚，锚歪了后面全是返工。
+        在需求与画页面之间，多插了一道<b>行为建模</b>：先把「谁在什么状态下能做什么」定下来，再决定按钮长什么样、页面怎么切。
       </p>
 
-      <h3 id="wf-flow">七阶段与三个卡点</h3>
+      <h3 id="wf-flow">八阶段与两个卡点</h3>
       <div class="flow">
         <div class="stage">
           <div class="sn">STAGE 01</div>
           <div class="st">需求澄清</div>
-          <div class="sd">8 维度提问，每轮 5~7 问；产出 4 份 shaping 文档</div>
+          <div class="sd">9 维度提问，每轮 5~7 问；产出 4 份 shaping 文档</div>
         </div>
         <div class="stage">
           <div class="sn">STAGE 02</div>
           <div class="st">需求分析 EARS</div>
           <div class="sd">逐条 EARS 条目 + 状态机 + 质量门禁</div>
         </div>
-        <div class="stage gate">
-          <div class="sn">卡点 A</div>
-          <div class="st">确认需求</div>
-          <div class="sd">需求清单 + 状态机 + 待澄清问题</div>
-        </div>
         <div class="stage">
           <div class="sn">STAGE 03</div>
+          <div class="st">行为建模</div>
+          <div class="sd">业务任务 → 命令策略（角色×状态×动作）→ 页面职责契约</div>
+        </div>
+        <div class="stage gate">
+          <div class="sn">卡点 A</div>
+          <div class="st">确认需求与行为</div>
+          <div class="sd">需求清单 + 状态机 + 命令策略表 + 页面职责表</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 04</div>
           <div class="st">板块计划</div>
           <div class="sd">按模块/页面拆板块，写 boardPlan</div>
         </div>
@@ -307,22 +315,22 @@ td code{white-space:normal;overflow-wrap:anywhere}
           <div class="sd">顺序 + 颗粒度</div>
         </div>
         <div class="stage">
-          <div class="sn">STAGE 04</div>
+          <div class="sn">STAGE 05</div>
           <div class="st">逐板块生成</div>
           <div class="sd">原型 + PRD 同步产出，每批 1~2 个板块</div>
         </div>
         <div class="stage">
-          <div class="sn">STAGE 05</div>
+          <div class="sn">STAGE 06</div>
           <div class="st">标注评审迭代</div>
           <div class="sd">用户在原型上打标注 → AI 按指令改</div>
         </div>
-        <div class="stage gate">
-          <div class="sn">卡点 C</div>
-          <div class="st">原型定稿</div>
-          <div class="sd">走查四态 / 关系图连通 / 审核模式</div>
-        </div>
         <div class="stage">
           <div class="sn">STAGE 07</div>
+          <div class="st">原型定稿</div>
+          <div class="sd">逐个切换单据状态走查 / 关系图连通 / 审核模式</div>
+        </div>
+        <div class="stage">
+          <div class="sn">STAGE 08</div>
           <div class="st">PRD + 导出</div>
           <div class="sd">组装完整 PRD、跑校验、出交接包</div>
         </div>
@@ -330,8 +338,18 @@ td code{white-space:normal;overflow-wrap:anywhere}
 
       <div class="tip info">
         <span class="ic">i</span>
-        <p>卡点是<b>停下来等用户确认</b>，不是「自动跳过」。卡点 A 确认需求语义，卡点 B 确认工作颗粒度，
-          卡点 C 确认原型可交付 —— 三次确认把返工挡在生成之前。</p>
+        <p>卡点是<b>停下来等用户确认</b>，不是「自动跳过」。卡点 A 确认需求语义与<b>命令策略</b>（这个状态下这个按钮该不该可点），
+          卡点 B 确认工作颗粒度 —— 两次确认把返工挡在生成之前。原型定稿不再单设卡点，改为阶段⑦里的<b>状态走查</b>：
+          把单据状态挨个切一遍，看按钮该亮的亮、该灰的灰、该消失的消失。</p>
+      </div>
+
+      <div class="tip warn">
+        <span class="ic">!</span>
+        <p><b>为什么行为建模要单独一个阶段</b>：只做 EARS + 状态机，信息是<b>分开记录</b>的 ——
+          角色在 <code>users</code>、状态在 <code>stateMachines</code>、按钮在 <code>componentTree</code>，
+          三者之间没有任何强制对应关系。于是「审批中」的单据照样摆着一个能点的「提交审批」按钮，
+          而页面 <code>goal</code> 只有一句话，回答不了「这几个表单为什么属于同一个页面」。
+          阶段③ 的工作就是把这些散点连成一条链：<b>角色 → 任务 → 命令 → 前置条件 → 状态转移 → 页面职责 → 组件</b>。</p>
       </div>
 
       <h3 id="wf-table">阶段速查表</h3>
@@ -343,7 +361,7 @@ td code{white-space:normal;overflow-wrap:anywhere}
           <tbody>
             <tr>
               <td class="nowrap"><b>① 澄清</b></td>
-              <td>按 8 个维度提问（定位/范围/角色/用户流/功能规则/状态生命周期/数据集成/体验交付），能给选项就不给开放题</td>
+              <td>按 9 个维度提问（定位/范围/角色/用户流/功能规则/状态生命周期/任务与页面归属/数据集成/体验交付），能给选项就不给开放题</td>
               <td><code>01-clarification.md</code></td>
               <td>4 份 shaping 文档：产品定位 / 用户流 / 模块清单 / 页面清单；<code>openQuestions</code>（P0 必须有答案或默认值）</td>
             </tr>
@@ -353,12 +371,21 @@ td code{white-space:normal;overflow-wrap:anywhere}
               <td><code>02-ears-spec.md</code></td>
               <td><code>requirements[]</code> + <code>stateMachines[]</code></td>
             </tr>
+            <tr style="background:var(--ant-primary-bg)">
+              <td class="nowrap"><b>③ 行为建模</b></td>
+              <td>6 步：列业务任务 → 写命令策略（角色 × 状态 × 动作，<code>hidden</code>/<code>disabled</code>/<code>reject</code>）→
+                  反向补状态机 → 写页面职责契约 → 按职责切页 → 自检。<br>
+                  <b>按钮可用性在这里定，不在画页面时定。</b></td>
+              <td><code>09-behavior-model.md</code><br><code>10-page-decomposition.md</code></td>
+              <td><code>tasks[]</code>、<code>capabilities[]</code>、<code>pages[].contract</code></td>
+            </tr>
             <tr style="background:var(--ant-warning-bg)">
               <td class="nowrap"><b>卡点 A</b></td>
-              <td colspan="3">把需求清单 + 状态机 + 待澄清问题交给用户确认。<b>未确认不进下一阶段。</b></td>
+              <td colspan="3">把需求清单 + 状态机 + <b>命令策略表</b> + <b>页面职责表</b>交给用户确认。<b>未确认不进下一阶段。</b>
+                  逐条问「这个状态下这个按钮该不该可点」。</td>
             </tr>
             <tr>
-              <td class="nowrap"><b>③ 板块计划</b></td>
+              <td class="nowrap"><b>④ 板块计划</b></td>
               <td>按模块/页面拆成 PRD 板块，排 <code>order</code> 与 <code>status</code></td>
               <td><code>03-prd-structure.md</code> §2</td>
               <td><code>boardPlan[]</code></td>
@@ -368,26 +395,27 @@ td code{white-space:normal;overflow-wrap:anywhere}
               <td colspan="3">用户确认板块顺序与颗粒度。</td>
             </tr>
             <tr>
-              <td class="nowrap"><b>④ 逐板块生成</b></td>
+              <td class="nowrap"><b>⑤ 逐板块生成</b></td>
               <td>每页产出组件树 + ≥4 态 + 交互 + PRD 小节；同步维护组件定义与数据模型。<br>
-                  <b>数据层级多 → 主子表</b>；<b>表单/详情 → 先选对容器</b>。</td>
+                  <b>数据层级多 → 主子表</b>；<b>表单/详情 → 先选对容器</b>；
+                  <b>业务按钮引用 <code>capability</code>，不写死 disabled</b>。</td>
               <td><code>04-container-schema.md</code><br><code>05-component-states.md</code><br><code>08-container-choice.md</code></td>
               <td><code>pages[].componentTree / states / interactions / prd.sections</code>；<code>components[]</code>；<code>dataModel</code></td>
             </tr>
             <tr>
-              <td class="nowrap"><b>⑤ 标注评审</b></td>
+              <td class="nowrap"><b>⑥ 标注评审</b></td>
               <td>用户点原型打标注 → 点顶部「⇪ 标注指令」生成结构化 prompt → AI 逐条判断影响面并修改</td>
               <td><code>04</code> §6.4 标注层</td>
               <td>标注置 <code>resolved</code> + <code>replies[]</code> 记录改了什么；影响 EARS 则同步 <code>requirements</code></td>
             </tr>
             <tr>
-              <td class="nowrap"><b>⑥ 原型定稿</b></td>
-              <td>走查：组件树与 PRD 一致、状态机在原型可见、四态齐全；关系图无孤岛页；开「审核模式」检查自洽</td>
+              <td class="nowrap"><b>⑦ 原型定稿</b></td>
+              <td>走查：<b>逐个切换单据状态</b>看按钮可用性、组件树与 PRD 一致、四态齐全；关系图无孤岛页；开「审核模式」检查自洽</td>
               <td><code>07-quality-and-examples.md</code></td>
               <td>定稿原型</td>
             </tr>
             <tr>
-              <td class="nowrap"><b>⑦ 最终 PRD + 导出</b></td>
+              <td class="nowrap"><b>⑧ 最终 PRD + 导出</b></td>
               <td>按 12 章大纲组装完整 PRD；导出 Markdown / 关键页 PNG / 关系图全图；跑校验器；出开发交接包</td>
               <td><code>03</code> §2、<code>07</code>、<code>scripts/validate_prd_json.py</code></td>
               <td><code>{产品}-PRD-v{版本}.md</code>、PNG、<code>{产品}.devspec.json</code> + <code>AGENT.md</code></td>
@@ -544,6 +572,11 @@ td code{white-space:normal;overflow-wrap:anywhere}
               <td><b>2.7 视觉语言</b></td>
               <td>P2 确定 + P3 意义</td>
               <td>AntD token 固定取值；涨红跌绿</td>
+            </tr>
+            <tr>
+              <td><b>2.8 行为先于界面</b></td>
+              <td>P2 确定 + P5 直截了当</td>
+              <td><code>capabilities</code> 算可用性（三策略）+ <code>contract</code> 守页面职责 + 校验器硬规则（状态转移无入口 <b style="color:var(--ant-error)">ERROR</b>、一命令两主页 <b style="color:var(--ant-error)">ERROR</b>）</td>
             </tr>
           </tbody>
         </table>
@@ -774,6 +807,55 @@ td code{white-space:normal;overflow-wrap:anywhere}
       <div class="tip warn"><span class="ic">!</span>
         <p><b>涨红跌绿</b>：涉及涨跌、收益的展示，涨用<b>红色</b>、跌用<b>绿色</b>（中国市场惯例）。</p>
       </div>
+
+      <!-- 2.8 行为先于界面 -->
+      <h3 id="rule-behavior">2.8 行为先于界面（按钮可用性 · 页面切分）</h3>
+      <p>
+        这是 <b>P2 确定</b>与 <b>P5 直截了当</b>在<b>行为维度</b>的应用，也是本 skill 最容易做错的地方。
+        一个按钮该不该可点，<b>不是画页面时的审美决定，而是业务事实</b>：谁、在单据的哪个状态、能做什么。
+        把这件事留到画页面时「顺手决定」，结果必然是「审批中的单据照样摆着能点的提交按钮」。
+      </p>
+
+      <h4>两条硬规则</h4>
+      <div class="grid2">
+        <div class="card">
+          <span class="badge b-blue">规则 1</span>
+          <h4>可用性来自 capability，不写死</h4>
+          <p>业务按钮的 <code>props</code> 里写 <code>capability: "cap-xxx"</code>，由「角色 × 当前状态」算出可用性；
+             三种不可用策略各有语义：<br>
+             <b><code>disabled</code></b>（默认）—— 存在但当前不行，置灰 + 悬停说明原因；<br>
+             <b><code>hidden</code></b> —— 这个角色不该知道有这功能，直接不渲染；<br>
+             <b><code>reject</code></b> —— 允许点，点了才告知为什么不行（用于需要引导的场景）。</p>
+        </div>
+        <div class="card">
+          <span class="badge b-blue">规则 2</span>
+          <h4>一个页面只干一件事</h4>
+          <p>页面的 <code>contract</code> 声明它<b>拥有哪些命令</b>（<code>owns</code>）、<b>解决谁的什么决策</b>（<code>decision</code>）、
+             <b>提交边界在哪</b>（<code>submitBoundary</code>）。<br>
+             五条合并判据全中才合（同角色 / 同对象 / 同决策 / 同提交边界 / 同屏可读）；
+             命中任一拆分信号就拆（角色不同 / 生命周期阶段不同 / 提交边界不同 / 信息超两屏 / 完成条件不同 / 权限差异大 / 入口不同）。</p>
+        </div>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:120px">策略</th><th style="width:180px">原型表现</th><th>什么时候用</th></tr></thead>
+          <tbody>
+            <tr><td><code>disabled</code></td><td>按钮置灰、保留指针事件，悬停出 <code>title</code> 说明原因</td>
+                <td>功能存在、用户也有权限，只是<b>当前状态不允许</b>。默认选它 —— 让用户知道「这条路存在，只是现在走不了」。</td></tr>
+            <tr><td><code>hidden</code></td><td>不渲染（DOM 里没有）</td>
+                <td>用户<b>不该知道</b>这个能力存在（无权限、或该角色根本不该看到）。慎用：隐藏过多会让用户以为系统没这功能。</td></tr>
+            <tr><td><code>reject</code></td><td>虚线边框 + 警告色，可点击，点击后 toast 说明</td>
+                <td>需要<b>引导而非阻断</b>：让用户点一下才知道「要先去完成前置步骤」。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tip info"><span class="ic">i</span>
+        <p><b>怎么验</b>：容器顶栏的「单据状态」下拉可以切换当前单据状态，按钮会实时按策略变灰 / 消失；
+          PRD 面板右栏会把 <code>capabilities</code> 渲染成一张<b>命令策略矩阵</b>（行＝命令，列＝状态），
+          点列头即可切换状态对照。<b>走查时把状态挨个点一遍</b>，比读一百行文字快。</p>
+      </div>
     </section>
 
     <!-- ================================================================
@@ -783,18 +865,22 @@ td code{white-space:normal;overflow-wrap:anywhere}
       <h2><span class="num">3</span>PRD 内容结构</h2>
       <p class="lead">
         PRD 的<b>结构必须与原型、标注、状态机一一对应</b> —— 这是「研发拿去能直接转技术文档」的前提。
-        整份产物按四层组织，最终交付的文档按 12 章组装。
+        整份产物按五层组织，最终交付的文档按 12 章组装。<b>顺序不能反</b>：行为层没定，原型层就是在猜。
       </p>
 
-      <h3 id="st-four">四层结构</h3>
+      <h3 id="st-four">五层结构</h3>
       <div class="layers">
         <div class="layer"><div class="ln">① 文档层</div>
           <div class="ld"><b>PRD 板块 <code>boardPlan</code> → 页面 <code>page.prd</code></b><br>目标 / 交互说明 / 业务规则 / 页面状态 / 验收</div></div>
-        <div class="layer"><div class="ln">② 原型层</div>
+        <div class="layer"><div class="ln">② 行为层</div>
+          <div class="ld"><b>任务 <code>tasks</code> + 命令策略 <code>capabilities</code> + 页面职责 <code>page.contract</code></b><br>
+            谁（actor）在什么状态（from）下能对什么对象（entity）做什么（动作），不可用时是隐藏、置灰还是点了才拒（policy）；<br>
+            页面承诺拥有哪些命令（owns）、解决谁的什么决策（decision）、提交边界在哪（submitBoundary）</div></div>
+        <div class="layer"><div class="ln">③ 原型层</div>
           <div class="ld"><b>组件树 <code>componentTree</code> + 交互 <code>interactions</code> + 页面状态 <code>states</code></b><br>递归 Node、事件 → 动作序列、状态变量与覆写</div></div>
-        <div class="layer"><div class="ln">③ 标注层</div>
+        <div class="layer"><div class="ln">④ 标注层</div>
           <div class="ld"><b><code>page.annotations</code></b><br>锚定节点（推荐）+ 归一化坐标兜底、分类、状态流转、处理记录</div></div>
-        <div class="layer"><div class="ln">④ 状态机层</div>
+        <div class="layer"><div class="ln">⑤ 状态机层</div>
           <div class="ld"><b><code>requirements[]</code> + <code>stateMachines[]</code></b><br>EARS 条目（角色/触发/规则/状态机/预期/验收）+ 实体生命周期</div></div>
       </div>
 
@@ -804,6 +890,9 @@ td code{white-space:normal;overflow-wrap:anywhere}
         <li><code>page.prd.reqIds</code> 必须能在 <code>requirements</code> 里找到，且这些需求的 <code>pageId</code> 指向本页。</li>
         <li><code>page.states</code> 的每个状态，在 PRD 的「页面状态」小节里必须有说明。</li>
         <li>状态机里的每个状态，在原型里必须<b>可见</b>（Tag / Badge / 状态条）。</li>
+        <li><b>业务按钮必须指向 <code>capability</code></b>，不写死 <code>disabled</code> —— 可用性由「角色 × 单据状态」算出来。</li>
+        <li><b>一条命令只能有一个主页面</b>（<code>contract.owns</code> 不得被两页同时声明），否则用户不知道该去哪操作。</li>
+        <li><b>状态机的每条人工转移必须有按钮入口</b>（<code>system: true</code> 的自动流转除外），否则状态永远走不到。</li>
       </ol>
 
       <h3 id="st-outline">12 章大纲（最终交付的 PRD）</h3>
@@ -811,14 +900,16 @@ td code{white-space:normal;overflow-wrap:anywhere}
         <div class="ch"><div class="cn">0</div><div class="ct"><b>文档信息</b><span class="mini">版本 / 日期 / 作者 / 变更记录 / 关联文档（原型链接、澄清文档）</span></div></div>
         <div class="ch"><div class="cn">1</div><div class="ct"><b>产品定位</b><span class="mini">引用阶段①的产品定位文档（一句话定位 / 定位陈述 / 目标用户 / 核心价值 / 非目标 / 成功指标）</span></div></div>
         <div class="ch"><div class="cn">2</div><div class="ct"><b>范围说明</b><span class="mini">本期范围 In Scope / 非目标 Out of Scope / 依赖与约束</span></div></div>
-        <div class="ch"><div class="cn">3</div><div class="ct"><b>用户与角色</b><span class="mini">角色表 + 权限矩阵</span></div></div>
+        <div class="ch"><div class="cn">3</div><div class="ct"><b>用户与角色</b><span class="mini">角色表 + 权限矩阵（功能权限 / 数据范围 / 字段级）</span></div></div>
+        <div class="ch"><div class="cn">3.5</div><div class="ct"><b>业务任务</b><span class="mini">每个角色为了达成什么目标、要完成哪几件事（tasks[]），每件事落在哪个页面</span></div></div>
         <div class="ch"><div class="cn">4</div><div class="ct"><b>用户流</b><span class="mini">每条流的主路径 + 分支 + 异常</span></div></div>
         <div class="ch"><div class="cn">5</div><div class="ct"><b>模块与页面总览</b><span class="mini">模块清单 + 页面清单 + 页面关系图（容器顶部「关系图」；对应 devspec.json 的 pageGraph）</span></div></div>
         <div class="ch"><div class="cn">6</div><div class="ct"><b>关键组件与状态定义</b><span class="mini">组件清单（引用 components[]）+ 业务状态色板</span></div></div>
         <div class="ch"><div class="cn">6.5</div><div class="ct"><b>数据模型 dataModel</b><span class="mini">实体清单 + 字段表（类型/约束/说明）+ 关系 + 索引 + 派生字段（口径与除零兜底）</span></div></div>
-        <div class="ch"><div class="cn">7</div><div class="ct"><b>状态机</b><span class="mini">每个实体的状态图（states + transitions 表）</span></div></div>
-        <div class="ch"><div class="cn">8</div><div class="ct"><b>需求条目（EARS）</b><span class="mini">按模块分组，每条含 角色 / 触发 / 规则 / 状态机 / 预期 / 验收</span></div></div>
-        <div class="ch"><div class="cn">9</div><div class="ct"><b>页面详述（按板块逐个）</b><span class="mini">页面目标 · 页面结构 · <b>主流程图</b> · 交互说明 · <b>容器选型说明</b> · <b>跳转关系</b> · 页面状态 · 业务规则 · 数据模型 · 关联需求 · 原型 · 标注记录</span></div></div>
+        <div class="ch"><div class="cn">7</div><div class="ct"><b>状态机</b><span class="mini">每个实体的状态图（states + transitions 表），标注哪些是系统自动流转</span></div></div>
+        <div class="ch"><div class="cn">7.5</div><div class="ct"><b>命令策略（角色 × 状态 × 动作）</b><span class="mini">矩阵表：每行一条命令，每列一个状态，格子标 ✓/—；附不可用时的表现与原因</span></div></div>
+        <div class="ch"><div class="cn">8</div><div class="ct"><b>需求条目（EARS）</b><span class="mini">按模块分组，每条含 角色 / 触发 / 规则 / 状态机 / 预期 / 验收；验收须覆盖非法路径</span></div></div>
+        <div class="ch"><div class="cn">9</div><div class="ct"><b>页面详述（按板块逐个）</b><span class="mini">页面目标 · <b>页面职责契约</b> · 页面结构 · <b>主流程图</b> · 交互说明 · <b>容器选型说明</b> · <b>动作可用性</b> · <b>跳转关系</b> · 页面状态 · 业务规则 · 数据模型 · 关联需求 · 原型 · 标注记录</span></div></div>
         <div class="ch"><div class="cn">10</div><div class="ct"><b>待澄清问题</b><span class="mini">openQuestions，未确认的东西不藏</span></div></div>
         <div class="ch"><div class="cn">11</div><div class="ct"><b>术语表</b><span class="mini">业务术语与口径统一</span></div></div>
         <div class="ch"><div class="cn">12</div><div class="ct"><b>附录：验收清单汇总</b><span class="mini">所有 EARS 条目的 acceptance 汇总成可勾选清单</span></div></div>
@@ -852,12 +943,17 @@ td code{white-space:normal;overflow-wrap:anywhere}
     ================================================================= -->
     <section id="product">
       <h2><span class="num">4</span>产物功能说明</h2>
-      <p class="lead">一次完整跑完，产出 7 类东西。<b>数据契约是唯一真源</b>，其余都是它的渲染、校验或导出形态。</p>
+      <p class="lead">一次完整跑完，产出 8 类东西。<b>数据契约是唯一真源</b>，其余都是它的渲染、校验或导出形态。</p>
 
       <h3 id="pd-list">产物清单</h3>
       <div class="prod">
         <div class="ph"><span class="pn">XX-PRD.data.json</span><span class="pt">唯一真源</span></div>
         <div class="pb">数据契约。容器渲染、校验器校验、Markdown/PNG/devspec 导出<b>全部基于它</b>。改了数据 = 改了全部产物。</div>
+      </div>
+      <div class="prod">
+        <div class="ph"><span class="pn">行为模型</span><span class="pt">真源里的一层 · 决定按钮与页面</span></div>
+        <div class="pb"><code>tasks[]</code>（业务任务）+ <code>capabilities[]</code>（角色 × 状态 × 动作）+ <code>pages[].contract</code>（页面职责）。
+          它决定原型里每个业务按钮该亮、该灰还是该消失，也决定功能要不要拆成两个页面。<b>先有它，才有原型。</b></div>
       </div>
       <div class="prod">
         <div class="ph"><span class="pn">XX-PRD.html</span><span class="pt">交付容器 · 单文件</span></div>
@@ -914,6 +1010,8 @@ td code{white-space:normal;overflow-wrap:anywhere}
             <tr><td><b>右栏</b></td><td>PRD 文档（可编辑，自动存 localStorage；含内嵌流程图与数据模型小节）</td></tr>
             <tr><td>右栏 · 折叠</td><td>面板头「›」或原型栏「PRD ‹」收起，右侧出现竖向「PRD」把手可展开；双击分割条复位</td></tr>
             <tr><td>状态切换</td><td>一键切 默认 / 加载 / 空 / 异常 态</td></tr>
+            <tr><td><b>单据状态</b></td><td>顶栏下拉，切换当前单据的业务状态（草稿 / 审批中 / 已通过 …），<b>按钮实时按 <code>capabilities</code> 变灰 / 消失</b>。这是验证「多状态单据」最快的方式</td></tr>
+            <tr><td>右栏 · 命令策略矩阵</td><td><code>capabilities</code> 渲染成一张表：行＝命令、列＝状态、格子 ✓/—；点列头直接切到该状态对照</td></tr>
             <tr><td><b>关系图</b></td><td>全局展开的页面关系图：分层布局 + 带跳转标签的有向连线（回边/入口虚线、当前页高亮）；可拖卡片、切纵横、缩放、适应、导出全图 PNG；点卡片进入该页</td></tr>
             <tr><td><b>标注模式</b></td><td>点原型任意位置加气泡；点气泡看 / 改 / 删</td></tr>
             <tr><td><b>⇪ 标注指令</b></td><td>把标注导出为一段可直接交给 AI 的修改指令（含锚定节点上下文），支持复制 / 下载 .md / 范围与筛选切换</td></tr>
@@ -948,6 +1046,11 @@ td code{white-space:normal;overflow-wrap:anywhere}
         <li>每页至少一条 <code>type:"flow"</code> 流程图小节</li>
         <li><code>dataModel</code> 写了实体/字段/主外键，派生字段有 <code>fallback</code></li>
         <li>推断内容标了 <code>source:"inferred"</code> 并进 <code>openQuestions</code></li>
+        <li><b>每个业务按钮都指向 <code>capability</code></b>，没有写死 <code>disabled</code></li>
+        <li><b>状态机每条人工转移都有按钮入口</b>（自动流转标了 <code>system:true</code>）</li>
+        <li><b>把单据状态逐个切一遍</b>：该亮的亮、该灰的灰、该消失的消失，置灰有原因说明</li>
+        <li><b>每个页面都有 <code>contract</code></b>，同一条命令没被两个页面同时 <code>owns</code></li>
+        <li>验收条件里<b>覆盖了非法路径</b>（当前状态不允许时系统如何响应）</li>
         <li><code>devNotes</code> 里没有 <code>missing</code> 项</li>
       </ul>
     </section>
@@ -961,28 +1064,31 @@ td code{white-space:normal;overflow-wrap:anywhere}
         <table>
           <thead><tr><th style="width:34%">文件</th><th>何时读</th></tr></thead>
           <tbody>
-            <tr><td><code>SKILL.md</code></td><td>总入口：核心产物、7 阶段工作流、容器使用表、19 条关键约定</td></tr>
-            <tr><td><code>references/01-clarification.md</code></td><td>阶段①：8 维度澄清提问、4 份文档模板、澄清完成判据</td></tr>
+            <tr><td><code>SKILL.md</code></td><td>总入口：核心产物、8 阶段工作流、容器使用表、25 条关键约定</td></tr>
+            <tr><td><code>references/01-clarification.md</code></td><td>阶段①：9 维度澄清提问（含「任务与页面归属」）、4 份文档模板、澄清完成判据</td></tr>
             <tr><td><code>references/02-ears-spec.md</code></td><td>阶段②：五种 EARS 句式、条目字段逐项说明、质量门禁</td></tr>
-            <tr><td><code>references/03-prd-structure.md</code></td><td>阶段④⑦：四层结构对应关系、12 章大纲、原型层与标注层规范</td></tr>
-            <tr><td><code>references/04-container-schema.md</code></td><td><b>全程：数据契约（先读这个）</b>。含 <code>MasterDetail</code> §6.7 与容器选型 §0.5</td></tr>
-            <tr><td><code>references/05-component-states.md</code></td><td>阶段④：68 个组件白名单、状态矩阵、6 个页面骨架模板</td></tr>
+            <tr><td><code>references/03-prd-structure.md</code></td><td>阶段⑤⑧：<b>五层结构</b>对应关系、12 章大纲、原型层与标注层规范</td></tr>
+            <tr><td><code>references/04-container-schema.md</code></td><td><b>全程：数据契约（先读这个）</b>。含 <code>capabilities</code> §8.5、命令策略 §0.6、<code>MasterDetail</code> §6.7、容器选型 §0.5</td></tr>
+            <tr><td><code>references/05-component-states.md</code></td><td>阶段⑤：68 个组件白名单、状态矩阵、6 个页面骨架模板、按钮四表现</td></tr>
             <tr><td><code>references/06-demo-reverse.md</code></td><td>Demo 逆向：三条抽取规则 + 对齐规则</td></tr>
-            <tr><td><code>references/07-quality-and-examples.md</code></td><td>全程：验收标准、21 条反例、交付话术</td></tr>
-            <tr><td><code>references/08-container-choice.md</code></td><td>阶段④：<b>容器选型准则</b>（对话框 / 抽屉 / 新页面 / 主子表）+ 反模式</td></tr>
-            <tr><td><code>assets/container/index.html</code></td><td>阶段④：复制为交付容器（单文件渲染引擎）</td></tr>
-            <tr><td><code>assets/examples/*.json</code></td><td>阶段④：4 个全链路 few-shot 示例，照着写</td></tr>
-            <tr><td><code>scripts/validate_prd_json.py</code></td><td>每次产出后：结构校验（支持 <code>.json</code> 与容器产物 <code>.html</code>）</td></tr>
+            <tr><td><code>references/07-quality-and-examples.md</code></td><td>全程：验收标准、25 条反例、交付话术</td></tr>
+            <tr><td><code>references/08-container-choice.md</code></td><td>阶段⑤：<b>容器选型准则</b>（对话框 / 抽屉 / 新页面 / 主子表）+ 反模式</td></tr>
+            <tr><td><code>references/09-behavior-model.md</code></td><td>阶段③：<b>行为建模</b> —— 任务清单、命令策略表、三策略、行级 vs 页面级状态、失败恢复、权限三粒度</td></tr>
+            <tr><td><code>references/10-page-decomposition.md</code></td><td>阶段③：<b>页面职责与功能切分</b> —— 合并五判据、拆分七信号、四类最常见的「揉」</td></tr>
+            <tr><td><code>assets/container/index.html</code></td><td>阶段⑤：复制为交付容器（单文件渲染引擎）</td></tr>
+            <tr><td><code>assets/examples/*.json</code></td><td>阶段⑤：5 个全链路 few-shot 示例，照着写（<code>example-05</code> 是行为建模范例）</td></tr>
+            <tr><td><code>scripts/validate_prd_json.py</code></td><td>每次产出后：结构 + <b>语义</b>校验（状态转移覆盖 / 命令归属唯一 / 页面职责契约 / 多功能混页），支持 <code>.json</code> 与容器产物 <code>.html</code></td></tr>
             <tr><td><code>guide.html</code></td><td>本指南：工作流 / 设计准则 / PRD 结构 / 产物功能</td></tr>
           </tbody>
         </table>
       </div>
-      <h4>4 个全链路示例</h4>
+      <h4>5 个全链路示例</h4>
       <div class="grid2">
         <div class="card"><h4><code>example-01-task-board.json</code></h4><p>任务看板 · 列表页 + 四态 + 状态机</p></div>
         <div class="card"><h4><code>example-02-refund-flow.json</code></h4><p>退款流程 · 多步表单 + 内嵌流程图</p></div>
         <div class="card"><h4><code>example-03-nav-tree.json</code></h4><p>多模块多级页面 · 左栏树形导航 + 关系图</p></div>
         <div class="card"><h4><code>example-04-master-detail.json</code></h4><p>设备巡检 · <b>主子表联动</b> + 列表页三件套 + 容器选型</p></div>
+        <div class="card"><h4><code>example-05-behavior-model.json</code></h4><p>采购订单 · <b>多状态单据</b> + 10 条命令策略（三策略齐全）+ 5 个页面各自的职责契约</p></div>
       </div>
     </section>
 

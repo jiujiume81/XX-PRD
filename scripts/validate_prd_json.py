@@ -17,6 +17,9 @@ validate_prd_json.py — XX-PRD 产物结构校验器
   7. 状态机完整性（初始态 / 孤立状态）
   8. 标注闭环
   9. 布局与交互完整性
+ 10. 数据模型（实体 / 字段 / 关系 / 派生字段）
+ 11. 行为建模：capabilities（角色 × 状态 × 命令）与状态转移覆盖
+ 12. 页面职责契约（页面切分、命令归属唯一性、多功能混页提示）
 
 退出码: 0 = 无 ERROR, 1 = 存在 ERROR
 """
@@ -52,7 +55,19 @@ ID_PREFIXES = {
     "n-": "componentTreeNode", "ix-": "interaction", "s-": "pageState",
     "an-": "annotation", "c-": "component", "sm-": "stateMachine",
     "REQ-": "requirement", "bp-": "boardPlan", "q-": "openQuestion",
+    "cap-": "capability", "task-": "task",
 }
+
+# ---------- 行为建模（见 references/09-behavior-model.md） ----------
+CAP_POLICIES = {"hidden", "disabled", "reject"}
+CAP_REQUIRED = ("id", "name", "entity", "actor", "from", "policy")
+# 「用户看到什么」的兜底文案：不可用原因不能是空话
+CAP_VAGUE_REASONS = {"不允许", "状态不允许", "无权限", "不能操作", "不可用", "错误", "失败"}
+# 拒绝/不可用的语义关键词（用于检查验收条件是否覆盖非法路径）
+DENIAL_WORDS = ("不可", "不能", "禁止", "拒绝", "无权限", "越权", "置灰", "隐藏", "不允许", "失败")
+
+# 页面职责（见 references/10-page-decomposition.md）
+CONTRACT_REQUIRED = ("task", "actor", "entity", "owns")
 
 EARS_PATTERNS = {"ubiquitous", "event-driven", "state-driven", "option", "unwanted"}
 
@@ -130,6 +145,16 @@ def walk_nodes(node, out):
     for key, arr in (node.get("slots") or {}).items():
         for c in arr or []:
             walk_nodes(c, out)
+    # 列表页「三件套」里的按钮也是可寻址节点（容器会给它们挂 data-node-id）。
+    # 注意：toolbar / queryActions 的条目有两种写法 ——
+    #   ① 节点式 {id, type:"Button", props:{...}}
+    #   ② 属性式 {id, type:"primary", text:"新建"}（type 是按钮视觉类型，不是组件类型）
+    # 只有 type 命中组件白名单时才当节点递归，否则会把 "primary" 误判成组件类型。
+    pr = node.get("props") or {}
+    for key in ("toolbar", "queryActions"):
+        for it in pr.get(key) or []:
+            if isinstance(it, dict) and it.get("id") and it.get("type") in WHITELIST:
+                walk_nodes(it, out)
 
 
 def collect_node_ids(data):
@@ -139,7 +164,21 @@ def collect_node_ids(data):
         walk_nodes(page.get("componentTree") or {}, nodes)
         for n in nodes:
             ids.add(n["id"])
+            # 属性式 toolbar/queryActions 条目（{id,type:"primary",text}）也是可寻址节点
+            for it in toolbar_items(n):
+                ids.add(it["id"])
     return ids
+
+
+def toolbar_items(node):
+    """列表页三件套里「属性式」的按钮条目（type 是视觉类型而非组件类型）。"""
+    pr = node.get("props") or {}
+    out = []
+    for key in ("toolbar", "queryActions"):
+        for it in pr.get(key) or []:
+            if isinstance(it, dict) and it.get("id") and it.get("type") not in WHITELIST:
+                out.append(it)
+    return out
 
 
 # 容器为某些组件内建了「合成节点 id」，可被 interactions.on.target / actions.scrollTo 引用：
@@ -160,6 +199,8 @@ def collect_node_types(data):
         walk_nodes(page.get("componentTree") or {}, nodes)
         for n in nodes:
             types[n["id"]] = n.get("type")
+            for it in toolbar_items(n):
+                types.setdefault(it["id"], "Button")
     return types
 
 
@@ -168,6 +209,21 @@ def node_subtree(node):
     out = []
     walk_nodes(node, out)
     return out
+
+
+def walk_nodes_skip(node, out, skip_types=()):
+    """同 walk_nodes，但整棵跳过指定类型的子树（例如 MasterDetail 内部的子表不算「本页第二张表」）。"""
+    if not isinstance(node, dict):
+        return
+    if node.get("type") in skip_types:
+        return
+    if node.get("id"):
+        out.append(node)
+    for c in node.get("children") or []:
+        walk_nodes_skip(c, out, skip_types)
+    for _, arr in (node.get("slots") or {}).items():
+        for c in arr or []:
+            walk_nodes_skip(c, out, skip_types)
 
 
 # ---------- 容器选型准则（见 references/08-container-choice.md） ----------
@@ -220,8 +276,8 @@ def validate(data, rep: Report):
         if k not in data:
             rep.warn(f"缺少顶层字段 `{k}`（容器可降级渲染，但建议补齐）")
     meta = data.get("meta") or {}
-    if meta.get("schemaVersion") != "1.0":
-        rep.warn(f"meta.schemaVersion 建议为 '1.0'，当前为 {meta.get('schemaVersion')!r}")
+    if meta.get("schemaVersion") not in ("1.0", "1.1"):
+        rep.warn(f"meta.schemaVersion 建议为 '1.0' 或 '1.1'，当前为 {meta.get('schemaVersion')!r}")
     if not data.get("pages"):
         rep.error("pages 为空：容器无内容可渲染")
         return
@@ -257,6 +313,10 @@ def validate(data, rep: Report):
         reg(b.get("id"), "boardPlan")
     for q in data.get("openQuestions") or []:
         reg(q.get("id"), "openQuestion")
+    for cp in data.get("capabilities") or []:
+        reg(cp.get("id"), "capability")
+    for tk in data.get("tasks") or []:
+        reg(tk.get("id"), "task")
     for p in data.get("pages") or []:
         reg(p.get("id"), "page")
     if dup:
@@ -832,6 +892,189 @@ def validate(data, rep: Report):
         if ents:
             rep.info(f"dataModel：{len(ents)} 个实体 / {sum(len(e.get('fields') or []) for e in ents)} 个字段"
                      f" / {len(derived)} 个派生字段")
+
+    # 10.5 行为建模：capabilities（角色 × 状态 × 命令）+ 页面职责契约
+    #      这一步检查的是「语义」而非「结构」：按钮与状态、命令与页面之间是否连得上。
+    sm_by_entity = {}
+    for s in data.get("stateMachines") or []:
+        if s.get("entity"):
+            sm_by_entity.setdefault(s["entity"], s)
+    ents_for_cap = set()
+    dm2 = data.get("dataModel")
+    if isinstance(dm2, dict):
+        for en in dm2.get("entities") or []:
+            ents_for_cap.add(en.get("id"))
+            if en.get("name"):
+                ents_for_cap.add(en["name"])
+
+    caps = data.get("capabilities") or []
+    cap_by_id = {}
+    for cp in caps:
+        cid = cp.get("id") or "<无 id>"
+        if cp.get("id"):
+            cap_by_id[cid] = cp
+        miss = [k for k in ("id", "name", "entity", "actor", "policy") if cp.get(k) in (None, "", [])]
+        if "from" not in cp:
+            miss.append("from")          # 允许 `from: []`（表示不限状态），但字段必须显式写出来
+        if miss:
+            rep.error(f"[cap] `{cid}` 缺少必填字段：{'、'.join(miss)}")
+        if cp.get("id") and not str(cp["id"]).startswith("cap-"):
+            rep.warn(f"[cap] `{cid}` 建议以 `cap-` 开头")
+        ent = cp.get("entity")
+        if ent and ents_for_cap and ent not in ents_for_cap:
+            rep.error(f"[cap] `{cid}` entity `{ent}` 不在 dataModel.entities 中")
+        for a in cp.get("actor") or []:
+            if a not in user_ids:
+                rep.error(f"[cap] `{cid}` actor `{a}` 不在 users 中")
+        pol = cp.get("policy")
+        if pol and pol not in CAP_POLICIES:
+            rep.error(f"[cap] `{cid}` policy `{pol}` 非法（hidden / disabled / reject）")
+        if pol in ("hidden", "disabled") and (cp.get("from") or []):
+            # from 为空 = 不限状态，policy 永远不会触发，也就不需要 reason
+            reason = (cp.get("reason") or "").strip()
+            if not reason:
+                rep.error(f"[cap] `{cid}` policy=`{pol}` 必须写 reason（用户要知道为什么不能点）")
+            elif reason in CAP_VAGUE_REASONS:
+                rep.warn(f"[cap] `{cid}` reason「{reason}」太笼统，应说明当前状态 + 允许状态")
+        sm = sm_by_entity.get(ent) if ent else None
+        state_ids = {x.get("id") for x in (sm or {}).get("states") or []}
+        for st in cp.get("from") or []:
+            if state_ids and st not in state_ids:
+                rep.error(f"[cap] `{cid}` from 中的状态 `{st}` 不在状态机 `{sm.get('id')}` 里")
+        to = cp.get("to")
+        if to:
+            if state_ids and to not in state_ids:
+                rep.error(f"[cap] `{cid}` to `{to}` 不在状态机 `{sm.get('id')}` 里")
+            elif sm:
+                ok_tr = any(t.get("from") in (cp.get("from") or []) and t.get("to") == to
+                            for t in sm.get("transitions") or [])
+                if not ok_tr:
+                    rep.error(f"[cap] `{cid}` 声称状态 {cp.get('from')} → `{to}`，"
+                              f"但状态机 `{sm.get('id')}` 没有对应转移")
+        if cp.get("page") and cp["page"] not in page_ids:
+            rep.error(f"[cap] `{cid}` page `{cp['page']}` 不存在")
+        if cp.get("requirement") and cp["requirement"] not in req_ids:
+            rep.error(f"[cap] `{cid}` requirement `{cp['requirement']}` 不存在")
+
+    # 状态机的每条人工转移，都应有对应命令；标了 system:true 的自动转移除外
+    caps_by_entity = {}
+    for cp in caps:
+        caps_by_entity.setdefault(cp.get("entity"), []).append(cp)
+    for sm in data.get("stateMachines") or []:
+        ent = sm.get("entity")
+        mine = caps_by_entity.get(ent) or []
+        if not mine:
+            rep.warn(f"[sm] 状态机 `{sm.get('id')}`（{ent}）没有任何命令策略（capabilities）："
+                     f"各状态下按钮该可用还是置灰无从判断")
+            continue
+        for t in sm.get("transitions") or []:
+            if t.get("system"):
+                continue
+            hit = any(t.get("from") in (c.get("from") or []) and c.get("to") == t.get("to") for c in mine)
+            if not hit:
+                rep.error(f"[sm] `{sm.get('id')}` 的转移 {t.get('from')}→{t.get('to')}"
+                          f"（{t.get('trigger') or '未命名'}）没有对应 capability，"
+                          f"用户无法从界面上触发它；若为系统自动流转请标 `system:true`")
+
+    # 页面职责契约
+    owns_owner = {}
+    for p in data.get("pages") or []:
+        pid = p.get("id")
+        ctr = p.get("contract")
+        if ctr is None:
+            sm = sm_by_entity.get(p.get("entity")) if p.get("entity") else None
+            if sm:
+                rep.warn(f"[page] `{pid}` 绑定了实体 `{p.get('entity')}` 却没有 contract："
+                         f"这个页面负责哪条任务、哪些命令说不清（见 references/10-page-decomposition.md）")
+            continue
+        if not isinstance(ctr, dict):
+            rep.error(f"[page] `{pid}` contract 应为对象")
+            continue
+        miss = [k for k in CONTRACT_REQUIRED if ctr.get(k) in (None, "", [])]
+        if miss:
+            rep.error(f"[page] `{pid}` contract 缺少：{'、'.join(miss)}")
+        if ctr.get("entity") and p.get("entity") and ctr["entity"] != p["entity"]:
+            rep.error(f"[page] `{pid}` contract.entity `{ctr['entity']}` 与 page.entity `{p['entity']}` 不一致")
+        for a in ctr.get("actor") or []:
+            if a not in user_ids:
+                rep.error(f"[page] `{pid}` contract.actor `{a}` 不在 users 中")
+        for cid in ctr.get("owns") or []:
+            if cid not in cap_by_id:
+                rep.error(f"[page] `{pid}` contract.owns 引用不存在的 capability `{cid}`")
+                continue
+            if cid in owns_owner and owns_owner[cid] != pid:
+                rep.error(f"[page] capability `{cid}` 被 `{owns_owner[cid]}` 与 `{pid}` 同时声明为"
+                          f"主页面：同一命令只能有一个主页面")
+            else:
+                owns_owner[cid] = pid
+            cp = cap_by_id[cid]
+            if cp.get("page") and cp["page"] != pid:
+                rep.error(f"[page] `{pid}` owns 了 `{cid}`，但该 capability 的 page 是 `{cp['page']}`")
+        sb = ctr.get("submitBoundary")
+        if sb and sb not in ("single", "staged", "none"):
+            rep.error(f"[page] `{pid}` contract.submitBoundary `{sb}` 非法（single / staged / none）")
+
+    # 命令有没有真的落到组件上（模型写了但没用 → 提示，不算错）
+    for cp in caps:
+        cid = cp.get("id")
+        if not cid:
+            continue
+        bound = False
+        for p in data.get("pages") or []:
+            nodes = []
+            walk_nodes(p.get("componentTree") or {}, nodes)
+            for n in nodes:
+                pr = n.get("props") or {}
+                if pr.get("capability") == cid:
+                    bound = True
+                    break
+                for col in pr.get("columns") or []:
+                    for a in (col or {}).get("actions") or []:
+                        if (a or {}).get("capability") == cid:
+                            bound = True
+                            break
+            if bound:
+                break
+        if not bound:
+            rep.info(f"[cap] `{cid}` 没有绑定到任何按钮（模型已建，但原型上看不到它的效果）")
+
+    # 非法路径的验收覆盖：只写成功路径 = 只写了一半
+    if caps:
+        denial_ok = False
+        for r in data.get("requirements") or []:
+            if r.get("pattern") == "unwanted":
+                denial_ok = True
+                break
+            for acc in r.get("acceptance") or []:
+                if any(w in str(acc) for w in DENIAL_WORDS):
+                    denial_ok = True
+                    break
+            if denial_ok:
+                break
+        if not denial_ok:
+            rep.warn("已有命令策略，但没有任何需求覆盖「非法动作被拒绝 / 无权限 / 状态不符」的验收条件")
+
+    # 多功能混页的启发式提示：一页多个表单 / 表单 + 多张表 / 多个主操作，且没有页面职责契约
+    for p in data.get("pages") or []:
+        if p.get("contract"):
+            continue
+        nodes = []
+        walk_nodes_skip(p.get("componentTree") or {}, nodes, ("MasterDetail",))
+        forms = [n for n in nodes if n.get("type") == "Form"]
+        tables = [n for n in nodes if n.get("type") == "Table"]
+        prim = 0
+        for n in nodes:
+            if n.get("type") == "Button":
+                pr = n.get("props") or {}
+                if pr.get("type") in ("primary", "danger") and not pr.get("capability"):
+                    prim += 1
+        if len(forms) >= 2 or (forms and len(tables) >= 2) or prim >= 3:
+            rep.warn(f"[page] `{p.get('id')}` 疑似多功能混页（表单 {len(forms)} 个 / 表格 {len(tables)} 张 / "
+                     f"主操作 {prim} 个）：确认它们是否同一角色、同一对象、同一提交边界，"
+                     f"并补 `contract` 说明（见 references/10-page-decomposition.md）")
+
+    if caps:
+        rep.info(f"capabilities：{len(caps)} 条命令 / {len(owns_owner)} 条已声明主页面")
 
     # 11. 机器可读性总检：AI 开发所需的最小信息是否齐备
     missing = []

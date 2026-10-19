@@ -230,6 +230,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .ant-btn.lg{height:var(--ant-h-lg);padding:0 18px;font-size:15px}
 .ant-btn.sm{height:var(--ant-h-sm);padding:0 8px;font-size:12px}
 .ant-btn.dis,.ant-btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none}
+/* 命令策略：按业务状态不可用。刻意不用 .dis —— 保留指针事件，点击时能说明「为什么不能点」 */
+.ant-btn.cap-blocked{opacity:.45;cursor:not-allowed;background:#f5f5f5;border-color:var(--ant-border);color:var(--ant-text-3)}
+.ant-btn.cap-blocked.primary{background:#f5f5f5;border-color:var(--ant-border);color:var(--ant-text-3)}
+.ant-btn.cap-blocked:hover{background:#f5f5f5;border-color:var(--ant-border);color:var(--ant-text-3)}
+.ant-btn.cap-reject{border-style:dashed;color:var(--ant-warning)}
+.ant-td-action .cap-blocked{opacity:.38;cursor:not-allowed;text-decoration:none}
+#entitySelect{display:none;max-width:200px}
+.cap-matrix{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.cap-matrix th,.cap-matrix td{border:1px solid var(--ant-border-2);padding:5px 7px;text-align:center;line-height:1.45}
+.cap-matrix th{background:#fafafa;font-weight:600;color:var(--ant-text-2);white-space:nowrap}
+.cap-matrix th:first-child,.cap-matrix td:first-child{text-align:left;white-space:nowrap}
+.cap-matrix td.ok{color:var(--ant-success);font-weight:700}
+.cap-matrix td.no{color:var(--ant-text-4)}
+.cap-matrix th.cur,.cap-matrix td.cur{background:var(--ant-primary-bg)}
+.cap-matrix .cap-note{font-size:11px;color:var(--ant-text-3);font-weight:400;display:block}
 .ant-btn.loading .ant-btn-ico{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -532,6 +547,13 @@ h5.ant-typography{font-size:14px;font-weight:600;margin:0 0 4px}
 .prd-body-txt:hover{background:#fafafa}
 .prd-body-txt:focus{background:#fff;box-shadow:0 0 0 2px var(--ant-primary-bg)}
 .prd-body-txt ul,.prd-body-txt ol{margin:4px 0;padding-left:22px}
+/* PRD 正文里的 markdown 表格与行内代码（评审时比一串竖线好读） */
+.prd-body-txt .prd-md-table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0;white-space:normal}
+.prd-body-txt .prd-md-table th,.prd-body-txt .prd-md-table td{border:1px solid var(--ant-border-2);
+  padding:6px 9px;text-align:left;vertical-align:top;white-space:normal}
+.prd-body-txt .prd-md-table th{background:#fafafa;font-weight:600}
+.prd-body-txt code{background:#f5f5f5;border:1px solid var(--ant-border-2);border-radius:3px;
+  padding:0 4px;font-size:12.5px;white-space:nowrap}
 .prd-req-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
 .prd-req-table th{text-align:left;padding:8px 10px;background:#fafafa;border:1px solid var(--ant-border-2);font-weight:600;white-space:nowrap}
 .prd-req-table td{padding:8px 10px;border:1px solid var(--ant-border-2);vertical-align:top}
@@ -699,6 +721,7 @@ h5.ant-typography{font-size:14px;font-weight:600;margin:0 0 4px}
     <div class="crumb" id="navCrumb"></div>
     <div class="actions">
       <span class="badge-warn" id="warnBadge" title="">⚠ <span id="warnCount">0</span></span>
+      <select class="sel" id="entitySelect" title="切换单据业务状态（模拟生命周期，验证按钮可用性）"></select>
       <select class="sel" id="stateSelect" title="切换页面状态"></select>
       <button class="btn" id="btnCanvas" title="页面关系图（全局展开）">关系图</button>
       <button class="btn" id="btnAnnoList" title="标注列表">标注 <span id="annoCount">0</span></button>
@@ -874,7 +897,7 @@ var uid=0, WARN=[];
 /* ---------- data ---------- */
 var DATA;
 try{ DATA=JSON.parse($('#iprd-data').textContent); }catch(e){ DATA={meta:{},pages:[],modules:[],requirements:[]}; }
-DATA.meta=DATA.meta||{}; ['pages','modules','users','userFlows','components','stateMachines','requirements','boardPlan','glossary','openQuestions'].forEach(function(k){ if(!Array.isArray(DATA[k])) DATA[k]=[]; });
+DATA.meta=DATA.meta||{}; ['pages','modules','users','userFlows','components','stateMachines','requirements','boardPlan','glossary','openQuestions','capabilities'].forEach(function(k){ if(!Array.isArray(DATA[k])) DATA[k]=[]; });
 /* 是否用到 {{expr}} 文本插值：用不到就整条插值路径短路，避免逐节点遍历的开销 */
 var HAS_INTERP=/\{\{/.test(JSON.stringify(DATA));
 
@@ -890,7 +913,7 @@ var RT={ pageId:null, stateId:null, vars:{}, overrides:{}, modalOpen:{}, annotat
          zoom:1, baseW:0, baseH:0, pan:false, spaceDown:false, panTrailClick:false, navStack:[],
          coDir:'LR', coZoom:1, coAuto:true, coBound:false, coSuppressClick:false,
          coW:0, coH:0, coOx:60, coOy:60,
-         mdSel:{}, mdCollapsed:{}, mdBindWarned:{} };
+         mdSel:{}, mdCollapsed:{}, mdBindWarned:{}, entState:{} };
 
 function deep(o){ return JSON.parse(JSON.stringify(o)); }
 function pageById(id){ return DATA.pages.filter(function(p){return p.id===id})[0]; }
@@ -1225,6 +1248,9 @@ R.Button=function(p,ctx,node){
   if(p.loading) b.appendChild(h('span','ant-btn-ico',null,icon('loading',14)));
   else if(p.icon) b.appendChild(icon(p.icon,14));
   if(p.text) b.appendChild(txt(p.text));
+  /* 命令策略：按钮声明 capability 后，可用性由「角色 × 单据状态」决定，而不是写死在 disabled 上 */
+  if(p.capability){ var cap=capById(p.capability); if(cap) applyCap(b,cap,null); }
+  else if(p.disabled&&p.disabledReason) b.setAttribute('title',p.disabledReason);
   return b;
 };
 R.Input=function(p,ctx,node){
@@ -1345,12 +1371,28 @@ function cellContent(col,row,nid,ri){
   if(col.type==='tag'){ return [h('span','ant-tag '+statusColor(v),{text:v==null?'':String(v)})]; }
   if(col.type==='avatar'){ return [h('span','ant-badge-wrap',null,[h('span','ant-avatar sm',{text:String(v||'?').slice(0,1)}),txt(v==null?'':String(v))])]; }
   if(col.type==='action'){
-    var box=h('span',null,{style:'display:flex;gap:10px;flex-wrap:wrap'});
+    var box=h('span','ant-td-action',{style:'display:flex;gap:10px;flex-wrap:wrap'});
     actionDefs(col).forEach(function(a){
       var color=a.type==='danger'?'var(--ant-error)':(a.type==='muted'?'var(--ant-text-3)':'var(--ant-primary)');
       var s=h('span',null,{text:a.label||a.key,style:'color:'+color,title:(a.label||a.key)});
       if(nid&&ri!=null) s.setAttribute('data-node-id',nid+'__act_'+ri+'_'+a.key);
       s.__iprdRow=row;                       /* 行上下文：让 params 能用 {{row.title}} 之类的写法 */
+      /* 行内动作同样受命令策略约束：状态不允许时置灰/隐藏，而不是照样可点 */
+      if(a.capability){
+        var cap=capById(a.capability);
+        if(cap){
+          var cr=capEval(cap,row);
+          if(!cr.ok&&cr.policy==='hidden') return;
+          s.setAttribute('data-capability',cap.id);
+          s.setAttribute('data-cap-state',cr.ok?'on':'off');
+          if(!cr.ok){
+            s.setAttribute('data-cap-policy',cr.policy);
+            s.setAttribute('title',cr.reason);
+            if(cr.policy==='reject') s.style.color='var(--ant-warning)';
+            else { s.classList.add('cap-blocked'); s.style.color='var(--ant-text-4)'; }
+          }
+        }
+      }
       box.appendChild(s);
     });
     return [box];
@@ -1890,6 +1932,57 @@ R.Frame=function(p,ctx,node){
 };
 
 /* =====================================================================
+   Capability（命令策略）：角色 × 业务状态 → 动作可用性
+   ---------------------------------------------------------------------
+   capabilities[] 描述「谁 / 在什么状态下 / 能执行什么命令 / 不能执行时怎么办」。
+   原型里据此把按钮渲染成可用 / 置灰 / 隐藏 / 虚线（点了才拒绝），
+   并允许用顶部「单据状态」下拉模拟任意生命周期状态，肉眼即可验证。
+   ===================================================================== */
+function smByEntity(ent){ if(!ent) return null; return DATA.stateMachines.filter(function(m){return m.entity===ent})[0]||null; }
+function curEntState(ent){ var sm=smByEntity(ent); if(!sm) return null; return RT.entState[ent]||sm.initial||null; }
+function stateName(sm,id){
+  if(id==null) return '';
+  var hit=sm&&(sm.states||[]).filter(function(s){return s.id===id})[0];
+  return hit?hit.name:String(id);
+}
+/* 行数据里存的是中文状态名，capabilities.from 里写的是状态 id —— 两边都要认 */
+function normStateId(sm,v){
+  if(v==null) return null;
+  if(!sm) return v;
+  var hit=(sm.states||[]).filter(function(s){return s.id===v||s.name===v})[0];
+  return hit?hit.id:v;
+}
+function capById(id){ return DATA.capabilities.filter(function(c){return c.id===id})[0]||null; }
+/* subject 为空 = 页面级（用顶部下拉模拟的单据状态）；传 row = 列表行级（读行上的状态字段） */
+function capEval(cap,subject){
+  if(!cap) return {ok:true};
+  var ent=cap.entity||((curPage()||{}).entity);
+  var sm=smByEntity(ent);
+  var raw=subject?(subject[cap.stateField||'status']):curEntState(ent);
+  var cur=normStateId(sm,raw);
+  var from=cap.from||[];
+  if(!from.length) return {ok:true,cur:cur,ent:ent};
+  var ok=from.indexOf(cur)>=0;
+  return {ok:ok,cur:cur,ent:ent,policy:cap.policy||'disabled',
+    reason:cap.reason||('当前状态「'+stateName(sm,cur)+'」下不可执行「'+(cap.name||cap.id)+'」')};
+}
+/* 把可用性落到一个可点击元素上；返回 {blocked:bool, hidden:bool, reason:string} */
+function applyCap(el,cap,subject){
+  if(!el||!cap) return {blocked:false,hidden:false};
+  var r=capEval(cap,subject);
+  el.setAttribute('data-capability',cap.id);
+  el.setAttribute('data-cap-state',r.ok?'on':'off');
+  if(r.ok) return {blocked:false,hidden:false};
+  el.setAttribute('data-cap-policy',r.policy);
+  el.setAttribute('title',r.reason);
+  if(r.policy==='hidden'){ el.style.display='none'; return {blocked:true,hidden:true,reason:r.reason}; }
+  if(r.policy==='reject'){ el.classList.add('cap-reject'); return {blocked:false,hidden:false,reason:r.reason,reject:true}; }
+  el.classList.add('cap-blocked');
+  el.setAttribute('aria-disabled','true');
+  return {blocked:true,hidden:false,reason:r.reason};
+}
+
+/* =====================================================================
    Page render
    ===================================================================== */
 function stateOf(page,id){ var s=(page.states||[]).filter(function(x){return x.id===id})[0]; return s||(page.states||[])[0]||{id:'s-default',vars:{},overrides:[]}; }
@@ -1904,7 +1997,39 @@ function buildCtx(page,st){
   var hidden={}, visible=new Set();
   (st.hidden||[]).forEach(function(id){ hidden[id]=1; });
   (st.visible||[]).forEach(function(id){ visible.add(id); });
-  return { vars:RT.vars, overrides:RT.overrides, hidden:hidden, visible:visible };
+  /* 页面声明了 entity 时，额外注入两个只读变量，让原型里的「状态标签」能跟着
+     顶栏「单据状态」下拉一起变，而不是写死一句「草稿」：
+       {{__entState}}   当前单据状态的中文名（草稿 / 待审批 / 已通过 …）
+       {{__entStateId}} 当前单据状态的 id（draft / pending / approved …）
+     只做浅拷贝，不污染 RT.vars（UI 只读它，写入仍走 RT.vars）。 */
+  var vars=RT.vars;
+  var sm=page&&page.entity?smByEntity(page.entity):null;
+  if(sm){
+    vars={};
+    for(var k in RT.vars) vars[k]=RT.vars[k];
+    vars.__entState=stateName(sm,curEntState(page.entity));
+    vars.__entStateId=curEntState(page.entity);
+  }
+  return { vars:vars, overrides:RT.overrides, hidden:hidden, visible:visible };
+}
+/* 顶部「单据状态」下拉：页面声明 entity 且存在对应状态机时出现。
+   它模拟的是**业务生命周期状态**（草稿/审核中/已通过），与页面状态（默认/加载/空/异常）是两条轴。 */
+function refreshEntitySelect(){
+  var sel=$('#entitySelect'); if(!sel) return;
+  var page=curPage();
+  var sm=page&&page.entity?smByEntity(page.entity):null;
+  if(!sm||!(sm.states||[]).length){ sel.style.display='none'; sel.innerHTML=''; sel.removeAttribute('data-entity'); return; }
+  /* 注意：CSS 里 `#entitySelect{display:none}` 是默认隐藏，这里必须给具体值，
+     置空字符串会回落到 CSS 规则而继续隐藏 */
+  sel.style.display='inline-block';
+  sel.innerHTML='';
+  (sm.states||[]).forEach(function(s){
+    var o=document.createElement('option');
+    o.value=s.id; o.textContent='单据状态：'+s.name;
+    sel.appendChild(o);
+  });
+  sel.value=curEntState(page.entity);
+  sel.setAttribute('data-entity',page.entity);
 }
 function renderProto(){
   var page=curPage(); if(!page) return;
@@ -1916,8 +2041,11 @@ function renderProto(){
   canvas.classList.toggle('annotating',RT.annotate);
   applyZoom();
   positionBubbles();
-  var tag=$('#protoStateTag'); tag.textContent='当前状态：'+st.name;
+  var sm=page.entity?smByEntity(page.entity):null;
+  var tag=$('#protoStateTag');
+  tag.textContent='当前状态：'+st.name+(sm?(' · 单据：'+stateName(sm,curEntState(page.entity))):'');
   $('#stateSelect').value=st.id;
+  refreshEntitySelect();
 }
 
 /* =====================================================================
@@ -2137,6 +2265,13 @@ function onCanvasClick(e){
   var t=e.target.closest?e.target.closest('[data-node-id]'):null;
   if(!t) return;
   var id=t.getAttribute('data-node-id');
+  /* 被业务状态拦住的动作：点了要说明原因，而不是静默无反应 */
+  var capOff=t.getAttribute('data-cap-state')==='off';
+  var capPolicy=t.getAttribute('data-cap-policy')||'disabled';
+  if(capOff&&capPolicy!=='reject'){
+    toast(t.getAttribute('title')||'当前状态不可执行该操作','warning');
+    return;
+  }
   /* Header 的返回箭头（`<nodeId>__back`）内建返回，优先级高于交互表 */
   if(/__back$/.test(id)){ goBack(); return; }
   /* 弹窗「取消」内建关闭（与 `__back` 同思路）：作者不写 interaction 也不会把弹窗卡住。
@@ -2150,11 +2285,15 @@ function onCanvasClick(e){
   /* 本次点击的行上下文（表格行 / 行内按钮），随 actions 一起传递，延迟动作也不会丢 */
   var scope=rowScopeFor(t);
   var page=curPage();
-  (page.interactions||[]).filter(function(ix){ return ix.on&&ix.on.event==='click'&&targetMatch(ix.on.target,id); })
-    .forEach(function(ix){
+  var matched=(page.interactions||[]).filter(function(ix){ return ix.on&&ix.on.event==='click'&&targetMatch(ix.on.target,id); });
+  matched.forEach(function(ix){
       if(ix.conditions&&ix.conditions.length){ var ok=ix.conditions.every(function(c){return evalExpr(c,scope)}); if(!ok) return; }
       runActions(ix.actions||[],scope);
     });
+  /* policy=reject：允许点、点了才拒绝。若作者没写提示交互，这里兜底说明原因 */
+  if(capOff&&capPolicy==='reject'&&!matched.length){
+    toast(t.getAttribute('title')||'当前状态不可执行该操作','warning');
+  }
 }
 
 /* =====================================================================
@@ -2217,17 +2356,46 @@ function closeAnnoPop(){ $$('.anno-pop').forEach(function(p){p.remove()}); RT.ac
    ===================================================================== */
 function mdToHtml(s){
   if(!s) return '';
+  /* 行内格式：先转义，再处理 **加粗** 与 `代码`（顺序不能反，否则会把标签转义掉） */
+  function inline(t){
+    return esc(t)
+      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+      .replace(/`([^`]+)`/g,'<code>$1</code>');
+  }
+  function cells(ln){
+    var a=String(ln).trim().replace(/^\|/,'').replace(/\|$/,'').split('|');
+    return a.map(function(x){ return x.trim(); });
+  }
   var lines=String(s).split('\n'), out='', inUl=false, inOl=false;
   function closeList(){ if(inUl){out+='</ul>';inUl=false;} if(inOl){out+='</ol>';inOl=false;} }
-  lines.forEach(function(ln){
-    var t=ln.replace(/\s+$/,'');
-    if(/^\s*-\s+\[[ x]\]\s+/.test(t)){ if(!inUl){out+='<ul>';inUl=true;} out+='<li>'+esc(t.replace(/^\s*-\s+\[[ x]\]\s+/,''))+'</li>'; return; }
-    if(/^\s*[-*]\s+/.test(t)){ if(!inUl){closeList();out+='<ul>';inUl=true;} out+='<li>'+esc(t.replace(/^\s*[-*]\s+/,''))+'</li>'; return; }
-    if(/^\s*\d+[.)]\s+/.test(t)){ if(!inOl){closeList();out+='<ol>';inOl=true;} out+='<li>'+esc(t.replace(/^\s*\d+[.)]\s+/,''))+'</li>'; return; }
+  for(var i=0;i<lines.length;i++){
+    var t=lines[i].replace(/\s+$/,'');
+    /* markdown 表格：连续的 | 行；第二行是 |---| 分隔行时，第一行当表头 */
+    if(/^\s*\|/.test(t)){
+      var rows=[];
+      while(i<lines.length && /^\s*\|/.test(lines[i])){ rows.push(cells(lines[i])); i++; }
+      i--;
+      closeList();
+      var head=null, body=rows;
+      if(rows.length>1 && rows[1].every(function(c){ return /^:?-{2,}:?$/.test(c); })){
+        head=rows[0]; body=rows.slice(2);
+      }
+      out+='<table class="prd-md-table">';
+      if(head){
+        out+='<thead><tr>'+head.map(function(c){ return '<th>'+inline(c)+'</th>'; }).join('')+'</tr></thead>';
+      }
+      out+='<tbody>'+body.map(function(r){
+        return '<tr>'+r.map(function(c){ return '<td>'+inline(c)+'</td>'; }).join('')+'</tr>';
+      }).join('')+'</tbody></table>';
+      continue;
+    }
+    if(/^\s*-\s+\[[ x]\]\s+/.test(t)){ if(!inUl){closeList();out+='<ul>';inUl=true;} out+='<li>'+inline(t.replace(/^\s*-\s+\[[ x]\]\s+/,''))+'</li>'; continue; }
+    if(/^\s*[-*]\s+/.test(t)){ if(!inUl){closeList();out+='<ul>';inUl=true;} out+='<li>'+inline(t.replace(/^\s*[-*]\s+/,''))+'</li>'; continue; }
+    if(/^\s*\d+[.)]\s+/.test(t)){ if(!inOl){closeList();out+='<ol>';inOl=true;} out+='<li>'+inline(t.replace(/^\s*\d+[.)]\s+/,''))+'</li>'; continue; }
     closeList();
     if(t==='') out+='<div style="height:6px"></div>';
-    else out+='<div>'+esc(t)+'</div>';
-  });
+    else out+='<div>'+inline(t)+'</div>';
+  }
   closeList();
   return out;
 }
@@ -2438,6 +2606,51 @@ function renderPrd(){
       });
       tb2.appendChild(tb2b); s2.appendChild(tb2); body.appendChild(s2);
     });
+  }
+
+  /* 命令策略矩阵：状态 × 命令 —— 把「多状态单据下按钮该不该可用」变成一眼可查的表 */
+  var capEnt=page.entity;
+  var capList=(DATA.capabilities||[]).filter(function(c){
+    if(capEnt) return (c.entity||capEnt)===capEnt;
+    return c.page===page.id;
+  });
+  if(capList.length){
+    var csm=smByEntity(capEnt||capList[0].entity);
+    var cstates=(csm&&csm.states)||[];
+    var ccur=csm?curEntState(csm.entity):null;
+    var cs=h('div','prd-sec');
+    cs.appendChild(h('h3',null,txt('命令策略（'+capList.length+'）')));
+    cs.appendChild(h('div','prd-empty',{style:'padding:0 0 6px;text-align:left',
+      text:'行 = 业务命令，列 = 单据状态；✓ 可执行，— 不可执行。点状态名可切换模拟。'}));
+    var mt=h('table','cap-matrix');
+    var hd=h('tr');
+    hd.appendChild(h('th',null,{text:'命令 / 角色'}));
+    cstates.forEach(function(s){
+      var th=h('th',(s.id===ccur?'cur':''),{text:s.name});
+      th.style.cursor='pointer'; th.title='切换到「'+s.name+'」';
+      th.onclick=function(){ if(!csm) return; RT.entState[csm.entity]=s.id; renderProto(); renderPrd(); };
+      hd.appendChild(th);
+    });
+    mt.appendChild(h('thead',null,null,hd));
+    var mb=h('tbody');
+    capList.forEach(function(c){
+      var tr=h('tr'), td=h('td');
+      td.appendChild(h('b',null,{text:c.name||c.id}));
+      var meta=[];
+      if((c.actor||[]).length) meta.push('角色：'+(c.actor||[]).join('、'));
+      if(c.policy) meta.push('不可用时：'+({hidden:'隐藏',disabled:'置灰',reject:'点了才拒绝'}[c.policy]||c.policy));
+      if(c.effect) meta.push(c.effect);
+      if(meta.length) td.appendChild(h('span','cap-note',{text:meta.join(' · ')}));
+      tr.appendChild(td);
+      cstates.forEach(function(s){
+        var ok=(c.from||[]).indexOf(s.id)>=0;
+        var cell=h('td',(ok?'ok ':'no ')+(s.id===ccur?'cur':''),{text:ok?'✓':'—'});
+        if(!ok&&c.reason) cell.title=c.reason;
+        tr.appendChild(cell);
+      });
+      mb.appendChild(tr);
+    });
+    mt.appendChild(mb); cs.appendChild(mt); body.appendChild(cs);
   }
 
   /* annotations */
@@ -3181,6 +3394,14 @@ function buildMarkdown(){
     DATA.stateMachines.forEach(function(m){ L.push('### '+m.name+'（'+m.entity+'）','','初始状态：'+m.initial,'',
       '| 从 | 到 | 触发 | 角色 | 守卫 | 副作用 |','|---|---|---|---|---|---|');
       (m.transitions||[]).forEach(function(t){ L.push('| '+t.from+' | '+t.to+' | '+(t.trigger||'')+' | '+(t.role||'')+' | '+(t.guard||'—')+' | '+(t.action||'—')+' |'); }); L.push(''); }); }
+  if((DATA.capabilities||[]).length){ L.push('## 6.5 命令策略（角色 × 状态 × 动作）','');
+    L.push('| 命令 | 角色 | 允许状态 | 不可用时 | 拒绝原因 | 执行结果 | 关联需求 |','|---|---|---|---|---|---|---|');
+    DATA.capabilities.forEach(function(c){
+      L.push('| '+(c.name||c.id)+' | '+((c.actor||[]).join('、')||'—')+' | '+((c.from||[]).join('、')||'全部')+' | '
+        +({hidden:'隐藏',disabled:'置灰并说明',reject:'允许点击后拒绝'}[c.policy]||c.policy||'—')+' | '+(c.reason||'—')+' | '
+        +(c.effect||'—')+' | '+(c.requirement||'—')+' |');
+    });
+    L.push(''); }
   var ents=(DATA.dataModel&&DATA.dataModel.entities)||[];
   if(ents.length){ L.push('## 7. 数据模型（实体与字段）','');
     ents.forEach(function(en){
@@ -3297,6 +3518,11 @@ function devNotes(){
     if(!(p.interactions||[]).length && DATA.pages.length>1)
       out.push({level:'missing',text:'页面「'+(p.name||p.id)+'」没有任何 interactions，无法验证跳转'});
   });
+  (DATA.stateMachines||[]).forEach(function(m){
+    var cs=(DATA.capabilities||[]).filter(function(c){ return (c.entity||m.entity)===m.entity; });
+    if(!cs.length)
+      out.push({level:'missing',text:'状态机「'+(m.name||m.id)+'」没有任何命令策略（capabilities），各状态下按钮该可用还是置灰无从判断'});
+  });
   return out;
 }
 function buildDevSpec(){
@@ -3311,6 +3537,7 @@ function buildDevSpec(){
     dataModel:DATA.dataModel||{entities:[]},
     components:DATA.components||[],
     stateMachines:DATA.stateMachines||[],
+    capabilities:DATA.capabilities||[],
     requirements:DATA.requirements||[],
     boardPlan:DATA.boardPlan||[],
     glossary:DATA.glossary||[],
@@ -3321,6 +3548,7 @@ function buildDevSpec(){
       return {
         id:p.id, name:p.name||'', route:p.route||'', moduleId:p.moduleId||'', parentId:p.parentId||null,
         goal:p.goal||'', layout:p.layout||'', defaultStateId:p.defaultStateId||'',
+        entity:p.entity||null, contract:p.contract||null,
         entryFrom:p.entryFrom||[], exitTo:p.exitTo||[],
         componentTree:p.componentTree||null,
         states:p.states||[], interactions:p.interactions||[],
@@ -3347,7 +3575,8 @@ function buildAgentMd(){
   L.push('3. 可点击元素与行为由 `pages[].interactions[]` 描述：`on.target` 是节点 id（含合成 id，见下），`actions[]` 是动作序列，按顺序执行。');
   L.push('4. 每个页面的视觉差异由 `pages[].states[]` 的 `vars` + `overrides` 决定：`overrides[].target` 是节点 id，`prop/value` 是要覆盖的属性。');
   L.push('5. 业务规则、验收条件以 `requirements[]`（EARS）为准；状态流转以 `stateMachines[]` 为准；数据实体与字段以 `dataModel.entities[]` 为准。');
-  L.push('6. `devNotes[]` 列出**尚未确认**的点，落地前需与产品确认。','');
+  L.push('6. **按钮可用性以 `capabilities[]` 为准，不要写死 disabled**：每条 capability 声明 `from`（允许的业务状态）、`policy`（不可用时 hidden / disabled / reject）与 `reason`。组件上的 `props.capability` 指向 capability id，渲染时按「当前单据状态」求值。');
+  L.push('7. `devNotes[]` 列出**尚未确认**的点，落地前需与产品确认。','');
   L.push('## 1. 合成节点 id（重要约定）','');
   L.push('容器把「容器类组件内部的可点区域」也抽象成了稳定 id，实现时请保持一致：','');
   L.push('| 合成 id | 含义 |','|---|---|');
@@ -3840,6 +4069,11 @@ function init(){
   try{ setupZoomPan(); }catch(e){ warn('缩放/平移初始化失败: '+e.message); }
 
   $('#stateSelect').onchange=function(){ RT.stateId=this.value; applyState(); renderProto(); renderPrd(); };
+  $('#entitySelect').onchange=function(){
+    var p=curPage(); if(!p||!p.entity) return;
+    RT.entState[p.entity]=this.value;
+    renderProto(); renderPrd();
+  };
   $('#protoCanvas').addEventListener('click',onCanvasClick);
   /* 浏览器前进/后退 → 切页。由 hash 驱动，故清空自有栈避免与历史栈打架 */
   window.addEventListener('hashchange',function(){

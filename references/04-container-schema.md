@@ -12,12 +12,14 @@
   "meta":         { ... },   // 元信息 / 渲染控制
   "product":      { ... },   // 产品定位（shaping 产物）
   "users":        [ ... ],   // 用户角色
+  "tasks":        [ ... ],   // 业务任务（角色想完成的事，页面切分的依据）
   "userFlows":    [ ... ],   // 用户流
   "modules":      [ ... ],   // 模块清单
   "dataModel":    { ... },   // 数据实体 / 字段 / 关系 / 派生字段（供 AI 生成类型与接口）
-  "pages":        [ ... ],   // 页面清单 + 原型（componentTree/states/interactions/annotations）
+  "pages":        [ ... ],   // 页面清单 + 原型（componentTree/states/interactions/annotations/contract）
   "components":   [ ... ],   // 关键组件与状态定义（设计/前端复用）
   "stateMachines":[ ... ],   // 状态机
+  "capabilities": [ ... ],   // 命令策略：角色 × 状态 × 动作（按钮可用性的唯一依据）
   "requirements": [ ... ],   // EARS 需求条目
   "boardPlan":    [ ... ],   // PRD 板块计划
   "glossary":     [ ... ],   // 术语表
@@ -29,14 +31,16 @@
 
 | 前缀 | 实体 | 唯一性范围 | 被谁引用 |
 |---|---|---|---|
-| `u-` | user | 全局 | userFlows.role、requirements.role、stateMachines.transitions.role |
+| `u-` | user | 全局 | userFlows.role、requirements.role、stateMachines.transitions.role、capabilities.actor、pages.contract.actor |
 | `m-` | module | 全局 | pages.moduleId、requirements.moduleId |
-| `page-` | page | 全局 | modules.pageIds、pages.entryFrom/exitTo、pages.parentId、interactions.navigate |
+| `page-` | page | 全局 | modules.pageIds、pages.entryFrom/exitTo、pages.parentId、interactions.navigate、capabilities.page |
+| `task-` | task | 全局 | pages.contract.task |
 | `flow-` | userFlow | 全局 | — |
-| `e-` | dataModel entity | 全局 | dataModel.entities[].relations.target、derived.usedBy |
+| `e-` | dataModel entity | 全局 | dataModel.entities[].relations.target、derived.usedBy、capabilities.entity |
 | `c-` | component | 全局 | pages.componentTree 的 `ref` |
-| `sm-` | stateMachine | 全局 | requirements.stateMachine |
-| `REQ-` | requirement | 全局 | boardPlan.reqIds、pages.prd.reqIds |
+| `sm-` | stateMachine | 全局 | requirements.stateMachine、pages.stateMachine |
+| `cap-` | capability | 全局 | pages.contract.owns、节点 `props.capability`、`columns[].actions[].capability` |
+| `REQ-` | requirement | 全局 | boardPlan.reqIds、pages.prd.reqIds、capabilities.requirement |
 | `bp-` | boardPlan | 全局 | — |
 | `q-` | openQuestion | 全局 | — |
 | `n-` | componentTree node | **页内** | interactions.on.target、states.overrides.target、annotations.anchor.nodeId |
@@ -304,11 +308,73 @@
 
 ---
 
+## 0.6 命令策略与业务状态模拟（按钮可用性）
+
+**完整方法见 `references/09-behavior-model.md`。** 这里只讲容器怎么消费它。
+
+B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点」。容器把这件事变成**数据驱动**：
+
+```jsonc
+// 根级
+"capabilities": [
+  { "id": "cap-po-approve", "name": "通过", "entity": "PurchaseOrder",
+    "actor": ["u-manager"], "from": ["pending"], "policy": "disabled",
+    "reason": "仅「待审批」订单可以审批", "to": "approved",
+    "page": "page-po-approve", "requirement": "REQ-PO-002" }
+]
+// 页面声明它作用在哪个实体上（顶部会出现「单据状态」下拉）
+{ "id": "page-po-approve", "entity": "PurchaseOrder", "stateMachine": "sm-po" }
+// 按钮引用命令，而不是写死 disabled
+{ "id": "n-ap-btn-approve", "type": "Button",
+  "props": { "text": "通过", "type": "primary", "capability": "cap-po-approve" } }
+```
+
+| policy | 渲染结果 | 点击行为 |
+|---|---|---|
+| `hidden` | 不渲染 | — |
+| `disabled` | 灰底灰字 + `cursor:not-allowed` + `title=reason` | **可点**，弹出 reason 提示（不是静默无反应） |
+| `reject` | 正常外观 + 虚线警告色 | 正常执行交互；无交互时兜底提示 reason |
+
+**状态来源分两种**（容器自动判断）：
+
+| 场景 | 取值 |
+|---|---|
+| 表格行内动作（`columns[].actions[].capability`） | 该行 `status` 字段（中文状态名或状态 id 都认，可用 `stateField` 改名） |
+| 详情/表单页按钮（`props.capability`） | 顶部「单据状态」下拉选中的模拟状态；默认取状态机的 `initial` |
+
+**右栏 PRD 自动生成「命令策略矩阵」**（行 = 命令，列 = 状态，✓/—），点状态名即可切换模拟 —— 评审时不用改 JSON。
+
+**状态标签别写死**：页面声明了 `entity` 时，容器会往插值上下文里注入两个只读变量，
+让「状态标签」跟着下拉一起变（否则切到「待审批」了，页面上还挂着「草稿」的 Tag）：
+
+| 变量 | 值 |
+|---|---|
+| `{{__entState}}` | 当前单据状态的中文名（草稿 / 待审批 / 已审批 …） |
+| `{{__entStateId}}` | 当前单据状态的 id（draft / pending / approved …） |
+
+```jsonc
+{ "id": "n-d-tag", "type": "Tag", "props": { "text": "{{__entState}}", "color": "blue" } }
+```
+
+**校验器硬规则**：
+
+| 规则 | 级别 |
+|---|---|
+| 状态机存在但没有任何 `capabilities` | WARN |
+| 状态机的人工转移没有对应 capability，且未标 `system: true` | ERROR |
+| `from` / `to` 引用了状态机里不存在的状态 | ERROR |
+| `policy` 为 `hidden`/`disabled` 且 `from` 非空，但没有 `reason` | ERROR |
+| `actor` 不在 `users[]`、`entity` 不在 `dataModel.entities[]` | ERROR |
+| `contract.owns` 引用了不存在的 capability，或同一条命令被两个页面 owns | ERROR |
+| 页面绑定 `entity` 却没有 `contract` | WARN |
+
+---
+
 ## 1. `meta` — 元信息与渲染控制
 
 ```jsonc
 "meta": {
-  "schemaVersion": "1.0",          // 固定 "1.0"
+  "schemaVersion": "1.1",          // "1.0"（无行为建模）/ "1.1"（含 tasks/capabilities/contract）
   "product": "团队任务看板",         // 产品名（顶栏标题）
   "version": "0.1.0",              // 产物版本
   "createdAt": "2026-10-15T10:42:00+08:00",
@@ -409,6 +475,16 @@
     "goal": "让负责人一眼看到所有任务及其状态",
     "entryFrom": ["page-home"],
     "exitTo": ["page-task-detail"],
+    "entity": "Task",                 // 可选：本页操作的业务实体（有它 + 状态机 → 顶部出现「单据状态」下拉）
+    "stateMachine": "sm-task",        // 可选：可省略，按 entity 自动匹配
+    "contract": {                     // 页面职责契约（见 references/10-page-decomposition.md）
+      "task": "task-track",           // 服务哪条业务任务
+      "actor": ["u-owner"],           // 主要使用者
+      "entity": "Task",               // 主体对象，须与 page.entity 一致
+      "owns": ["cap-task-start"],     // 本页负责发起的命令（一条命令只能有一个主页面）
+      "submitBoundary": "none",       // single | staged | none
+      "doneWhen": "任务已开始或被标记完成"
+    },
     "layout": "sider-content",        // blank | header-content | sider-content | header-sider-content
     "defaultStateId": "s-default",
     "notApplicableStates": [],        // 四态中确实不适用的，显式声明，如 ["empty"]
@@ -759,6 +835,46 @@
   }
 ]
 ```
+
+`transitions[].system: true` 表示**系统自动流转**（定时任务 / 支付回调 / 超时关闭），
+校验器不会要求它有对应按钮。没有这个标记的人工转移，必须有一条 `capability` 覆盖，否则报 ERROR。
+
+---
+
+## 8.5 `capabilities` — 命令策略（角色 × 状态 × 动作）
+
+```jsonc
+"capabilities": [
+  {
+    "id": "cap-task-start",          // cap- 前缀，全局唯一
+    "name": "开始任务",               // 用户看到的动作名
+    "entity": "Task",                // 作用于哪个实体
+    "actor": ["u-owner"],            // 哪些角色可以执行（引用 users[].id）
+    "from": ["todo"],                // 允许执行的业务状态；[] = 不限状态
+    "guard": "任务已有负责人",         // 状态之外的前置条件
+    "policy": "disabled",            // hidden | disabled | reject（不可用时怎么办）
+    "reason": "仅「待办」任务可以开始，当前为「进行中」",  // 用户能据此行动的一句话
+    "to": "doing",                   // 成功后进入的状态（无状态变化可省略）
+    "effect": "记录开始时间",          // 副作用
+    "page": "page-task-list",        // 主要出现位置
+    "requirement": "REQ-TASK-004",   // 对应哪条 EARS 需求
+    "onFail": "无负责人时提示先指派"    // 失败后用户能做什么
+  }
+]
+```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `id` / `name` / `entity` / `actor` / `from` / `policy` | ✓ | `from` 允许空数组，但字段必须写出来 |
+| `reason` | policy 为 hidden/disabled **且 `from` 非空**时必填 | 不能写「状态不允许」这类空话 |
+| `guard` | | 写具体条件，不要写「条件满足」 |
+| `to` | | 必须能在状态机里找到 `from → to` 的转移 |
+| `stateField` | | 行级取值字段名，默认 `status`（表格行内动作用） |
+| `dataScope` | | 数据范围（如「仅本人名下」），配合列表默认筛选 |
+| `onFail` | | 失败原因 + 下一步动作 |
+
+> **一条命令只能有一个主页面**（`pages[].contract.owns`），其他页面可以引用同一个 `capability.id`，
+> 但不能各自实现一套禁用逻辑 —— 这是防止「列表能删、详情不能删」的唯一手段。
 
 ---
 

@@ -79,7 +79,7 @@
 
 | type | props |
 |---|---|
-| `Button` | `text`、`type`(`primary`\|`default`\|`dashed`\|`text`\|`link`)、`size`、`danger`、`disabled`、`loading`、`block`、`icon` |
+| `Button` | `text`、`type`(`primary`\|`default`\|`dashed`\|`text`\|`link`)、`size`、`danger`、`disabled`、`disabledReason`、`loading`、`block`、`icon`、**`capability`**（引用 `capabilities[].id`，可用性由角色 × 状态求值） |
 | `Input` | `placeholder`、`value`、`prefix`、`suffix`、`size`、`disabled`、`allowClear`、`status`(`error`\|`warning`) |
 | `TextArea` | `placeholder`、`rows`、`value`、`maxLength`、`showCount` |
 | `InputNumber` | `value`、`min`、`max`、`step`、`disabled` |
@@ -98,6 +98,19 @@
 | `Rate` | `value`、`count` |
 | `Cascader` | `placeholder`、`options`(`[{value,label,children}]`) |
 | `Transfer` | `dataSource`(`[{key,title}]`)、`targetKeys` |
+
+> **按钮可用性不要写死 `disabled`**：业务按钮声明 `props.capability`（表格行内用
+> `columns[].actions[].capability`），容器按「当前角色 × 当前单据状态」求值，得到四种表现：
+>
+> | 表现 | 触发条件 | 视觉 |
+> |---|---|---|
+> | 可用 | 当前状态 ∈ `capability.from` | 正常 |
+> | 置灰 | 不满足且 `policy: "disabled"` | 灰底灰字 + 悬浮/点击说明 `reason` |
+> | 隐藏 | 不满足且 `policy: "hidden"` | 不渲染 |
+> | 虚线警告 | 不满足且 `policy: "reject"` | 正常外观 + 警告色虚线，点了才拒绝 |
+>
+> 纯查看类动作（详情、打印、复制单号）覆盖全部状态时，不必写 `capability`。
+> 契约见 `04-container-schema.md` §8.5，方法见 `09-behavior-model.md`。
 
 ### 2.4 数据展示类
 

@@ -164,9 +164,9 @@
     "entities": [
       {
         "id": "e-refund",
-        "name": "Refund",
+        "name": "RefundOrder",
         "table": "refund",
-        "description": "退款申请单",
+        "description": "退款申请单（对应状态机实体 RefundOrder）",
         "pageIds": [
           "page-refund-apply",
           "page-refund-review"
@@ -1491,6 +1491,84 @@
           "action": "回退至客服并通知"
         }
       ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "cap-refund-approve",
+      "name": "通过并转财务",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-agent"
+      ],
+      "from": [
+        "reviewing"
+      ],
+      "guard": "申请信息完整且凭证已上传",
+      "policy": "disabled",
+      "reason": "仅「待初审」单据可以审批，当前为「待放款 / 已完成 / 已驳回」",
+      "to": "pending_pay",
+      "effect": "记录初审人与时间并通知财务",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-004",
+      "onFail": "凭证缺失时提示补充上传，停留在当前页"
+    },
+    {
+      "id": "cap-refund-reject",
+      "name": "驳回",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-agent"
+      ],
+      "from": [
+        "reviewing"
+      ],
+      "guard": "审批意见 5–200 字",
+      "policy": "disabled",
+      "reason": "仅「待初审」单据可以驳回，当前不是该状态",
+      "to": "rejected",
+      "effect": "记录驳回意见并通知用户",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-004",
+      "onFail": "意见过短时在输入框下提示"
+    },
+    {
+      "id": "cap-refund-pay",
+      "name": "确认放款",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-finance"
+      ],
+      "from": [
+        "pending_pay"
+      ],
+      "guard": "收款账户信息完整",
+      "policy": "reject",
+      "reason": "仅「待放款」单据可以放款，且账户信息需完整",
+      "to": "refunded",
+      "effect": "调用支付渠道并记录流水号",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-005",
+      "onFail": "渠道超时提示稍后重试，不重复放款"
+    },
+    {
+      "id": "cap-refund-review-reject",
+      "name": "复核不通过",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-finance"
+      ],
+      "from": [
+        "pending_pay"
+      ],
+      "guard": "复核意见已填写",
+      "policy": "disabled",
+      "reason": "仅「待放款」单据可以复核驳回，当前不是该状态",
+      "to": "rejected",
+      "effect": "回退到已驳回并通知客服",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-005",
+      "onFail": "未填意见时提示补充"
     }
   ],
   "requirements": [

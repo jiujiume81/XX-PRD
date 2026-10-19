@@ -18,9 +18,11 @@
 | **可交互原型** | 组件树 + 交互 + 页面状态 + **主子表联动** + **按单据状态变灰/隐藏的按钮**，单文件、零依赖、离线可用 |
 | **页面关系图** | 所有 `navigate` 自动抽成全局分层有向图 |
 | **标注评审** | 原型上直接点位置加气泡提意见，可一键导出为「AI 修改指令」 |
+| **切片交付** | 大需求按「用户故事最小闭环」切片，一轮一片，每片独立验收（`slices.json` + `prd_slice.py`） |
 | **开发交接包** | `devspec.json` + `AGENT.md`，机器可读，AI / 研发可直接开工 |
 
-两个**必须人工确认**的卡点（确认需求与命令策略 / 确认板块）—— 卡点未确认不往下走。
+两个**必须人工确认**的卡点（确认需求与命令策略 / 确认切片清单）—— 卡点未确认不往下走，
+并由 `scripts/prd_flow.py` 落盘校验：`guard build` / `guard export` 未过闸点直接返回非 0。
 
 ![主子表联动](docs/master-detail.png)
 
@@ -164,12 +166,15 @@ XX-PRD/
 │   ├── 07-quality-and-examples.md 验收标准与反例
 │   ├── 08-container-choice.md    容器选型准则
 │   ├── 09-behavior-model.md      行为建模（命令策略 / 状态 × 角色 × 动作）
-│   └── 10-page-decomposition.md  页面职责与功能切分（合并判据 / 拆分信号）
+│   ├── 10-page-decomposition.md  页面职责与功能切分（合并判据 / 拆分信号）
+│   └── 11-slice-delivery.md      切片交付（用户故事最小闭环 / 单片上限 / 合并规则）
 ├── assets/
 │   ├── container/index.html      交付容器本体（单文件、零依赖）
 │   └── examples/                 5 个全链路示例 JSON
 ├── scripts/
-│   └── validate_prd_json.py      结构 + 语义校验器
+│   ├── validate_prd_json.py      结构 + 语义校验器
+│   ├── prd_flow.py               流程闸门（8 阶段 + 卡点 A/B 落盘校验）
+│   └── prd_slice.py              切片计划校验 / 单片校验 / 合并 / 标记完成
 └── docs/                         截图
 ```
 

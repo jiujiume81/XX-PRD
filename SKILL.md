@@ -1,16 +1,45 @@
 ---
 name: XX-PRD
-description: 产品经理需求分析与原型设计工作台。把口头需求/一句话想法/Vibe-Coding Demo 收敛成「可交互原型 + EARS 规范 PRD + 标注对齐」三合一的单文件 HTML 容器，基于 Ant Design 5 设计（内置压缩版 AntD token 与组件语义，并据此推导容器选型 / 主子表 / 跳转 / 视觉等设计准则），先做行为建模（角色 × 状态 × 命令 + 页面职责）再画原型，产出可交付给 AI 直接开发的开发交接包。当用户要写 PRD、做需求分析、澄清需求、画原型、做需求评审、把 Demo 逆向成文档、对齐产研理解、生成产品需求文档或交互原型时使用。触发词：PRD、需求分析、需求澄清、原型、原型图、可交互原型、EARS、用户流、模块清单、页面清单、状态机、标注、评审、Demo 逆向、需求文档、产品文档、设计准则、设计原则、Ant Design、AntD、主子表、主从表、对话框选型、抽屉、页面关系图、开发交接、命令策略、按钮置灰、状态流转、多状态单据、页面切分、功能拆分。
+description: 产品经理需求分析与原型设计工作台。把口头需求/一句话想法/Vibe-Coding Demo 收敛成「可交互原型 + EARS 规范 PRD + 标注对齐」三合一的单文件 HTML 容器，基于 Ant Design 5 设计（内置压缩版 AntD token 与组件语义，并据此推导容器选型 / 主子表 / 跳转 / 视觉等设计准则），先做行为建模（角色 × 状态 × 命令 + 页面职责）再画原型，产出可交付给 AI 直接开发的开发交接包；流程带闸门（澄清与切片清单必须经用户确认，由脚本校验），大需求按用户故事最小闭环逐片交付。当用户要写 PRD、做需求分析、澄清需求、画原型、做需求评审、把 Demo 逆向成文档、对齐产研理解、生成产品需求文档或交互原型时使用。触发词：PRD、需求分析、需求澄清、原型、原型图、可交互原型、EARS、用户流、模块清单、页面清单、状态机、标注、评审、Demo 逆向、需求文档、产品文档、设计准则、设计原则、Ant Design、AntD、主子表、主从表、对话框选型、抽屉、页面关系图、开发交接、命令策略、按钮置灰、状态流转、多状态单据、页面切分、功能拆分。
 ---
 
 # XX-PRD — 需求分析与原型设计工作台
 
 把"压缩的 Demo / 模糊的想法"展开成"产研可直接消费的 PRD + 可交互原型"，并在同一个容器里完成**评审、标注、对齐、导出**。
 
+## 开工第一件事：过闸门，不是写文档
+
+这个 skill 的流程**不靠"记得要问"，靠脚本拦**。开工先建流程状态，每阶段落盘，卡点由脚本记录：
+
+```bash
+python3 scripts/prd_flow.py start --product "<产品名>"   # 建流程状态（XX-PRD.workflow.json）
+python3 scripts/prd_flow.py status                        # 看当前阶段 + 下一步 + 缺哪些产物
+python3 scripts/prd_flow.py submit <stage>                # 该阶段产物齐了才提交
+python3 scripts/prd_flow.py approve A --by user           # 卡点必须显式批准
+python3 scripts/prd_flow.py guard build                   # 生成原型前自检
+```
+
+| 卡点 | 位置 | 未批准会怎样 |
+|---|---|---|
+| **A** | 澄清 + EARS + 行为建模之后 | `guard build` 退出码非 0 → **禁止写 `pages[]` / `componentTree`** |
+| **B** | 切片计划之后 | `guard export` 退出码非 0 → **禁止导出交付物** |
+
+**首轮红线（违反即返工）**
+
+- 首轮回复**只允许**三样东西：澄清问题（5~7 个，能给选项就给选项）、你的假设与默认值、非目标。**不得**出现 JSON / HTML / 组件树 / schema 片段 / 「我先搭个原型」。
+- 用户给的需求**再详细也不等于澄清完成**：`shaping/` 里 5 份产物没落盘、P0 问题没答案，就不算澄清完。
+- 卡点 A 批准前写的任何原型代码都是白做。宁可多问一轮，不要返工一片。
+
+> 这道闸门是补出来的：此前 8 阶段与卡点只写在文档里，没有状态、不可校验，
+> 于是"需求丢进去就直接生成原型"反复发生。现在卡点是一个文件 + 一个退出码。
+
 ## 核心产物
 
 | 产物 | 形式 | 说明 |
 |---|---|---|
+| 流程状态 | `XX-PRD.workflow.json` | 8 阶段 + 卡点 A/B 的落盘状态，`scripts/prd_flow.py` 维护 |
+| 澄清产物 | `shaping/*.md` + `open-questions.json` | 产品定位 / 用户流 / 模块清单 / 页面清单 / 待澄清问题 |
+| **切片计划** | `shaping/slices.json` | **用户故事级交付单元**，卡点 B 的确认对象 |
 | 数据契约 | `XX-PRD.data.json` | 唯一真源，容器渲染 + 校验 + 导出都基于它 |
 | **行为模型** | `tasks[]` + `capabilities[]` + `pages[].contract` | **角色 × 状态 × 命令 + 页面职责**，按钮可用性与页面切分的依据 |
 | 交付容器 | `XX-PRD.html` | **单文件**，双击即开，无需服务器/联网 |
@@ -27,9 +56,13 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 
 ```
 ① 澄清 → ② 需求分析(EARS+状态机) → ③ 行为建模(任务/命令/页面职责)
-   →【卡点A：确认需求 + 行为模型】→ ④ 板块计划 →【卡点B：确认板块】
-   → ⑤ 逐板块生成原型+PRD → ⑥ 标注评审迭代 → ⑦ 原型定稿 → ⑧ 生成最终 PRD + 导出
+   →【卡点A：确认需求 + 行为模型】→ ④ 切片计划 →【卡点B：确认切片清单】
+   → ⑤ 逐片生成（每片：片段 → check → merge → validate → done）
+   → ⑥ 标注评审迭代 → ⑦ 原型定稿 → ⑧ 生成最终 PRD + 导出
 ```
+
+每个阶段的产出都要**落盘并 `submit`** 才算完成。`submit` 会检查该阶段的产物是否真的存在、
+有体量、不是占位符 —— 所以"口头说做完了"在这里不成立。
 
 > **③ 为什么必须单独一个阶段**：只做 EARS + 状态机，信息是**分开记录**的 ——
 > 角色在 `users`、状态在 `stateMachines`、按钮在组件树里，三者之间没有强制对应关系。
@@ -39,10 +72,13 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 ### 阶段 ① 需求澄清
 
 1. 读 `references/01-clarification.md`。
-2. 按 8 个维度提问，**每轮 5~7 个问题**，能给选项就不给开放题。
+2. 按 9 个维度提问，**每轮 5~7 个问题**，能给选项就不给开放题。
 3. 产出 4 份 shaping 文档：产品定位 / 用户流 / 模块清单 / 页面清单（模板见该文件 §3）。
-4. 产出 `openQuestions`，P0 问题必须有答案或默认值。
-5. 满足「澄清完成判据」后才进入阶段 ②。
+4. 产出待澄清问题，P0 必须有答案或默认值。
+5. **落盘**到 `shaping/`：`positioning.md` / `user-flows.md` / `modules.md` / `pages.md` / `open-questions.json`
+   （问题格式：`{"questions":[{"id":"q-1","question":"…","priority":"P0","status":"resolved|assumed","answer":"…"}]}`）。
+6. `prd_flow.py submit clarify`。闸门会拦：产物缺失、体量过小、过半是占位符、P0 还挂着 `open`。
+7. 「澄清完成判据」全部满足且 submit 通过，才进入阶段 ②。
 
 **若输入是 Vibe-Coding Demo 代码**：跳到 `references/06-demo-reverse.md`，按"路由抽模块、分支抽规则、状态变化抽状态机"三条规则逆向，再回到本流程对齐。
 
@@ -52,6 +88,7 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 2. 逐条产出 EARS 条目，字段：`角色/触发/规则/状态机/预期/验收`。
 3. 建状态机（`stateMachines`），覆盖实体生命周期。**系统自动流转标 `system: true`**（定时任务 / 支付回调 / 超时关闭）。
 4. 跑 §5 质量门禁自检，不通过则重写。
+5. 落盘 `shaping/requirements.md`，然后 `prd_flow.py submit ears`。
 
 ### 阶段 ③ 行为建模（任务 / 命令策略 / 页面职责）
 
@@ -66,19 +103,48 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 5. **按职责切页面**：命中任一拆分信号（角色不同 / 生命周期阶段不同 / 提交边界不同 / 信息超两屏 /
    权限差异大 / 入口不同）就拆；五条合并判据全中才合。
 6. 自检 `09` §8 的 12 条 + `10` §8 的 12 条。
+7. 把「任务清单 / 命令策略 / 页面职责」三张表落盘到 `shaping/behavior.md`（缺任一张，`submit` 会被拦），
+   然后 `prd_flow.py submit behavior`。
 
 **【卡点 A】把需求清单 + 状态机 + 命令策略表 + 页面职责表 + 待澄清问题给用户确认。**
 未确认不进下一阶段。命令策略表要让用户逐条确认「这个状态下这个按钮该不该可点」。
 
-### 阶段 ④ 板块计划
+### 阶段 ④ 切片计划（取代原「板块计划」）
 
-1. 按模块/页面拆成 PRD 板块，写入 `boardPlan`（含 `order` / `status`）。
-2. **【卡点 B】用户确认板块顺序与颗粒度。**
+**为什么换**：`板块` 从来没被定义到可执行颗粒度。一个大需求里一个模块几十个页面，
+"按板块"仍然是巨块，单轮输出必然衰减。改成**用户故事最小闭环**为交付单元。
 
-### 阶段 ⑤ 逐板块生成原型 + PRD
+1. 读 `references/11-slice-delivery.md`。
+2. 拆成用户故事级切片，写入 `shaping/slices.json`：每片一个角色 / 一个目标 / 一条闭合主路径 / 能独立验收。
+3. 单片上限：**≤4 页面 / ≤6 命令 / ≤12 需求 / ≤80 组件节点**。超了继续拆，不要硬塞。
+4. `python3 scripts/prd_slice.py plan shaping/slices.json` 通过
+   —— 会拦住页面或命令被两片同时认领、依赖成环、超上限、缺字段。
+5. `prd_flow.py submit plan`。
+6. **【卡点 B】用户确认切片清单与顺序**：每片的范围、体量、验收边界都要看得明白，
+   而不是只看一个模块名。确认后 `prd_flow.py approve B --by user`。
+7. `boardPlan` 仍要写进数据契约（容器的板块导航用它），但它现在**由切片清单推导**，不是拍脑袋的板块顺序。
 
-1. 读 `references/04-container-schema.md`（数据结构）+ `references/05-component-states.md`（组件白名单）。
-2. 每次只做 1~2 个板块，避免一次输出过载。
+### 阶段 ⑤ 逐片生成原型 + PRD
+
+**一轮只做一片**，六步走完再下一片：
+
+```bash
+# 1. 写片段 slices/s-01.json（只含本片页面 / 需求 / 命令 / 状态机增量 / 数据模型新增字段）
+# 2. 单片自检
+python3 scripts/prd_slice.py check slices/s-01.json --plan shaping/slices.json
+# 3. 合并全部已完成片段
+python3 scripts/prd_slice.py merge slices/*.json -o XX-PRD.data.json --plan shaping/slices.json
+# 4. 整份校验（这里查跨片引用是否闭合）
+python3 scripts/validate_prd_json.py XX-PRD.data.json
+# 5. 标记完成
+python3 scripts/prd_slice.py done s-01 --plan shaping/slices.json
+# 6. 跑下一片
+```
+
+1. 读 `references/04-container-schema.md`（数据结构）+ `references/05-component-states.md`（组件白名单）
+   + `references/11-slice-delivery.md`（片段格式与上限）。
+2. `check` 不过不合并；`validate` 有 ERROR 不进下一片。单片阶段允许"引用了别的切片的页面"这类跨片错误，
+   合并后必须为 0。
 3. 每页必须产出：
    - `componentTree`（组件树，`type` 走白名单，`id` 稳定）
    - `states`（**≥4 态**：默认/加载/空/异常）
@@ -93,7 +159,7 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
    把主表与子表关联起来，点行联动、子表可展开收起；**不要平铺两张表**。契约见 `04-container-schema.md` §6.7。
 7. **表单录入 / 详情先选容器**：读 `references/08-container-choice.md`，按决策树确定用
    对话框 / 抽屉 / 新页面（长表单禁对话框、禁 dialogception、详情主从首选抽屉）。选错了校验器会 ERROR。
-8. 每完成一批，把 JSON 写盘并让容器渲染，确认无警告；顶部「关系图」应呈现连通的页面图。
+8. 每片合并后让容器渲染一次，确认无警告；顶部「关系图」应保持连通，**不能因为分片而出现孤岛页**。
 
 ### 阶段 ⑥ 标注评审迭代
 
@@ -250,6 +316,10 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 23. **一条命令只有一个主页面**：`contract.owns` 里声明的命令不得被第二个页面重复 owns；其他页面可以引用同一个 `capability.id`，但不能各写一套逻辑。
 24. **状态机的每条人工转移都要有入口**：要么有 `capability` 覆盖，要么标 `system: true`（定时任务 / 回调 / 超时）。校验器会 ERROR。
 25. **验收必须覆盖非法路径**：每条关联状态机的需求，至少一条验收写「状态不符 / 权限不足 / 并发冲突时被拒绝」，只写成功路径等于只写了一半。
+26. **流程状态必须落盘**：开工先 `prd_flow.py start`，每阶段 `submit`，卡点 `approve`。没有 `XX-PRD.workflow.json` 就开始写文档，等于没有流程 —— 卡点会随上下文一起消失。
+27. **卡点未批不得产出**：`guard build` 不通过，不许写 `pages[]` / `componentTree`；`guard export` 不通过，不许导出。这条**优先于**任何"先做个样子看看"的要求。
+28. **切片交付，不整包生成**：一轮只做一片；单片超限（4 页面 / 6 命令 / 12 需求 / 80 节点）必须再拆。`merge` 冲突就回头统一理解，不要改后者覆盖。
+29. **单片可独立验收**：每片做完要能单独打开、单独评审、单独说"对/不对"；做不到就说明切错了。
 
 ---
 
@@ -267,9 +337,12 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 | `references/08-container-choice.md` | 阶段⑤：**容器选型准则**（对话框 / 抽屉 / 新页面 / 主子表）+ 反模式 |
 | `references/09-behavior-model.md` | 阶段③：**行为建模**（任务 / 命令策略 / 状态 × 角色 × 动作 / 失败恢复 / 权限三粒度） |
 | `references/10-page-decomposition.md` | 阶段③：**页面职责与功能切分**（合并五判据 / 拆分七信号 / 四类揉法） |
+| `references/11-slice-delivery.md` | 阶段④⑤：**切片协议**（用户故事最小闭环 / 单片上限 / 片段格式 / 合并规则 / 反例） |
 | `assets/container/index.html` | 阶段⑤：复制为交付容器 |
 | `assets/examples/*.json` | 阶段⑤：全链路 few-shot，照着写（`example-05` 是行为建模范例） |
 | `scripts/validate_prd_json.py` | 每次产出后：结构 + 行为语义校验 |
+| `scripts/prd_flow.py` | 全程：**流程闸门**（8 阶段与卡点 A/B 落盘，`guard` 拦越级） |
+| `scripts/prd_slice.py` | 阶段④⑤：切片计划校验 / 单片校验 / 合并 / 标记完成 |
 
 ---
 
@@ -277,12 +350,13 @@ description: 产品经理需求分析与原型设计工作台。把口头需求/
 
 用户说"帮我写个 XX 的 PRD / 原型"时：
 
-1. 读 `references/04-container-schema.md` 建立数据认知。
-2. 读 `references/01-clarification.md`，抛出第一轮 5~7 个澄清问题。
-3. 澄清到位后按流程推进，在卡点 A/B 停下等确认。
-4. **卡点 A 之前先做完行为建模**（`tasks` / `capabilities` / `contract`），再画页面。
-5. 参考 `assets/examples/` 的完整示例产出 JSON（先看 `example-05-behavior-model.json` 学行为建模）。
-6. 复制容器、内联数据、跑校验、交付并说明操作方式。
+1. **先建流程状态**：`python3 scripts/prd_flow.py start --product "<产品名>"`。这一步不做，后面全会乱。
+2. 读 `references/04-container-schema.md` 建立数据认知，读 `references/01-clarification.md`。
+3. 抛第一轮 5~7 个澄清问题，**本轮到此为止**，等用户回答 —— 不许夹带任何原型内容。
+4. 按 ①→③ 推进，每阶段把产物落盘到 `shaping/` 并 `submit`；到卡点 A 停下等确认。
+5. 卡点 A 批准后做切片计划（阶段④：`shaping/slices.json` + `prd_slice.py plan`），卡点 B 确认切片清单。
+6. 逐片生成：`check → merge → validate → done`，一片一片来（先看 `example-05` 学行为建模、`11-slice-delivery.md` 学片段格式）。
+7. 全部 done → `guard export` 通过 → 复制容器、内联数据、跑校验、交付并说明操作方式。
 
 > **用户想先了解这个 skill 是干什么的**：直接打开 `guide.html` —— 它是本 skill 的自解释文档
 > （工作流 / 设计准则 / PRD 内容结构 / 产物功能说明），单文件、零依赖、可导出 PDF。

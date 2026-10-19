@@ -278,7 +278,7 @@ td code{white-space:normal;overflow-wrap:anywhere}
       <h2><span class="num">1</span>工作流</h2>
       <p class="lead">
         从「用户开口」到「可交付 PRD」，走八个阶段。<b>两个关键位置设了人工确认卡点</b> —— 卡点未确认不往下走，
-        这是本 skill 与「一口气生成一份文档」最大的区别：需求与板块是产研对齐的锚，锚歪了后面全是返工。
+        这是本 skill 与「一口气生成一份文档」最大的区别：需求与切片是产研对齐的锚，锚歪了后面全是返工。
         在需求与画页面之间，多插了一道<b>行为建模</b>：先把「谁在什么状态下能做什么」定下来，再决定按钮长什么样、页面怎么切。
       </p>
 
@@ -306,18 +306,18 @@ td code{white-space:normal;overflow-wrap:anywhere}
         </div>
         <div class="stage">
           <div class="sn">STAGE 04</div>
-          <div class="st">板块计划</div>
-          <div class="sd">按模块/页面拆板块，写 boardPlan</div>
+          <div class="st">切片计划</div>
+          <div class="sd">按用户故事最小闭环切片，写 slices.json 并过 plan 校验</div>
         </div>
         <div class="stage gate">
           <div class="sn">卡点 B</div>
-          <div class="st">确认板块</div>
-          <div class="sd">顺序 + 颗粒度</div>
+          <div class="st">确认切片清单</div>
+          <div class="sd">每片范围 + 顺序 + 体量 + 验收边界</div>
         </div>
         <div class="stage">
           <div class="sn">STAGE 05</div>
-          <div class="st">逐板块生成</div>
-          <div class="sd">原型 + PRD 同步产出，每批 1~2 个板块</div>
+          <div class="st">逐片生成</div>
+          <div class="sd">原型 + PRD 逐片产出：check → merge → validate → done</div>
         </div>
         <div class="stage">
           <div class="sn">STAGE 06</div>
@@ -339,8 +339,10 @@ td code{white-space:normal;overflow-wrap:anywhere}
       <div class="tip info">
         <span class="ic">i</span>
         <p>卡点是<b>停下来等用户确认</b>，不是「自动跳过」。卡点 A 确认需求语义与<b>命令策略</b>（这个状态下这个按钮该不该可点），
-          卡点 B 确认工作颗粒度 —— 两次确认把返工挡在生成之前。原型定稿不再单设卡点，改为阶段⑦里的<b>状态走查</b>：
+          卡点 B 确认<b>切片清单</b> —— 两次确认把返工挡在生成之前。原型定稿不再单设卡点，改为阶段⑦里的<b>状态走查</b>：
           把单据状态挨个切一遍，看按钮该亮的亮、该灰的灰、该消失的消失。</p>
+        <p>两个卡点都有<b>脚本兜底</b>：<code>prd_flow.py guard build / export</code> 在未批准时返回非 0，
+          所以「跳卡点直接生成」这条路是堵死的。</p>
       </div>
 
       <div class="tip warn">
@@ -385,22 +387,23 @@ td code{white-space:normal;overflow-wrap:anywhere}
                   逐条问「这个状态下这个按钮该不该可点」。</td>
             </tr>
             <tr>
-              <td class="nowrap"><b>④ 板块计划</b></td>
-              <td>按模块/页面拆成 PRD 板块，排 <code>order</code> 与 <code>status</code></td>
-              <td><code>03-prd-structure.md</code> §2</td>
-              <td><code>boardPlan[]</code></td>
+              <td class="nowrap"><b>④ 切片计划</b></td>
+              <td>拆成<b>用户故事最小闭环</b>：一个角色 / 一个目标 / 一条闭合主路径 / 能独立验收。<br>
+                  单片上限 4 页面 · 6 命令 · 12 需求 · 80 节点，超了继续拆。</td>
+              <td><code>11-slice-delivery.md</code></td>
+              <td><code>shaping/slices.json</code>（过 <code>prd_slice.py plan</code>）；<code>boardPlan[]</code> 由切片推导</td>
             </tr>
             <tr style="background:var(--ant-warning-bg)">
               <td class="nowrap"><b>卡点 B</b></td>
-              <td colspan="3">用户确认板块顺序与颗粒度。</td>
+              <td colspan="3">用户确认<b>切片清单与顺序</b>：每片的范围、体量、验收边界都要看得明白。</td>
             </tr>
             <tr>
-              <td class="nowrap"><b>⑤ 逐板块生成</b></td>
-              <td>每页产出组件树 + ≥4 态 + 交互 + PRD 小节；同步维护组件定义与数据模型。<br>
-                  <b>数据层级多 → 主子表</b>；<b>表单/详情 → 先选对容器</b>；
-                  <b>业务按钮引用 <code>capability</code>，不写死 disabled</b>。</td>
-              <td><code>04-container-schema.md</code><br><code>05-component-states.md</code><br><code>08-container-choice.md</code></td>
-              <td><code>pages[].componentTree / states / interactions / prd.sections</code>；<code>components[]</code>；<code>dataModel</code></td>
+              <td class="nowrap"><b>⑤ 逐片生成</b></td>
+              <td>一轮只做一片，六步走：写片段 → <code>check</code> → <code>merge</code> → <code>validate</code> → <code>done</code> → 下一片。<br>
+                  每页产出组件树 + ≥4 态 + 交互 + PRD 小节；<b>数据层级多 → 主子表</b>；
+                  <b>表单/详情 → 先选对容器</b>；<b>业务按钮引用 <code>capability</code>，不写死 disabled</b>。</td>
+              <td><code>04-container-schema.md</code><br><code>05-component-states.md</code><br><code>08-container-choice.md</code><br><code>11-slice-delivery.md</code></td>
+              <td><code>slices/s-0N.json</code>（片段）→ 合并为 <code>XX-PRD.data.json</code>；<code>components[]</code>；<code>dataModel</code></td>
             </tr>
             <tr>
               <td class="nowrap"><b>⑥ 标注评审</b></td>

@@ -2,6 +2,10 @@
 
 > 这是整套 Skill 的**唯一数据契约**。容器渲染引擎、EARS 条目、标注系统、导出逻辑全部依赖它。
 > 生成任何产物前，先读本文件；产出的所有 JSON 必须能被 `scripts/validate_prd_json.py` 校验通过，并能被 `assets/container/index.html` 渲染。
+>
+> **分片交付时**：每个切片写的是本文件的**子集**（多一个 `sliceId`），由
+> `scripts/prd_slice.py merge` 合并成完整的 `XX-PRD.data.json`。片段格式、合并规则与单片上限
+> 见 `references/11-slice-delivery.md`。
 
 ---
 
@@ -911,7 +915,9 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
 
 ## 10. `boardPlan` — PRD 板块计划
 
-用户确认板块计划后才逐板块写 PRD 和原型。**这是关键的人工确认卡点。**
+**卡点 B 的确认对象已从「板块」改为「切片清单」**（`shaping/slices.json`，见 `11-slice-delivery.md`）。
+`boardPlan` 现在是切片清单在数据契约里的投影：每片对应一个或多个条目，用来驱动容器左栏的板块导航与 PRD 组装顺序，
+**不再单独作为人工确认的颗粒度单位**。
 
 ```jsonc
 "boardPlan": [

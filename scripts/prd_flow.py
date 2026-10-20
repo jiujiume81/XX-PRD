@@ -50,7 +50,25 @@ STAGES = [
     {"id": "export", "name": "⑧ 生成最终 PRD + 导出", "need": []},
 ]
 STAGE_ID = [s["id"] for s in STAGES]
-PLACEHOLDER = ("TODO", "待补充", "待定", "TBD", "…")
+VOCAB_FILE = os.path.join(HERE, "placeholder-vocab.json")
+
+
+def load_vocab(scope):
+    """占位词唯一数据源（XX-016④）：scripts/placeholder-vocab.json，按作用域取词。
+
+    scope="artifact" 是本脚本的 shaping 产物闸门；"doc" 归 tests/check_placeholders.py。
+    读不到或该作用域为空必须炸——静默退回空词表等于闸门恒开。
+    """
+    with open(VOCAB_FILE, encoding="utf-8") as f:
+        words = json.load(f)["words"]
+    picked = tuple(item["w"] for item in words if scope in item.get("scopes", ()))
+    if not picked:
+        # 此处不能用 die()：它定义在本函数之后，模块级调用时还不存在
+        raise SystemExit(f"✗ 词表 {VOCAB_FILE} 里没有 scope={scope!r} 的词")
+    return picked
+
+
+PLACEHOLDER = load_vocab("artifact")
 
 
 def now():
@@ -121,9 +139,11 @@ def check_artifact(d, rel, min_bytes):
         with open(p, encoding="utf-8", errors="ignore") as f:
             lines = [l for l in f.read().splitlines() if l.strip()]
         if lines:
+            hit_words = [k for k in PLACEHOLDER if any(k in l for l in lines)]
             junk = sum(1 for l in lines if any(k in l for k in PLACEHOLDER))
             if junk / len(lines) > 0.5:
-                return [f"{rel} 过半内容是占位符（TODO/待补充），不能算完成"]
+                # 文案按词表动态生成：硬编码两个词会在扩表后只报两个、漏报其余（XX-016④）
+                return [f"{rel} 过半内容是占位符（{'/'.join(hit_words)}），不能算完成"]
     return []
 
 

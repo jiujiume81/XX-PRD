@@ -1,0 +1,12 @@
+{
+  "schema": "xx-prd-placeholder-vocab/1",
+  "note": "占位词唯一数据源（XX-016④）。scopes: doc = tests/check_placeholders.py 全库文档扫描；artifact = scripts/prd_flow.py 的 shaping 产物闸门。… 只对 artifact 生效——它在中文正文里是正常标点，放进全库扫描会产生 46 处误报（references/ 24 处、SKILL/guide 各 4 处），见 iterations/I-02/preflight.md §1 证据 D。",
+  "words": [
+    {"w": "TODO", "scopes": ["doc", "artifact"]},
+    {"w": "TBD", "scopes": ["doc", "artifact"]},
+    {"w": "待补充", "scopes": ["doc", "artifact"]},
+    {"w": "待填", "scopes": ["doc", "artifact"]},
+    {"w": "待定", "scopes": ["doc", "artifact"]},
+    {"w": "…", "scopes": ["artifact"]}
+  ]
+}

@@ -6,7 +6,7 @@
 2. README 引用可达：markdown 链接 + 行内代码文件名 + img src，输出 refs=N whitelist=M dead=0
 3. references/*.md 的文件数与 README 里的"NN 份参考文档"一致
 4. 版本一致：SKILL.md frontmatter = CHANGELOG.md 最新条目（本地若存在
-   ../iterations/I-01/release.md 也一并比对）
+   ../iterations/I-NN/release.md 也一并比对；取**编号最大**的那一轮，见 _latest_release）
 5. EXTERNAL：容器零外部依赖（D9 换判据）—— 判 src/href 外链、@import url(http、
    CSS url(http、fetch(http、XHR.open(..., http、importScripts(http；
    SVG 命名空间 http://www.w3.org/2000/svg 不算违规（不联网）
@@ -24,7 +24,25 @@ ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 SKILL = ROOT / "SKILL.md"
 CHANGELOG = ROOT / "CHANGELOG.md"
-RELEASE = ROOT.parent / "iterations" / "I-01" / "release.md"
+
+
+def _latest_release():
+    """取 ../iterations 下**编号最大**的 I-*/release.md，而不是写死某一轮。
+
+    写死 I-01 的后果（I-02 实测）：轮次一换，本轮自己的 release.md 永远读不到，
+    却读到了上一轮的值——DoD 6 于是"三处都比了"，但第三处比错了文件。
+    ADR：iterations/ 属治理 §12 工作区维护区，不入仓库，CI 上不存在 → 返回 None。
+    排序用目录名字典序，对 I-01…I-99 成立；**I-100 会排到 I-10 前面**，
+    到那时须改成按数字排序（此处不提前上复杂度，但把限制写明）。
+    """
+    base = ROOT.parent / "iterations"
+    if not base.is_dir():
+        return None
+    cands = sorted(base.glob("I-*/release.md"), key=lambda p: p.parent.name)
+    return cands[-1] if cands else None
+
+
+RELEASE = _latest_release()
 
 # 产物名 / 占位符 / 安装副本路径 —— 不是仓库内文件，检查时必须显式列出
 WHITELIST = {
@@ -128,14 +146,29 @@ def read_changelog_version():
 
 
 def read_release_version():
-    if not RELEASE.exists():
+    """只认**显式版本字段**，拿不到就返回 None。
+
+    删掉了原来那句兜底 `re.search(r"v?(\\d+\\.\\d+\\.\\d+)", text)`：它抓的是全文第一个
+    x.y.z，在 I-01/release.md 里下一步就会撞上 Chrome 版本号（`155.0.8059.39`）。
+    兜底正则的坏处不是"偶尔抓错"，而是**它永远能返回一个值、永远不报错**，
+    于是判据看起来在跑、实际判的不是它宣称的东西（与 E-01/E-02 同型）。
+    """
+    if RELEASE is None or not RELEASE.exists():
         return None
     text = RELEASE.read_text(encoding="utf-8")
-    m = re.search(r"版本\s*[:：]\s*v?(\d+\.\d+\.\d+)", text)
-    if m:
-        return m.group(1)
-    m = re.search(r"v?(\d+\.\d+\.\d+)", text)
+    # 表格行：| 版本号 | `0.5.0`（暂定…） |
+    m = re.search(r"(?m)^\|\s*版本号\s*\|\s*`?v?(\d+\.\d+\.\d+)`?", text)
+    if not m:
+        # 冒号行：版本：0.5.0 / 版本: v0.5.0
+        m = re.search(r"版本\s*[:：]\s*v?(\d+\.\d+\.\d+)", text)
     return m.group(1) if m else None
+
+
+def release_source():
+    """release.md 的来源（相对工作区根），便于在输出里自证"读的是哪份"。"""
+    if RELEASE is None or not RELEASE.exists():
+        return "none"
+    return os.path.relpath(str(RELEASE), str(ROOT.parent))
 
 
 def check_versions():
@@ -145,8 +178,9 @@ def check_versions():
 
     print(
         "versions: skill=%s changelog=%s release=%s"
-        % (skill or "MISSING", changelog or "MISSING", release or "未生成(S6 前可缺省)")
+        % (skill or "MISSING", changelog or "MISSING", release or "none")
     )
+    print("release-source: %s" % release_source())
 
     if not skill or not changelog:
         print("FAIL versions: SKILL.md 或 CHANGELOG.md 缺版本号")

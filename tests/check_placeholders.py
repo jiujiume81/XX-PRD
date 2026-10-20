@@ -10,15 +10,40 @@
 输出遵循 tests/README.md 的断言约定：`PLACEHOLDER=<n> allowed=<m> unallowed=<k>`
 后面必须跟着 n 行明细，一条命中一行。
 """
+import json
 import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VOCAB_FILE = os.path.join("scripts", "placeholder-vocab.json")
 
-PATTERNS = ("TODO", "TBD", "待补充", "待填")
+
+def load_patterns(scope):
+    """词表唯一数据源是 scripts/placeholder-vocab.json（XX-016④），本文件不再硬编码词条。
+
+    scope: "doc" = 本脚本的全库文档扫描；"artifact" = scripts/prd_flow.py 的 shaping 产物闸门。
+    读失败或该作用域为空必须炸——静默退回空词表等于恒 PASS。
+    """
+    with open(os.path.join(ROOT, VOCAB_FILE), encoding="utf-8") as f:
+        words = json.load(f)["words"]
+    picked = tuple(item["w"] for item in words if scope in item.get("scopes", ()))
+    if not picked:
+        raise SystemExit("FAIL placeholders: %s 里没有 scope=%r 的词" % (VOCAB_FILE, scope))
+    return picked
+
+
+# `…` 只有 artifact 作用域：它在中文正文里是正常标点，进全库扫描会误报 46 处
+# （references/ 24 处、SKILL/guide 各 4 处，见 iterations/I-02/preflight.md §1 证据 D）。
+PATTERNS = load_patterns("doc")
 EXTS = {".md", ".py", ".json", ".yml", ".yaml", ".sh", ".html", ".js", ".txt"}
 SKIP_DIRS = {".git", "dist", "__pycache__", "node_modules", ".venv", ".build"}
-SELF = os.path.join("tests", "check_placeholders.py")  # 本文件含模式字面量，跳过自身
+# 扫描豁免：本文件与词表数据文件自身都含模式字面量。
+# 判定粒度仍是"命中"（不做整行放行）；新增豁免必须写在这里并说明原因，
+# 不允许把带占位词的产物塞进来——产物类命中走 ALLOW 三元组。
+SELF = {
+    "tests/check_placeholders.py",
+    VOCAB_FILE,
+}
 
 # 显式允许清单：(相对路径, 该行必须包含的片段, 理由)
 # 用"片段"而不是行号：文件行号会漂移，片段漂移了就该重新审一遍。
@@ -30,10 +55,9 @@ ALLOW = [
      "断言模式本身：校验产物是否要求对未确认项打 TODO(confirm) 标注"),
     ("references/05-component-states.md", "阻塞、待补充",
      "组件状态枚举里的状态名，属设计术语不是未完成占位"),
-    ("scripts/prd_flow.py", 'PLACEHOLDER = ("TODO", "待补充", "待定", "TBD"',
-     "占位符检测器的常量定义（这一行同时含三个模式，一条覆盖）"),
-    ("scripts/prd_flow.py", "（TODO/待补充）",
-     "校验器报错文案（同时含两个模式）"),
+    # 2026-10-20（XX-016④）删掉两条：prd_flow.py 的 PLACEHOLDER 常量与报错文案已改为
+    # "读词表 + 按命中动态生成"，字面量消失，原 ALLOW（'PLACEHOLDER = ("TODO"...' 与
+    # "（TODO/待补充）"）成了不再对得上的死条目。留着它们等于让白名单看起来还在管、其实不管（E-02 同理）。
     ("assets/container/index.html", "'待补充':'warning'",
      "状态中文名 → 徽标色的映射表"),
     ("assets/container/index.html", "// TODO(confirm)",
@@ -48,6 +72,15 @@ ALLOW = [
      "README 在声明占位符规则本身"),
     ("tests/README.md", "追加一个 `TODO`",
      "README 在复述历史漏洞（按行判定会把同一行新增的占位词一起放行）"),
+    # 「待定」2026-10-20 并入词表（XX-016④）后新增的三条：都是"在讲这个词本身的正当用法"，
+    # 不是留了未填内容。按 E-02 纪律入 ALLOW 写理由，不改文案——
+    # 尤其容器那处：改它就是改 assets/container/，会让 I-02 非目标 1 与 R3 的前提同时失效。
+    ("references/01-clarification.md", '答不上来的写"待定"',
+     "澄清引导语在教用户「拿不准就写这个词」，删掉等于删方法论"),
+    ("references/05-component-states.md", '用于"此处待定"',
+     "Placeholder 组件的用途说明，描述的是该组件的语义"),
+    ("assets/container/index.html", "'待定区域'",
+     "Placeholder 渲染器的默认占位文案（运行时 UI 文案，不是未填内容）"),
 ]
 
 
@@ -59,7 +92,7 @@ def iter_files(root):
                 continue
             full = os.path.join(dirpath, name)
             rel = os.path.relpath(full, root).replace(os.sep, "/")
-            if rel == SELF.replace(os.sep, "/"):
+            if rel in SELF:
                 continue
             yield rel, full
 

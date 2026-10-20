@@ -3,15 +3,25 @@
 # 用法:
 #   bash tests/run.sh
 #   CHROME=/path/to/chrome bash tests/run.sh
+#   RETRIES_MAX=1 bash tests/run.sh      # 允许的重试上限（默认 0；勘误 E-03）
 # 退出码:
-#   0 = 6 用例全绿且断言数与基线一致（retries>0 时仍为 0，但输出可见）
-#   1 = 有失败（fails>0 或条数不等于基线，或生成器漂移）
+#   0 = 6 用例全绿且断言数与基线一致，且 retries <= RETRIES_MAX（默认 0）
+#   1 = 有失败（fails>0 或条数不等于基线，或生成器漂移，或 retries > RETRIES_MAX）
 #   2 = 环境不可用（找不到 Chrome）
 #   3 = 另一个 run.sh 正在同一工作区跑（单实例锁，避免并发互相覆盖 .build/）
 #
 # 稳定性判据（XX-001）：连续 3 次全 PASS 且 retries=0 才算通过；
 # retries>0 不是通过证据，只是"重试后通过"，必须记录在案。
+# 勘误 E-03（XX-016⑤）：retries 从 I-01 起只打在日志里，导致 CI 绿不蕴含"一次就过"。
+# 现改为进退出码：默认 RETRIES_MAX=0（retries>0 即红），确需容忍抖动的场景显式抬高上限，
+# 且上限与实际重试数一律打进 `RETRIES=<n> (max=<m>) PASS|FAIL` 行，不接受只留日志。
 set -u
+
+# 勘误 E-03：retries 上限在开跑前就校验——写错时立刻退 2，不必等两分钟回归跑完才报错
+RETRIES_MAX="${RETRIES_MAX:-0}"
+case "$RETRIES_MAX" in
+  ''|*[!0-9]*) echo "ERROR: RETRIES_MAX 必须是非负整数，当前为 '$RETRIES_MAX'" >&2; exit 2 ;;
+esac
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
@@ -152,6 +162,13 @@ PY
 done
 
 echo "TOTAL ok=$total_ok fails=$total_fails retries=$total_retries (baseline=757)"
+# 勘误 E-03：retries 必须进退出码，且上限与实际值都要出现在输出里（CI 匿名日志读不到明细）
+if [ "$total_retries" -gt "$RETRIES_MAX" ]; then
+  echo "RETRIES=$total_retries (max=$RETRIES_MAX) FAIL"
+  bad=1
+else
+  echo "RETRIES=$total_retries (max=$RETRIES_MAX) PASS"
+fi
 if [ "$bad" -ne 0 ] || [ "$total_ok" -ne 757 ] || [ "$total_fails" -ne 0 ]; then
   echo "RESULT FAIL"
   exit 1

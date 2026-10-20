@@ -4,14 +4,18 @@
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 **每个条目必须含 `breaking` 字段**（是 / 否 + 一句说明），用于判断能否安全升级。
 
-> **状态：`0.5.0` 尚未发布。** 标「待核」的条目是本期计划内容，**不是已发生的事实**；
-> G4 发布前必须用命令核验通过才可保留原有措辞，未通过则改写为"未完成，见 I-01 偏差"。
-> 核验命令：`bash tests/run.sh`（回归）、`python3 tests/check_generators.py`（生成器一致性）。
+> **状态：`0.5.1` 为本版（未发布）；`0.5.0` 已于 2026-10-20 发布（`5409cbf`）。**
+> `[0.5.0]` 段里仍标「待核」的条目是**发布当时的核验目标**，其结论以 `iterations/I-01/release.md`
+> 与 `iterations/I-02/build.md` 记录的实测为准——本文件不重复断言，也不因发布而在事后补写"已验证"。
+> `[0.5.1]` 段对应的核验命令：`bash tests/run.sh`（回归）、`python3 tests/check_generators.py`（生成器一致性）。
 
-## [Unreleased]
+## [0.5.1] - 2026-10-20
 
-**breaking: 否** —— 本批全部为增量与判据收紧，无 `schemaVersion` 变更、无命令与目录结构的破坏性调整。
-（本节标题不含 `x.y.z`，`check_docs.py` 的 `^##\s*\[?v?(\d+\.\d+\.\d+)\]?` 不会把它当成最新版本。）
+**breaking: 是** —— **"绿"的含义变严**：`RETRIES_MAX` 默认 0，以前"重试后成功"算通过，现在判 `exit 1`。
+依赖既有绿灯的流水线需显式设 `RETRIES_MAX`，且上限会打进输出（`RETRIES=<n> (max=<m>)`）。
+数据契约（`schemaVersion`）与命令、目录结构均无破坏性变更。
+（本节标题现含 `x.y.z`，`check_docs.py` 的 `^##\s*\[?v?(\d+\.\d+\.\d+)\]?` 会把它读作最新版本——
+这正是需要的：`CHANGELOG` 最新 = `SKILL.md` 的 `version` = 当轮 `release.md`。）
 
 ### 新增
 
@@ -28,8 +32,9 @@
 
 - **`retries` 进退出码**（勘误 E-03）：`tests/run.sh` 新增 `RETRIES_MAX`（默认 0）与
   `RETRIES=<n> (max=<m>) PASS|FAIL` 行；`retries > RETRIES_MAX` 判 `exit 1`，非法值前置 `exit 2`。
-  **breaking: 否** —— 757 条断言与逐用例 `94/137/123/136/150/117` 未变；但"绿"的含义变严了：
-  曾依赖"重试后成功也算过"的场景需显式设 `RETRIES_MAX`，且上限会打进输出。
+  **breaking: 是** —— **"绿"的含义变严**：`RETRIES_MAX` 默认 0，以前"重试后成功"算过，现在判 `exit 1`；
+  依赖既有绿灯的流水线需显式设 `RETRIES_MAX`（上限会打进输出）。757 条断言与逐用例
+  `94/137/123/136/150/117` 未变——**变的是判定口径，不是用例数量**。
 - **占位符检查改用词表**：`tests/check_placeholders.py` 的模式不再硬编码；`SELF` 豁免从单文件扩为
   路径集合（含数据文件本身）；ALLOW 由 13 条收敛到 11 条（删 2 条指向已消失源码的死条目，加 3 条）。
   **breaking: 否** —— 判定粒度仍是"（文件, 行, 模式）"，`unallowed=0` 仍是通过判据。

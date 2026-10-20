@@ -60,13 +60,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # 缺 CJK 字体时中文渲染成 tofu，字宽趋近 0，凡依赖文案宽度的断言都会假红
-      # ——不是容器坏了，是环境没字。fc-list 那行是取证：日志里能看到实际装上的字体名，
-      # 以后若再出现宽度漂移，可直接对照字体版本排查。
+      # ——不是容器坏了，是环境没字。fc-list 只证明"字体装上了"，fc-match 才证明
+      # "中文文案实际会解析到哪个字体文件"——后者才是量宽判据真正依赖的东西，
+      # 以后若再出现宽度漂移，日志能直接答"当时用的是哪个字体文件"，不用回头猜。
       - name: Install CJK fonts
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji
           fc-list :lang=zh | head -3
+          fc-match "Noto Sans CJK SC"
+          fc-match sans-serif:lang=zh
       # 单点路径一旦 runner 镜像换代就假红，而假红会被误读成"代码坏了"（同 E-01/E-02 的失效模式：
       # 检查本身没被验证过，却拿它的绿灯当证据）。改成候选探测，命中即写 GITHUB_ENV 供下一步复用。
       - name: Check Chrome availability

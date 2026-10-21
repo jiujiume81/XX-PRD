@@ -30,6 +30,13 @@
   `…` 仅 `artifact`，因中文文档里它是正常标点，进文档扫描会误报）。`tests/check_placeholders.py`
   与 `scripts/prd_flow.py` 共用这一份，不再各自硬编码。
   **breaking: 否** —— 词表内容与两处原有关键字集合等价（本轮新增的那一个词原先只在 `prd_flow` 侧生效）。
+- **TREE 自证**：`scripts/check_release.py` 首行先声明"本轮判的是哪棵树"——
+  `TREE <sha> clean` / `TREE <sha> DIRTY(<N>)` / `TREE unversioned`；`DoD 7` 的 PASS detail
+  追加 `（HEAD=<sha>）`，脏树时 `RESULT` 行尾追加 `｜TREE DIRTY(<N>)`。
+  起因是 0.5.1 收口时的一次真实误判：源仓库与安装副本**同时是脏的**，`DoD 7` 比出"两边一样脏"
+  而判 PASS，`9/9` 看着全绿；事后只能靠人工回忆 `git status` 才发觉。**脏树不改退出码**，
+  它不是失败，只是让"绿"带上"绿在哪棵树上"的证据。
+  **breaking: 否** —— 输出多一行；退出码语义（0/1/2/3）与九项判据均未变。
 
 ### 变更
 
@@ -41,6 +48,16 @@
 - **占位符检查改用词表**：`tests/check_placeholders.py` 的模式不再硬编码；`SELF` 豁免从单文件扩为
   路径集合（含数据文件本身）；ALLOW 由 13 条收敛到 11 条（删 2 条指向已消失源码的死条目，加 3 条）。
   **breaking: 否** —— 判定粒度仍是"（文件, 行, 模式）"，`unallowed=0` 仍是通过判据。
+- **`README.md` 与 `guide.html` 文案重写**：只改散文，不动结构。`guide.html` 的 `<b>` 由 242 降至 51、
+  `——` 由 36 降至 0、`「」` 由 93 降至 48；标签计数（`section/h2/h3/h4/div/p/table/tr/td/th/code`）
+  与改前**逐一相等**，HTML 解析零错配。术语统一为「本技能」，并把"容器"的两个含义拆开——
+  指交付容器 `index.html` 时仍称"容器"，指对话框/抽屉/新页面的选择时改称"承载容器"。
+  **breaking: 否** —— 纯文案，无锚点、无 `id`、无字段名变更。
+- **两处文档事实修正**：`README.md` 结尾的当前版本由 `0.5.0` 改为 `0.5.1`（原先滞后一版，
+  且没有任何校验器覆盖它）；`guide.html` 首屏统计的参考文档数由 `10` 改为 `11`
+  （`references/*.md` 实测 11 份，`README.md` 早已写的 11）。`68 组件白名单` 经核验正确
+  （`05-component-states.md` §2 共 71 行表项、去重 68 个组件名），未改。
+  **breaking: 否**。
 
 ### 修复
 

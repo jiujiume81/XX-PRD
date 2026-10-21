@@ -18,6 +18,11 @@
     只要 skipped>0，RESULT 之后再打一行 `NOT-VERIFIED: <项名, …>`，点名"哪几项没被验证过"。
     当前两个 SKIP 源都写实到具体文件：DoD 6（`release.md` 是占位、无版本行，
     或 CI 上根本没有 `iterations/`）与 DoD 7（本机无安装副本）。
+  - **TREE 自证**：首行先声明"本轮判的是哪棵树"——`TREE <sha> clean` /
+    `TREE <sha> DIRTY(<N>)` / `TREE unversioned`。源仓库与安装副本同时是脏的时，
+    DoD 7 会比出"两边一样脏"而 PASS（0.5.1 收口时确实发生过），全绿但判的是脏树。
+    脏树不是失败，退出码不变，只是把事实印在脸上：RESULT 行尾带 `｜TREE DIRTY(<N>)`，
+    DoD 7 的 PASS detail 带 `（HEAD=<sha>）`。
 
 用法:
     python3 scripts/check_release.py
@@ -38,8 +43,12 @@ import shutil
 import subprocess
 import sys
 from contextlib import redirect_stdout
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 同一棵树的另一种写法：git 命令一律 `-C REPO_ROOT`，不依赖进程 cwd——
+# 本脚本会被从任意目录调用（例如 `python3 ~/.workbuddy/skills/XX-PRD/scripts/...`）。
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TESTS = os.path.join(ROOT, "tests")
 SCRIPTS = os.path.join(ROOT, "scripts")
 INSTALL_COPY = os.path.expanduser("~/.workbuddy/skills/XX-PRD")
@@ -73,6 +82,41 @@ def silence(fn, *a, **kw):
 def first_lines(text, n=6):
     rows = [r.rstrip() for r in text.splitlines() if r.strip()]
     return rows[:n]
+
+
+# ---------------------------------------------------------------- TREE 自证
+
+_TREE = {}
+
+
+def tree_state():
+    """本轮判的是哪棵树：`(行, sha, 脏文件数)`，结果缓存在 `_TREE` 里只算一次。
+
+    三种取值，穷尽所有情况，不允许抛异常：
+      - `TREE <sha> clean`    —— 有 .git 且 `git status --porcelain` 为空
+      - `TREE <sha> DIRTY(N)` —— 有 .git 且 N 行改动（源 ↔ 副本同时脏时 DoD 7 会假绿）
+      - `TREE unversioned`    —— 没有 .git（安装副本就是这种）或 git 不可用
+
+    `git` 一律显式 `-C`，不靠 cwd；不传 `check=True`，rc≠0 一律降级成 unversioned。
+    """
+    if _TREE:
+        return _TREE
+    _TREE.update(line="TREE unversioned", sha=None, dirty=0)
+    try:
+        head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"],
+                              capture_output=True, text=True)
+        status = subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
+                                capture_output=True, text=True)
+    except (OSError, ValueError):        # git 不存在 / 不是可执行文件
+        return _TREE
+    sha = head.stdout.strip()
+    if head.returncode != 0 or status.returncode != 0 or not sha:
+        return _TREE
+    dirty = len([l for l in status.stdout.splitlines() if l.strip()])
+    _TREE["sha"] = sha
+    _TREE["dirty"] = dirty
+    _TREE["line"] = ("TREE %s DIRTY(%d)" % (sha, dirty)) if dirty else ("TREE %s clean" % sha)
+    return _TREE
 
 
 # ---------------------------------------------------------------- 各项检查
@@ -257,7 +301,9 @@ def check_install_copy(_docs, _ph, _gen):
         # 前缀区分三类：- 只在源码 / + 只在副本 / ~ 两边都有但字节不同。
         lines = (["-" + x for x in only_a] + ["+" + x for x in only_b] + ["~" + x for x in differ])
         return STATUS_FAIL, detail, lines
-    return STATUS_PASS, "%d 个文件逐字节一致" % len(a), []
+    # PASS detail 必须带 HEAD：不然"一致"只说清了两边相等，说不清相等的是哪棵树——
+    # 两边同时脏时这条照样 PASS，只有印上 sha 才留得下证据。
+    return STATUS_PASS, "%d 个文件逐字节一致（HEAD=%s）" % (len(a), tree_state()["sha"] or "unversioned"), []
 
 
 def check_placeholders(_docs, ph, _gen):
@@ -303,6 +349,10 @@ def main(argv):
         print("未知参数：%s（本脚本只有 --help）" % " ".join(argv))
         return 3
 
+    # 首行：先声明判的是哪棵树，再谈九项结论。脏不脏与判据无关，只影响"这次绿算不算数"。
+    tree = tree_state()
+    print(tree["line"])
+
     docs, ph, gen = _import_check_modules()
     rows, fails, skipped = [], 0, 0
     for i, (name, fn) in enumerate(ITEMS, 1):
@@ -328,16 +378,18 @@ def main(argv):
     skipped_items = [r[1] for r in rows if r[2] == STATUS_SKIP]
     tail = "skipped=%d" % skipped if skipped else "skipped=0"
     bad = ("，未通过：" + "、".join(r[1] for r in rows if r[2] == STATUS_FAIL)) if fails else ""
+    # 脏树不改变退出码，但必须在结论行留痕：否则"全绿"会被当成"干净树上的全绿"。
+    dirty_note = ("｜TREE DIRTY(%d)" % tree["dirty"]) if tree["dirty"] else ""
     if envs:
         # 环境不可用时退出码仍是 2，但**必须把已 FAIL 的项一并列出**：
         # 否则「某项真红 + 某项环境不可用」会被读成"只是环境问题"。
-        print("RESULT ENV  %d/%d（%s，环境不可用：%s%s）"
-              % (passed, len(rows), tail, "、".join(r[1] for r in envs), bad))
+        print("RESULT ENV  %d/%d（%s，环境不可用：%s%s）%s"
+              % (passed, len(rows), tail, "、".join(r[1] for r in envs), bad, dirty_note))
         if skipped_items:
             print("NOT-VERIFIED: " + ", ".join(skipped_items))
         return 2
     verdict = "PASS" if not fails else "FAIL"
-    print("RESULT %s  %d/%d（%s%s）" % (verdict, passed, len(rows), tail, bad))
+    print("RESULT %s  %d/%d（%s%s）%s" % (verdict, passed, len(rows), tail, bad, dirty_note))
     if skipped_items:
         # SKIP 不阻断退出码，于是 CI 上"双 SKIP + rc=0"看起来是全绿。
         # 单独一行点名"哪几项没被验证过"：人扫一眼能看见，CI 也能 grep 断言。

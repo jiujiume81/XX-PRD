@@ -286,9 +286,18 @@ def _manifest(root):
 
 
 def check_install_copy(_docs, _ph, _gen):
-    """DoD 7：安装副本同步。本机无副本时 SKIP（CI 恒无），不当作 PASS。"""
+    """DoD 7：安装副本同步。本机无副本时 SKIP（CI 恒无），不当作 PASS。
+
+    **自己在副本里跑不算 PASS**：此时 ROOT 与 INSTALL_COPY 指向同一目录，
+    `_manifest` 比的是自己跟自己，恒等恒绿。0.5.1 收口时实测到过——
+    从 `~/.workbuddy/skills/XX-PRD/scripts/` 运行，打出
+    「PASS 43 个文件逐字节一致（HEAD=unversioned）」，看着像证据，
+    其实一个字都没比过。与 TREE 同一类病：判据在跑，判的不是它宣称的东西。
+    """
     if not os.path.isdir(INSTALL_COPY):
         return STATUS_SKIP, "无 %s（CI 上恒无）" % INSTALL_COPY, []
+    if os.path.realpath(ROOT) == os.path.realpath(INSTALL_COPY):
+        return STATUS_SKIP, "在安装副本内运行（ROOT 与 INSTALL_COPY 同一目录），无可比对象", []
     a, b = _manifest(ROOT), _manifest(INSTALL_COPY)
     only_a = sorted(set(a) - set(b))
     only_b = sorted(set(b) - set(a))

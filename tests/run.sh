@@ -57,7 +57,25 @@ if ! mkdir "$lock" 2>/dev/null; then
   fi
 fi
 echo $$ > "$lock/pid"
-trap 'clean_dir "$lock"' EXIT
+
+# per-attempt 的 Chrome profile 一律放在**工作树之外**的临时目录：
+#  1) 路径不在仓库内，删它不会被 safe-delete 当成"批量删除仓库文件"拦掉 ——
+#     实测旧路径 tests/.build/profiles 的 clean_dir 一次都没删成功（954 个文件
+#     / 13MB，跑完 6 个目录全在），而删除失败被 ignore_errors 吞掉；
+#     后果是"跑前必须是干净的"变成隐性前提，第 2 次连跑就掉到 754/4（Chrome
+#     复用带旧 localStorage 的 profile → hash 基线错误 / 状态覆写断言假红）。
+#  2) 每次 run 一个 mktemp 目录，两次连跑天然互不污染；退出时整体清掉。
+# **不要把这里改回 $OUT 下面的固定路径**：那等于把"上一轮残留"写进判据前提。
+TMP_BASE="${TMPDIR:-/tmp}"
+TMP_BASE="${TMP_BASE%/}"                   # macOS 的 TMPDIR 带尾斜杠，去掉免得路径出现 //
+PROF_ROOT="$(mktemp -d "$TMP_BASE/xx-prd-profiles.XXXXXX")"
+echo "PROFILES_DIR=$PROF_ROOT"
+
+cleanup() {
+  clean_dir "$lock"
+  clean_dir "$PROF_ROOT"
+}
+trap cleanup EXIT
 
 # 用例: 名称|示例文件|基线断言数
 CASES=(
@@ -97,7 +115,7 @@ for spec in "${CASES[@]}"; do
   runlog="$OUT/$name.chrome.log"
   : > "$runlog"
   # 每轮先清掉该用例的全部 profile，保证从零状态起跑
-  clean_dir "$OUT/profiles/$name"
+  clean_dir "$PROF_ROOT/$name"
 
   python3 "$HERE/build_cases.py" "$example" "$HERE/harness.js" "$html" >/dev/null || {
     echo "CASE $name fails=1 ok=0 retry=0 (baseline=$base) [FAIL 构建失败]"
@@ -114,7 +132,7 @@ for spec in "${CASES[@]}"; do
   for attempt in 1 2; do
     [ "$attempt" -eq 2 ] && case_retries=1
     # 每次尝试用一个全新 profile 目录（不同 attempt 不同路径），不删也不复用
-    prof="$OUT/profiles/$name/a$attempt"
+    prof="$PROF_ROOT/$name/a$attempt"
     "$CHROME" --headless=new --disable-gpu --no-sandbox --no-first-run --disable-extensions \
       --user-data-dir="$prof" --window-size=1680,1000 --virtual-time-budget=8000 \
       --dump-dom "file://$html" > "$dom" 2>"$errlog"
@@ -143,7 +161,7 @@ PY
     read -r fails oks <<< "$parsed"
     break
   done
-  clean_dir "$OUT/profiles/$name"
+  clean_dir "$PROF_ROOT/$name"
 
   total_ok=$((total_ok + oks))
   total_fails=$((total_fails + fails))

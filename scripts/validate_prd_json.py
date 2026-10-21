@@ -897,8 +897,12 @@ def validate(data, rep: Report, strict=False):
                 else:
                     avail = interaction_ids_of(pages_by_id.get(upid))
                     if uix not in avail:
-                        gate(f"[XX-019] {label} 指向的交互 `{uix}` 不在页面 `{upid}` 的 "
-                             f"interactions 中（该页现有：{sorted(avail)}）")
+                        # 悬空引用是「写错了」，不是「没写」——两档都 ERROR，
+                        # 与 XX-020 的 L2（:815）以及本块的 ui.pageId 不存在（:894）同一严重度。
+                        # L1 类（缺 pageId / 缺 interactionId / ui 不是对象）仍走 gate()，
+                        # 让未声明 ui 的存量产物在默认档活着。
+                        rep.error(f"[XX-019] {label} 指向的交互 `{uix}` 不在页面 `{upid}` 的 "
+                                  f"interactions 中（该页现有：{sorted(avail)}）")
             has_in.add(t.get("to"))
             has_out.add(t.get("from"))
         for st in sids:

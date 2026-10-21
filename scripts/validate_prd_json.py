@@ -801,6 +801,24 @@ def validate(data, rep: Report, strict=False):
             rep.error(f"[XX-020] 需求 {rid} 的 ui 应为对象，当前为 {type(rui).__name__}（L3）")
         else:
             rkind, rix = rui.get("kind"), rui.get("interactionId")
+            # 需求侧的页面归属只有一个真源：同级 `pageId`。`ui.pageId` 不会被任何
+            # 检查读取 —— 它是数据契约里的假字段：写了不报错、也永远不生效，
+            # 于是"ui 说 A 页、同级说 B 页"两档都会静默通过（实测：REQ-PO-001
+            # 同级 page-po-create + ui.pageId=page-po-approve → rc=0 errors=0）。
+            # 声明看起来完整、校验器却当它不存在，比漏检更坏，所以出现即 ERROR。
+            # 三态都要拦：kind=system / page-enter 时同样不许带 pageId。
+            if "pageId" in rui:
+                # 报错里直接给出"这一条应该长什么样"：三态各自只保留自己的那个键，
+                # 别让人读完报错还要回去翻文档。
+                if rkind in ("system", "page-enter"):
+                    hint = '{"kind": "%s"}' % rkind
+                elif rix:
+                    hint = '{"interactionId": "%s"}' % rix
+                else:
+                    hint = '{"interactionId": "ix-xxx"}'
+                rep.error(f"[XX-020] 需求 {rid} 的 ui 里不应出现 pageId（L3）："
+                          f"需求侧的页面归属取同级 pageId（当前 {rpage or '未声明'}），"
+                          f"ui 只写 {hint}")
             if rkind is not None and rkind not in ("system", "page-enter"):
                 rep.error(f"[XX-020] 需求 {rid} 的 ui.kind `{rkind}` 不合法："
                           f"只允许 `system` / `page-enter`（L3）")

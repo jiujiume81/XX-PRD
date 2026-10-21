@@ -831,17 +831,35 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
       { "id": "done",   "name": "已完成", "type": "success" }
     ],
     "transitions": [
-      { "id": "t-1", "from": "todo",    "to": "doing", "trigger": "负责人点击开始", "role": "u-owner", "guard": "有负责人", "action": "记录开始时间" },
-      { "id": "t-2", "from": "doing",   "to": "blocked","trigger": "标记阻塞",     "role": "u-owner", "guard": "", "action": "" },
-      { "id": "t-3", "from": "blocked", "to": "doing", "trigger": "解除阻塞",     "role": "u-owner", "guard": "", "action": "" },
-      { "id": "t-4", "from": "doing",   "to": "done",  "trigger": "标记完成",     "role": "u-owner", "guard": "所有子任务完成", "action": "通知关注者" }
+      { "id": "t-1", "from": "todo",    "to": "doing", "trigger": "负责人点击开始", "role": "u-owner", "guard": "有负责人", "action": "记录开始时间",
+        "ui": { "pageId": "page-task-list", "interactionId": "ix-task-start" } },
+      { "id": "t-2", "from": "doing",   "to": "blocked","trigger": "标记阻塞",     "role": "u-owner", "guard": "", "action": "",
+        "ui": { "pageId": "page-task-list", "interactionId": "ix-task-block" } },
+      { "id": "t-3", "from": "blocked", "to": "doing", "trigger": "解除阻塞",     "role": "u-owner", "guard": "", "action": "",
+        "ui": { "pageId": "page-task-list", "interactionId": "ix-task-unblock" } },
+      { "id": "t-4", "from": "doing",   "to": "done",  "trigger": "标记完成",     "role": "u-owner", "guard": "所有子任务完成", "action": "通知关注者",
+        "ui": { "pageId": "page-task-list", "interactionId": "ix-task-finish" } },
+      { "id": "t-5", "from": "todo",    "to": "blocked","trigger": "超过 3 天无人认领，自动标记阻塞", "guard": "无负责人", "action": "通知组长",
+        "ui": { "kind": "system" } }
     ]
   }
 ]
 ```
 
-`transitions[].system: true` 表示**系统自动流转**（定时任务 / 支付回调 / 超时关闭），
-校验器不会要求它有对应按钮。没有这个标记的人工转移，必须有一条 `capability` 覆盖，否则报 ERROR。
+`transitions[].ui` 是这条转移的**界面落点**：人工转移写
+`{ "pageId": "page-xxx", "interactionId": "ix-xxx" }`，
+系统自动流转写 `{ "kind": "system" }`（没有按钮可点，不需要 `pageId`）。三态写法、L1/L2/L3 分层、
+以及「`page-enter` 只能用在需求上」这条限制，见 `09-behavior-model.md` §2.4。
+
+> 上面 4 个 `interactionId`（`ix-task-start` / `ix-task-block` / `ix-task-unblock` / `ix-task-finish`）
+> 必须在 `pages[].interactions` 里真实存在，否则报 L2，**默认档与交付档都是 ERROR**。
+> **这四个 id 是示意，本文没有在别处定义它们** —— §6.3 的 `interactions` 示例只展开了 `ix-submit`。
+> 落地时按你页面的实际交互替换，不要把它们当真源照抄。写成指向不存在的 id，比不写更糟：
+> 不写是"还没补"，写错是"声称补了"。
+
+`transitions[].system: true`（或 `role: "system"`、或 `ui.kind: "system"`）表示**系统自动流转**
+（定时任务 / 支付回调 / 超时关闭），校验器不会要求它有对应按钮。没有这个标记的人工转移，
+必须有一条 `capability` 覆盖、且 `ui` 指得出页面里的按钮，否则报 ERROR。
 
 ---
 
@@ -892,11 +910,20 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
     "id": "REQ-TASK-001",
     "moduleId": "m-task",
     "pageId": "page-task-list",
+    "ui": { "interactionId": "ix-task-create" },  // 这条需求落在哪个按钮上：三态之二/之三见下
     "pattern": "event-driven",       // ubiquitous | event-driven | state-driven | option | unwanted
     "title": "创建任务",
     "role": "u-owner",               // 角色（引用 users.id）
     "trigger": "在任务列表页点击『新建任务』",   // 触发
     "rule": "任务标题必填且 ≤ 50 字；负责人可空", // 规则
+    "guards": [                      // 前置校验（页面上表现为阻断/提示）
+      { "text": "标题为空时提交按钮禁用", "kind": "block" },
+      { "text": "负责人为空时提示可稍后指派", "kind": "warn" }
+    ],
+    "effects": [                     // 成功后的副作用（写给研发看，不是渲染指令）
+      { "text": "列表新增该任务", "target": "page-task-list" },
+      { "text": "通知被指派人", "target": "REQ-NOTIFY-002" }
+    ],
     "stateMachine": "sm-task",       // 关联状态机（可空）
     "expected": "系统在列表中新增一条状态为『待办』的任务，并提示创建成功", // 预期
     "acceptance": [                  // 验收条件（可测）
@@ -910,6 +937,17 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
   }
 ]
 ```
+
+| 字段 | 必填 | 校验器 | 说明 |
+|---|---|---|---|
+| `ui` | 交付档必填 | **有**（XX-020） | 三选一：`{"interactionId":"ix-xxx"}` / `{"kind":"system"}` / `{"kind":"page-enter"}`。**不写 `pageId`**，用同级 `pageId` 定位；**写了是 L3 硬错（两档都 ERROR）**。分层 L1/L2/L3 见 §13.1 |
+| `guards[]` | — | **暂不校验** | `{ "text": "...", "kind": "block" \| "warn" }`。`block` = 拦住提交，`warn` = 提示但放行。**校验器尚未强制（XX-023）**，缺失或写错都不报错 —— 别把这段当已生效的门 |
+| `effects[]` | — | **暂不校验** | `{ "text": "...", "target": "页面 id \| 需求 id \| 实体字段" }`。同上，XX-023 未实施，缺失不报错 |
+
+> `guards[]` / `effects[]` 目前**只进契约、没有校验器**。写在文档里是为了让 AI 知道有这两个槽位，
+> 不是因为它已经被检查。**文档里有、脚本里没有的字段，正是"假的通过"最喜欢的藏身处** ——
+> 所以这两行必须显式写"暂不校验"，而不是让人自己发现。
+> `ui` 相反：它是真被检查的，把 `kind` 写成 `page_entered`、`system_auto` 这类近义词都会 L3 报错。
 
 ---
 
@@ -975,3 +1013,45 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
 3. 所有 ID 全局唯一；引用必须存在（校验脚本会检查悬空引用）。
 4. 时间戳统一 ISO 8601 带时区。
 5. 交付给 AI / 研发时，除了 `.html` 容器，还要给出 **`{产品}.devspec.json` + `AGENT.md`**（容器顶栏「⬇ 开发交接」一键导出）。
+
+### 13.1 校验档位：默认档 vs `--profile=delivery`
+
+```bash
+python3 scripts/validate_prd_json.py <file.json|file.html>                     # 默认档
+python3 scripts/validate_prd_json.py --profile=delivery <file.json|file.html>  # 交付档
+```
+
+两档跑的是**同一份检查代码**，只有一处开关不同（`validate(..., strict=)`）：新语义检查在默认档降为 WARN。
+下面这张表按"缺了会怎样"写，不按代码结构写：
+
+| 检查项 | 默认档 | `--profile=delivery` | 走哪个开关 |
+|---|---|---|---|
+| 顶层 `tasks` 缺失/为空 | **完全不检查**（连提示都没有） | ERROR | `strict` 分支（`validate` 开头） |
+| 顶层 `capabilities` 缺失/为空 | 字段本身不问，但**通常会间接红**：页面 `contract.owns` 引用它时按悬空引用报 ERROR —— 实测默认档 **9 条** | ERROR：同一批悬空引用 **9 条 + 1 条**「缺少顶层 capabilities」= **10 条** | `strict` 分支 + 悬空引用检查 |
+| `pages[].contract` **缺失** | 仅当该页 `entity` 有对应状态机时 WARN；否则**静默** | ERROR（不看 `entity`） | `strict` 分支（页面职责段） |
+| `pages[].contract` **字段不全**（`CONTRACT_REQUIRED`） | ERROR | ERROR | 无条件 |
+| `requirement.ui` 缺失（L1） | WARN | ERROR | `gate()` |
+| `transitions[].ui` 缺失 / 缺 `pageId` / 缺 `interactionId` / `ui` 不是对象（L1） | WARN | ERROR | `gate()` |
+| **L2 悬空引用**：`pageId` 不存在、`interactionId` 不在该页 `interactions` 中、需求有 `interactionId` 却无 `pageId` | **ERROR** | **ERROR** | 直接 `rep.error()` |
+| **L3 结构错**：需求的 `ui` 不是对象、`kind` 非法、既无 `interactionId` 也无合法 `kind`、需求的 `ui` 里出现 `pageId` | **ERROR** | **ERROR** | 直接 `rep.error()` |
+
+四处容易看错的地方：
+
+- **默认档"不检查"和"WARN"不是一回事。** `tasks` 在默认档连警告都没有，且**没有下游检查能兜住它**
+  （`tasks` 只参与 ID 唯一性）—— 跑通默认档，不能据此说"任务清单没问题"，只能说"没人问过它"。
+  `capabilities` 不同：字段本身默认档不问，但页面 `contract.owns` 一旦引用它，删掉就红。
+- **`contract` 默认档的静默依赖 `page.entity`。** 页面不写 `entity` 时，这条检查对它是隐形的；
+  交付档不看 `entity`，每个页面都必须有 `contract`。
+- **`capabilities` 那行是唯一"两档数字不同"的**：默认档 9 条、交付档 10 条（多出的 1 条是字段级的"缺少顶层
+  `capabilities`"，那 9 条是同一个事实在下游 `contract.owns` 上的回声）。别以为交付档"更严"，它只是多报了 1 条
+  本该自己报的。
+- **L2 / L3 没有过渡期。** 只有 L1（"还没写"）两档有别；"写错了"在任何档位都是 ERROR。
+  写一个指向不存在交互的 `interactionId`，比不写更糟：不写是漏，写错是**声称补过了**。
+
+**交付档的唯一调用者**是 `scripts/check_release.py` 的 DoD 1，对 `assets/examples/example-05-behavior-model.json`
+一个文件开 `--profile=delivery`（其余 4 个示例走默认档）。detail 行会带
+`profile=delivery:example-05-behavior-model.json`，用来断言"这一档真的被跑了"——
+**一个没有人调用的档位，等于第二扇不存在的门。**
+
+默认档存在的理由只有一个：**存量产物**。没有 `ui` 的老 PRD 不能升级当天全线判红，
+否则人的第一反应是关掉检查，而不是补齐链路。

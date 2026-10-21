@@ -140,6 +140,64 @@
   "trigger": "超过 7 天未放款", "system": true, "guard": "无人工操作", "action": "释放冻结金额" }
 ```
 
+### 2.4 `ui` 三态：行为必须落到界面
+
+状态机只证明「流程想清楚了」，证明不了「页面能点出来」。`ui` 是这条链上唯一机器可检的连线，
+`transitions[]` 与 `requirements[]` 两处都要写，**写法同构、含义同构**：
+
+| 写法 | 含义 | 用在哪 |
+|---|---|---|
+| `{"interactionId": "ix-xxx"}` | 由某个交互触发（按钮 / 行内动作 / 弹窗确认） | 两处都可用 |
+| `{"kind": "system"}` | 系统自动（定时任务 / 外部回调 / 自动建单） | 两处都可用 |
+| `{"kind": "page-enter"}` | 进页面即满足，不需要点击 | **仅 `requirement.ui`** |
+
+**两处唯一必须记住的差异：一条转移可能被多个页面触发，所以 `transitions[].ui` 自带 `pageId`；
+`requirement.ui` 不重复写 `pageId`，它用同级 `requirement.pageId` 定位。**
+
+**需求侧不许写 `pageId`，写了是 L3 硬错（两档都 ERROR）。** 页面归属只有一个真源，就是需求同级的
+`pageId`；`ui` 里再写一份，等于同一个事实有两个来源 —— 改了一处另一处不动，谁也说不清哪个算数。
+校验器对此直接报错（`scripts/validate_prd_json.py:819`），而不是"忽略多余字段"：
+**多余字段被静默忽略，比报错更危险** —— 写的人以为生效了，读的人以为那是真源。
+
+> `{"kind":"page-enter"}` 写到转移上是**错**，不是"暂未实现"：校验器只对 `kind == "system"` 放行，
+> 其余一律按人工转移处理，于是它会要求 `pageId` 并报「缺少 pageId」（默认档 WARN / 交付档 ERROR）。
+> 别指望它被识别成第三种态。
+
+**什么算系统行为：三个入口等价，只许一处实现。** 任一成立即算，不要求写 `ui`：
+
+- `"system": true`（老写法，`tests/check_generators.py` 的 `count_system()` 数的就是它）
+- `"role": "system"`
+- `"ui": {"kind": "system"}`（本节的新写法）
+
+判定只在 `scripts/validate_prd_json.py` 的两处实现：`ui_kind_is_system()` 与 `transition_is_system()`。
+不要在生成器、检查器里各写一遍 —— 一旦各长一套，「什么算系统行为」会在两个检查里给出不同答案，
+而且是"两边都 PASS、只是口径不同"的静默分叉，比报错难查得多。
+
+**分层与档位：什么 WARN、什么必须 ERROR。**
+
+| 层 | 情况 | 默认档 | `--profile=delivery` |
+|---|---|---|---|
+| **L1** | `ui` 缺失 / 转移缺 `pageId` / 转移缺 `interactionId` / 转移的 `ui` 不是对象 | WARN | **ERROR** |
+| **L2** | 悬空引用：`pageId` 不存在、`interactionId` 不在该页 `interactions` 中、需求有 `interactionId` 却没有 `pageId` | **ERROR** | **ERROR** |
+| **L3** | 结构错：需求的 `ui` 不是对象 / `kind` 不是 `system` 或 `page-enter` / 既无 `interactionId` 也无合法 `kind` / 需求的 `ui` 里出现 `pageId` | **ERROR** | **ERROR** |
+
+分层的唯一理由是**存量产物**：L1 是"还没写"，一刀切 ERROR 会让升级当天所有老 PRD 全红，
+人的第一反应是关掉检查而不是补页面；L2 / L3 是"写错了"，写错没有过渡期。
+档位表见 `04-container-schema.md` §13.1。
+
+**为什么不用 `pattern` 当前提。** `pattern`（`event-driven` / `state-driven` / …）看起来是现成的入口判据，
+实测不可信：`REQ-ITK-007` 是人工点「审核驳回」，标成了 `state-driven`；`REQ-NTC-007`（回传 WMS）、
+`REQ-SMP-001`（自动生成取样任务单）是系统动作，标成了 `event-driven`。拿它当"这条需求该有按钮"的前提，
+真缺陷会**静默漏检** —— 判据自己先错了，后面越严越糟。
+
+**同一 trigger 何时合法、何时是歧义。** `example-05` 的 `t-po-6`（draft→cancelled）与
+`t-po-7`（pending→cancelled）共用 trigger「采购员点击「取消」」和同一个 `interactionId`，
+看着像重复，其实是**一个按钮、两种来源状态、同一终态**：
+
+- `from` 不同、`to` 相同 → **靠 `from` 消歧，属正确建模**，不要合并成一条；
+- 真歧义的判据是「**同一 `from`** + 同一 trigger + **不同 `to`**」—— 那才是同一个按钮会走到两个终态，
+  用户点下去系统自己也不知道该去哪。
+
 ---
 
 ## 3. 从策略表推导按钮
@@ -289,7 +347,9 @@
 
 交付前逐条回答，答不上就是没做完：
 
-1. 每个状态机转移，要么有对应 `capability`，要么标了 `system: true`？
+1. 每个状态机转移，要么有对应 `capability` **且** `ui` 指向该页真实存在的 `interactionId`，要么是 system
+   （`system: true` / `role: "system"` / `ui.kind: "system"` 三者任一）？**"有 capability"不等于"页面有按钮"**——
+   capability 只说这条命令被允许，说不说得出按钮在哪个页面、点哪个东西，全靠 `ui`。
 2. 每个写进原型的业务按钮，都指向一个 `capability`（除纯查看类）？
 3. 每条 `capability` 的 `from` 都是真实存在的状态 id？
 4. 每条 `capability` 的 `policy` 都选了，且 `reason` 是用户能行动的句子？
@@ -301,6 +361,8 @@
 10. 每条 `capability` 都挂到了至少一条 EARS 需求？
 11. 每条需求至少有一条验收条件覆盖**非法动作被拒绝**，而不只是成功路径？
 12. 把顶部「单据状态」逐个切一遍，页面上的按钮是否都符合预期？
+13. **每条需求**的 `ui` 是否指明它落在哪个按钮 / 哪次进入（`interactionId` / `system` / `page-enter`）？
+    需求侧的 `ui` 不写 `pageId`，靠同级 `pageId` 定位（见 §2.4）。
 
 ---
 

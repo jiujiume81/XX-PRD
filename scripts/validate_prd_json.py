@@ -293,7 +293,8 @@ def ui_kind_is_system(ui):
 
 def transition_is_system(t):
     """这条转移是不是「系统自动触发」。三种写法等价，任一成立即算：
-      - `"system": true`（老写法，check_generators 数的就是它）
+      - `"system": true`（老写法；`tests/check_generators.py` 的 `count_system()`
+        数的就是它 —— 注意在 tests/ 不在 scripts/，别按名字去 scripts/ 找）
       - `"role": "system"`
       - `"ui": {"kind": "system"}`（XX-019 的新写法）
     判成系统转移的，不要求写 pageId / interactionId —— 它没有按钮可点。

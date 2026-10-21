@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 *.zip
+dist/
 tests/.build/
 .idea/
 .vscode/

@@ -4,13 +4,52 @@
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 **每个条目必须含 `breaking` 字段**（是 / 否 + 一句说明），用于判断能否安全升级。
 
-> **状态：`0.5.1` 为本版（未发布）；`0.5.0` 已于 2026-10-20 发布（`5409cbf`）。**
+> **状态：`0.6.0` 为本版（未发布）；`0.5.0` 已于 2026-10-20 发布（`5409cbf`）。**
+> `0.5.1` **从未单独发布**，其变更（`RETRIES_MAX` 默认 0）并入 `0.6.0` 一同交付 ——
+> 所以升级 `0.5.0 → 0.6.0` 的人同时承受 `[0.5.1]` 的 breaking（"绿"变严）与 `[0.6.0]` 的新增字段。
 > `[0.5.0]` 段里仍标「待核」的条目是**发布当时的核验目标**，其结论以 `iterations/I-01/release.md`
 > 与 `iterations/I-02/build.md` 记录的实测为准——本文件不重复断言，也不因发布而在事后补写"已验证"。
 > （「待核」「未验证」**不在占位词表里**：词表只收 5 个"未填内容"类的词，见 `scripts/placeholder-vocab.json`；
 > 这两个词描述的是**核验状态**而非**未填内容**，所以 DoD 8 不会因它们判红——`tests/check_placeholders.py`
 > 实测 `PASS placeholders: 16 处命中均已在显式允许清单内`。**留着它们既诚实、也不妨碍放行。**）
 > `[0.5.1]` 段对应的核验命令：`bash tests/run.sh`（回归）、`python3 tests/check_generators.py`（生成器一致性）。
+
+## [0.6.0] - 2026-10-21
+
+**breaking: 否** —— 新增字段全部可选，默认档行为不变：缺 `ui` 只是 WARN，存量 PRD 升级当天不会变红。
+破坏性变更只发生在**显式加 `--profile=delivery`** 的那一次运行里。
+
+### 新增
+
+- **行为模型绑定到界面（XX-019 / XX-020）**：`stateMachines[].transitions[].ui` 与
+  `requirements[].ui` 引入统一的三态声明 —— `{"interactionId":"ix-xxx"}` /
+  `{"kind":"system"}` / `{"kind":"page-enter"}`（第三个仅 requirement）。system 判定三入口等价：
+  `system:true`、`role:"system"`、`ui.kind:"system"`，共用 `transition_is_system()` 一处实现。
+  解决的问题：QMS 实测里 17 条人工转移有 8 条界面无入口，而校验器如实报 `errors=0`。
+- **`--profile=delivery` 校验档（XX-021）**：`tasks` / `capabilities` / `pages[].contract` /
+  `ui` 缺失即 ERROR 并非 0 退出；默认档保持宽松以护住存量产物。本档有真实调用者 ——
+  `scripts/check_release.py` 的 DoD 1 对 `example-05` 走 delivery。
+
+### 修复
+
+- **XX-019 的悬空 `interactionId` 升为 ERROR（两档一致）**：`validate_prd_json.py:900` 原先走
+  `gate()`（默认档只 WARN），而同一语义规则在 `ui.pageId` 不存在（`:894`）与 XX-020 的
+  `interactionId` 不在页面（`:815`）都是硬 ERROR。悬空引用是「写错了」不是「没写」，不享受宽松；
+  L1 类（缺 `pageId` / 缺 `interactionId` / `ui` 不是对象）仍走 `gate()`。
+- **`tests/run.sh` 的 Chrome profile 移出工作树**：改到 `$TMPDIR/xx-prd-profiles.XXXXXX`，每轮
+  `mktemp -d` 一个目录、`trap` 退出时清理。原先把 profile 放在 `tests/.build/profiles/`，
+  本机 safe-delete 会拦截 `run.sh` 内部 python 子进程的批量删除（单条命令会触发升级、子进程不会），
+  `clean_dir()` 用 `ignore_errors=True` 于是**静默失败** → 跨轮复用 profile 带旧 localStorage →
+  实测 `TOTAL ok=754 fails=4`（分布 `01 -1 / 02 -2`）。修复后同一棵树连跑两次均为 `ok=757 fails=0`，
+  反证（固定路径 + 不清理）能稳定复现 754/4。
+- **`run.sh` 新增 `PROFILES_DIR=<path>` 输出**：让"这轮用的哪个 profile 目录、跑完删没删"可核对，
+  不用再靠推断。
+
+### 核验方式
+
+`python3 scripts/check_release.py`（DoD 1–9 全过，`TREE` 与 `RESULT` 自带 self-proof）；
+`bash tests/run.sh` 连跑两次均 `ok=757 fails=0 retries=0`。
+
 
 ## [0.5.1] - 2026-10-20
 

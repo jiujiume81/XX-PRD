@@ -123,7 +123,16 @@ def tree_state():
 
 
 def check_examples(_docs, _ph, _gen):
-    """DoD 1：5 个示例结构 + 语义校验（走 validate_prd_json.py 自带的 --json 出口）。"""
+    """DoD 1：5 个示例结构 + 语义校验（走 validate_prd_json.py 自带的 --json 出口）。
+
+    **example-05 走 --profile=delivery，其余 4 个走默认档**（XX-021）。
+    为什么必须有一个真实调用者：delivery 档如果只是"能加上"，它就是第二个无人使用的闸门——
+    与「规则写了但页面没落地」同型的病。example-05 是本仓库唯一把 任务 → 命令 →
+    页面契约 → 转移 UI → 需求交互 全链路补齐的 few-shot，适合当交付档的正例；
+    另外 4 个示例补齐是下一条迭代的事，本轮只保证它们默认档不红。
+    detail 行带 `profile=delivery:example-05-behavior-model.json`，让"这一档真的被跑了"
+    可被 grep 断言。
+    """
     files = sorted(
         os.path.join(ROOT, "assets", "examples", f)
         for f in os.listdir(os.path.join(ROOT, "assets", "examples"))
@@ -133,12 +142,15 @@ def check_examples(_docs, _ph, _gen):
         return STATUS_FAIL, "找不到 assets/examples/example-0*.json", []
     n_err = n_warn = 0
     details, fails = [], []
+    strict_files = {"example-05-behavior-model.json"}
     for path in files:
         rel = os.path.relpath(path, ROOT)
-        proc = subprocess.run(
-            [sys.executable, os.path.join(SCRIPTS, "validate_prd_json.py"), "--json", path],
-            capture_output=True, text=True,
-        )
+        base = os.path.basename(path)
+        strict = base in strict_files
+        argv = [sys.executable, os.path.join(SCRIPTS, "validate_prd_json.py"), "--json"]
+        if strict:
+            argv.append("--profile=delivery")
+        proc = subprocess.run(argv + [path], capture_output=True, text=True)
         try:
             rep = json.loads(proc.stdout)
         except ValueError:
@@ -148,7 +160,8 @@ def check_examples(_docs, _ph, _gen):
             n_warn += len(item["warns"])
             for e in item["errors"]:
                 fails.append("%s: %s" % (os.path.basename(item["target"]), e))
-    details.append("%d/%d errors=%d warnings=%d" % (len(files), len(files), n_err, n_warn))
+    details.append("%d/%d errors=%d warnings=%d profile=delivery:%s"
+                   % (len(files), len(files), n_err, n_warn, ",".join(sorted(strict_files))))
     if n_err:
         return STATUS_FAIL, details[0], fails
     return STATUS_PASS, details[0], []

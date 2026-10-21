@@ -2169,7 +2169,11 @@
           "trigger": "采购员点击「提交审批」",
           "role": "u-buyer",
           "guard": "供应商、交期、至少一条明细均已填写",
-          "action": "锁定订单字段并通知主管"
+          "action": "锁定订单字段并通知主管",
+          "ui": {
+            "pageId": "page-po-list",
+            "interactionId": "ix-submit"
+          }
         },
         {
           "id": "t-po-2",
@@ -2178,7 +2182,11 @@
           "trigger": "主管点击「通过」",
           "role": "u-manager",
           "guard": "审批意见可留空",
-          "action": "记录审批人与时间"
+          "action": "记录审批人与时间",
+          "ui": {
+            "pageId": "page-po-approve",
+            "interactionId": "ix-ap-approve"
+          }
         },
         {
           "id": "t-po-3",
@@ -2187,7 +2195,11 @@
           "trigger": "主管点击「驳回」",
           "role": "u-manager",
           "guard": "审批意见 5–200 字",
-          "action": "记录驳回意见并通知采购员"
+          "action": "记录驳回意见并通知采购员",
+          "ui": {
+            "pageId": "page-po-approve",
+            "interactionId": "ix-ap-reject"
+          }
         },
         {
           "id": "t-po-4",
@@ -2196,7 +2208,11 @@
           "trigger": "仓库管理员点击「确认本次到货」",
           "role": "u-wh",
           "guard": "本次到货数量大于 0 且不超过未到货数量",
-          "action": "写入入库单"
+          "action": "写入入库单",
+          "ui": {
+            "pageId": "page-po-receive",
+            "interactionId": "ix-rcv-confirm"
+          }
         },
         {
           "id": "t-po-5",
@@ -2205,7 +2221,11 @@
           "trigger": "仓库管理员点击「全部到货并关闭」",
           "role": "u-wh",
           "guard": "所有明细已到货",
-          "action": "关闭订单并通知采购员"
+          "action": "关闭订单并通知采购员",
+          "ui": {
+            "pageId": "page-po-receive",
+            "interactionId": "ix-rcv-close"
+          }
         },
         {
           "id": "t-po-6",
@@ -2214,7 +2234,11 @@
           "trigger": "采购员点击「取消」",
           "role": "u-buyer",
           "guard": "订单仍为草稿",
-          "action": "记录取消原因"
+          "action": "记录取消原因",
+          "ui": {
+            "pageId": "page-po-list",
+            "interactionId": "ix-cancel-ok"
+          }
         },
         {
           "id": "t-po-7",
@@ -2223,7 +2247,11 @@
           "trigger": "采购员点击「取消」",
           "role": "u-buyer",
           "guard": "主管尚未处理",
-          "action": "撤回审批并通知主管"
+          "action": "撤回审批并通知主管",
+          "ui": {
+            "pageId": "page-po-list",
+            "interactionId": "ix-cancel-ok"
+          }
         },
         {
           "id": "t-po-8",
@@ -2232,7 +2260,11 @@
           "trigger": "主管点击「取消已审批订单」",
           "role": "u-manager",
           "guard": "未发生任何到货",
-          "action": "释放供应商产能并记录原因"
+          "action": "释放供应商产能并记录原因",
+          "ui": {
+            "pageId": "page-po-detail",
+            "interactionId": "ix-d-cancel"
+          }
         },
         {
           "id": "t-po-9",
@@ -2242,7 +2274,10 @@
           "role": "system",
           "system": true,
           "guard": "无入库记录",
-          "action": "自动关闭并通知采购员"
+          "action": "自动关闭并通知采购员",
+          "ui": {
+            "kind": "system"
+          }
         }
       ]
     }
@@ -2433,6 +2468,9 @@
       "id": "REQ-PO-001",
       "pageId": "page-po-create",
       "moduleId": "m-po",
+      "ui": {
+        "interactionId": "ix-new-submit"
+      },
       "title": "提交采购订单审批",
       "pattern": "event-driven",
       "trigger": "采购员在草稿订单上点击「提交审批」",
@@ -2452,6 +2490,9 @@
       "id": "REQ-PO-002",
       "pageId": "page-po-approve",
       "moduleId": "m-po",
+      "ui": {
+        "interactionId": "ix-ap-approve"
+      },
       "title": "采购主管审批订单",
       "pattern": "event-driven",
       "trigger": "采购主管在待审批订单上点击「通过」或「驳回」",
@@ -2471,6 +2512,9 @@
       "id": "REQ-PO-003",
       "pageId": "page-po-receive",
       "moduleId": "m-po",
+      "ui": {
+        "interactionId": "ix-rcv-confirm"
+      },
       "title": "仓库登记到货",
       "pattern": "event-driven",
       "trigger": "仓库管理员点击「确认本次到货」或「全部到货并关闭」",
@@ -2490,6 +2534,9 @@
       "id": "REQ-PO-004",
       "pageId": "page-po-detail",
       "moduleId": "m-po",
+      "ui": {
+        "kind": "page-enter"
+      },
       "title": "已提交订单不可编辑",
       "pattern": "unwanted",
       "trigger": "",
@@ -2508,6 +2555,9 @@
       "id": "REQ-PO-005",
       "pageId": "page-po-approve",
       "moduleId": "m-po",
+      "ui": {
+        "interactionId": "ix-ap-approve"
+      },
       "title": "越权审批被拒绝",
       "pattern": "unwanted",
       "trigger": "",
@@ -2526,6 +2576,9 @@
       "id": "REQ-PO-006",
       "pageId": "page-po-detail",
       "moduleId": "m-po",
+      "ui": {
+        "kind": "page-enter"
+      },
       "title": "动作可用性随状态变化",
       "pattern": "state-driven",
       "trigger": "",

@@ -6,6 +6,7 @@ validate_prd_json.py — XX-PRD 产物结构校验器
 用法:
     python3 validate_prd_json.py <file.json|file.html> [more...]
     python3 validate_prd_json.py --json      # 机器可读输出
+    python3 validate_prd_json.py --profile=delivery <file...>   # 交付档（XX-021）
 
 校验维度:
   1. 顶层结构完整性
@@ -20,6 +21,11 @@ validate_prd_json.py — XX-PRD 产物结构校验器
  10. 数据模型（实体 / 字段 / 关系 / 派生字段）
  11. 行为建模：capabilities（角色 × 状态 × 命令）与状态转移覆盖
  12. 页面职责契约（页面切分、命令归属唯一性、多功能混页提示）
+ 13. 交付档（--profile=delivery，XX-021）：tasks / capabilities / pages[].contract
+     缺失即 ERROR；transitions[].ui（XX-019）与 requirement.ui（XX-020）必填。
+     默认档把「缺失」降为 WARN，但「指向不存在的交互」两档都 ERROR。
+     requirement.ui 与 transitions[].ui 同构，三选一：
+       {"interactionId": "ix-xxx"} / {"kind": "system"} / {"kind": "page-enter"}
 
 退出码: 0 = 无 ERROR, 1 = 存在 ERROR
 """
@@ -69,6 +75,15 @@ DENIAL_WORDS = ("不可", "不能", "禁止", "拒绝", "无权限", "越权", "
 # 页面职责（见 references/10-page-decomposition.md）
 CONTRACT_REQUIRED = ("task", "actor", "entity", "owns")
 
+# ---------- 校验档位（XX-021） ----------
+# default  ：宽松档。结构错才 ERROR，新增的语义闭合检查一律 WARN —— 存量 PRD 不会被一夜判红。
+# delivery ：交付档。交付前必须闭合的检查升 ERROR 并让退出码非 0：
+#            tasks / capabilities / pages[].contract 缺失（XX-021）、
+#            人工转移缺 ui（XX-019）、需求缺 ui（XX-020）。
+#            存在的意义不是「更啰嗦」，而是让「页面层没落地」这件事无法靠 errors=0 蒙过去。
+PROFILES = ("default", "delivery")
+
+
 EARS_PATTERNS = {"ubiquitous", "event-driven", "state-driven", "option", "unwanted"}
 
 SUBJECTIVE_WORDS = ["友好", "快速", "合理", "尽量", "美观", "尽可能", "优秀", "良好",
@@ -104,8 +119,9 @@ STATE_KEYS = {
 
 
 class Report:
-    def __init__(self, target):
+    def __init__(self, target, profile="default"):
         self.target = target
+        self.profile = profile
         self.errors = []
         self.warns = []
         self.infos = []
@@ -266,8 +282,42 @@ def eval_pattern_trigger_ok(pat, trigger):
     return True
 
 
+def ui_kind_is_system(ui):
+    """`ui` 是否声明为「系统自动流转」：`{"kind": "system"}`。
+
+    requirement.ui 与 transitions[].ui 共用这一个判断 —— 两处的 system 语义必须同源，
+    否则「什么算系统行为」会在两个检查里各长一套，迟早打架。
+    """
+    return isinstance(ui, dict) and ui.get("kind") == "system"
+
+
+def transition_is_system(t):
+    """这条转移是不是「系统自动触发」。三种写法等价，任一成立即算：
+      - `"system": true`（老写法，check_generators 数的就是它）
+      - `"role": "system"`
+      - `"ui": {"kind": "system"}`（XX-019 的新写法）
+    判成系统转移的，不要求写 pageId / interactionId —— 它没有按钮可点。
+    """
+    return (t.get("system") is True
+            or t.get("role") == "system"
+            or ui_kind_is_system(t.get("ui")))
+
+
+def interaction_ids_of(page):
+    return {ix.get("id") for ix in (page or {}).get("interactions") or []}
+
+
 # ---------- 校验主体 ----------
-def validate(data, rep: Report):
+def validate(data, rep: Report, strict=False):
+    def gate(msg):
+        """新语义检查的统一开关：交付档 ERROR、宽松档 WARN。
+
+        为什么需要它：XX-021/019/020 这三条检查如果直接判 ERROR，存量 PRD
+        会在升级当天全线判红，人的第一反应是关掉检查而不是补页面；如果一律 WARN，
+        就会出现「errors=0 而页面层一片空白」——那正是 QMS 实测踩到的假绿。
+        """
+        (rep.error if strict else rep.warn)(msg)
+
     # 1. 顶层结构
     required = ["meta", "product", "users", "userFlows", "modules", "pages",
                 "components", "stateMachines", "requirements", "boardPlan",
@@ -275,6 +325,12 @@ def validate(data, rep: Report):
     for k in required:
         if k not in data:
             rep.warn(f"缺少顶层字段 `{k}`（容器可降级渲染，但建议补齐）")
+    # 交付档：AI 开发要照着排期与命令策略落地，缺了就只能自己编（XX-021）
+    if strict:
+        for k in ("tasks", "capabilities"):
+            if not (data.get(k) or []):
+                rep.error(f"[delivery] 缺少顶层 `{k}`（交付档必填："
+                          f"tasks 说明谁先做什么、capabilities 说明谁在什么状态能点什么）")
     meta = data.get("meta") or {}
     if meta.get("schemaVersion") not in ("1.0", "1.1"):
         rep.warn(f"meta.schemaVersion 建议为 '1.0' 或 '1.1'，当前为 {meta.get('schemaVersion')!r}")
@@ -726,6 +782,38 @@ def validate(data, rep: Report):
             rep.error(f"[{rid}] moduleId `{r.get('moduleId')}` 不存在")
         if r.get("pageId") and r.get("pageId") not in page_ids:
             rep.error(f"[{rid}] pageId `{r.get('pageId')}` 不存在")
+        # XX-020：需求到交互的绑定，与 transitions[].ui 同构的三态声明：
+        #   {"interactionId": "ix-xxx"}  由某个交互触发
+        #   {"kind": "system"}           系统自动（回传 WMS、自动建单）
+        #   {"kind": "page-enter"}       进页面即满足，不需要点击
+        # 为什么不拿 `pattern` 当判据：`pattern` 的实际标错率很高（系统动作标成
+        # event-driven、人点按钮标成 state-driven），拿它当前提，判据本身就不成立。
+        # 一条 ui 声明的成本，换掉「忘了绑」与「本来不需要绑」分不清——后者正是
+        # QMS 那 11 条「界面上有按钮但没声明」的成因。
+        rui = r.get("ui")
+        rpage = r.get("pageId")
+        if rui is None:
+            gate(f"[XX-020] 需求 {rid}（{r.get('title') or '未命名'}）缺少 ui："
+                 f"三选一 {{\"interactionId\":\"ix-xxx\"}} / {{\"kind\":\"system\"}} / "
+                 f"{{\"kind\":\"page-enter\"}}")
+        elif not isinstance(rui, dict):
+            rep.error(f"[XX-020] 需求 {rid} 的 ui 应为对象，当前为 {type(rui).__name__}（L3）")
+        else:
+            rkind, rix = rui.get("kind"), rui.get("interactionId")
+            if rkind is not None and rkind not in ("system", "page-enter"):
+                rep.error(f"[XX-020] 需求 {rid} 的 ui.kind `{rkind}` 不合法："
+                          f"只允许 `system` / `page-enter`（L3）")
+            elif rkind in ("system", "page-enter"):
+                pass                     # 系统动作 / 进页面即满足，不需要 interactionId
+            elif not rix:
+                rep.error(f"[XX-020] 需求 {rid} 的 ui 既没有 interactionId 也没有合法 kind（L3）")
+            elif not rpage:
+                rep.error(f"[XX-020] 需求 {rid} 的 ui.interactionId `{rix}` 缺少 pageId，无法定位（L2）")
+            elif rpage in page_ids:
+                avail = interaction_ids_of(pages_by_id.get(rpage))
+                if rix not in avail:
+                    rep.error(f"[XX-020] 需求 {rid} 的 ui.interactionId `{rix}` 不在页面 "
+                              f"`{rpage}` 的 interactions 中（该页现有：{sorted(avail)}）（L2）")
         if r.get("role") and r.get("role") not in user_ids and r.get("role") != "system":
             rep.warn(f"[{rid}] role `{r.get('role')}` 不在 users 中（系统行为请写 'system'）")
         if r.get("stateMachine") and r.get("stateMachine") not in sm_ids:
@@ -780,6 +868,37 @@ def validate(data, rep: Report):
                 rep.warn(f"[{sid}] 转移 `{t.get('id')}` 缺少 trigger")
             if t.get("role") and t.get("role") not in user_ids and t.get("role") != "system":
                 rep.warn(f"[{sid}] 转移 `{t.get('id')}` 的 role `{t.get('role')}` 不在 users 中")
+            # XX-019：人工转移必须写明「由哪个页面的哪个交互触发」。
+            # 没有它，状态机就只能证明「流程想清楚了」，证明不了「页面能点出来」——
+            # QMS 实测：17 条非 system 转移一条都没写，审核通过 / 审核驳回在页面上根本无按钮。
+            # 文本固定以 `转移 <id>` 开头：验收要靠 grep -oE "转移 (nt|it|st|nr)-[0-9]+"
+            # 抓 id 集合，格式一变断言就静默变空 —— 行首写死，别让下游去猜。
+            ui = t.get("ui")
+            tid = t.get("id")
+            label = f"转移 {tid}（{sid}，{t.get('from')}→{t.get('to')}，" \
+                    f"{t.get('trigger') or '未命名'}）"
+            if transition_is_system(t):
+                pass                     # 系统自动触发，没有按钮可点，不参与校验
+            elif ui is None:
+                gate(f"[XX-019] {label} 缺少 ui：这条转移由哪个页面的哪个交互触发？"
+                     f"人工转移请写 ui:{{pageId, interactionId}}，"
+                     f"系统自动流转请写 ui:{{\"kind\":\"system\"}}")
+            elif not isinstance(ui, dict):
+                gate(f"[XX-019] {label} 的 ui 应为对象 {{pageId, interactionId}}，"
+                     f"当前为 {type(ui).__name__}")
+            elif ui.get("kind") != "system":
+                upid, uix = ui.get("pageId"), ui.get("interactionId")
+                if not upid:
+                    gate(f"[XX-019] {label} 的 ui 缺少 pageId")
+                elif upid not in page_ids:
+                    rep.error(f"[XX-019] {label} 的 ui.pageId `{upid}` 不存在")
+                elif not uix:
+                    gate(f"[XX-019] {label} 的 ui 缺少 interactionId（页面 `{upid}`）")
+                else:
+                    avail = interaction_ids_of(pages_by_id.get(upid))
+                    if uix not in avail:
+                        gate(f"[XX-019] {label} 指向的交互 `{uix}` 不在页面 `{upid}` 的 "
+                             f"interactions 中（该页现有：{sorted(avail)}）")
             has_in.add(t.get("to"))
             has_out.add(t.get("from"))
         for st in sids:
@@ -982,10 +1101,17 @@ def validate(data, rep: Report):
         pid = p.get("id")
         ctr = p.get("contract")
         if ctr is None:
-            sm = sm_by_entity.get(p.get("entity")) if p.get("entity") else None
-            if sm:
-                rep.warn(f"[page] `{pid}` 绑定了实体 `{p.get('entity')}` 却没有 contract："
-                         f"这个页面负责哪条任务、哪些命令说不清（见 references/10-page-decomposition.md）")
+            if strict:
+                # 交付档不再依赖 page.entity：旧写法把提示挂在 `p.entity` 上，
+                # 于是「页面根本不写 entity」的 PRD 这条检查完全静默 —— 11 个页面
+                # 一条 contract 都没有，校验器却报 PASS。这正是 XX-021 要堵的洞。
+                rep.error(f"[delivery] [page] `{pid}` 缺少 contract（交付档必填："
+                          f"这个页面负责哪条任务、哪些命令、提交边界是什么）")
+            else:
+                sm = sm_by_entity.get(p.get("entity")) if p.get("entity") else None
+                if sm:
+                    rep.warn(f"[page] `{pid}` 绑定了实体 `{p.get('entity')}` 却没有 contract："
+                             f"这个页面负责哪条任务、哪些命令说不清（见 references/10-page-decomposition.md）")
             continue
         if not isinstance(ctr, dict):
             rep.error(f"[page] `{pid}` contract 应为对象")
@@ -1101,17 +1227,18 @@ def validate(data, rep: Report):
              f"nodes={len(node_ids)}")
 
 
-def run(paths, as_json=False):
+def run(paths, as_json=False, profile="default"):
+    strict = profile == "delivery"
     results = []
     worst = 0
     for p in paths:
         if not os.path.exists(p):
-            rep = Report(p)
+            rep = Report(p, profile)
             rep.error("文件不存在")
             results.append(rep)
             worst = 1
             continue
-        rep = Report(p)
+        rep = Report(p, profile)
         try:
             data = load_data(p)
         except Exception as e:
@@ -1120,7 +1247,7 @@ def run(paths, as_json=False):
             worst = 1
             continue
         try:
-            validate(data, rep)
+            validate(data, rep, strict=strict)
         except Exception as e:
             rep.error(f"校验过程异常：{e}")
         if rep.errors:
@@ -1128,7 +1255,8 @@ def run(paths, as_json=False):
         results.append(rep)
 
     if as_json:
-        out = [{"target": r.target, "errors": r.errors, "warns": r.warns, "infos": r.infos}
+        out = [{"target": r.target, "profile": r.profile,
+                "errors": r.errors, "warns": r.warns, "infos": r.infos}
                for r in results]
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return worst
@@ -1143,16 +1271,36 @@ def run(paths, as_json=False):
         for e in r.errors:
             print(f"  ERROR {e}")
         status = "FAIL" if r.errors else ("PASS(with warnings)" if r.warns else "PASS")
-        print(f"  => {status}  (errors={len(r.errors)}, warnings={len(r.warns)})")
+        print(f"  => {status}  (errors={len(r.errors)}, warnings={len(r.warns)}, "
+              f"profile={r.profile})")
     print("=" * 68)
-    print("结论：" + ("存在 ERROR，必须修复后交付" if worst else "全部通过结构校验"))
+    print(f"结论（profile={profile}）："
+          + ("存在 ERROR，必须修复后交付" if worst else "全部通过结构校验"))
     return worst
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if a != "--json"]
-    as_json = "--json" in sys.argv
+    argv = sys.argv[1:]
+    as_json = "--json" in argv
+    profile = "default"
+    args = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--json":
+            pass
+        elif a.startswith("--profile="):
+            profile = a.split("=", 1)[1].strip()
+        elif a == "--profile" and i + 1 < len(argv):
+            i += 1
+            profile = argv[i]
+        else:
+            args.append(a)
+        i += 1
+    if profile not in PROFILES:
+        print(f"未知 --profile={profile}；可用：{list(PROFILES)}", file=sys.stderr)
+        sys.exit(2)
     if not args:
         print(__doc__)
         sys.exit(2)
-    sys.exit(run(args, as_json))
+    sys.exit(run(args, as_json, profile))

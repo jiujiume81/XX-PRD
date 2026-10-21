@@ -7,7 +7,7 @@
 # 退出码:
 #   0 = 6 用例全绿且断言数与基线一致，且 retries <= RETRIES_MAX（默认 0）
 #   1 = 有失败（fails>0 或条数不等于基线，或生成器漂移，或 retries > RETRIES_MAX）
-#   2 = 环境不可用（找不到 Chrome）
+#   2 = 环境不可用（找不到 Chrome / $TMPDIR 不可写 / 清理失败）
 #   3 = 另一个 run.sh 正在同一工作区跑（单实例锁，避免并发互相覆盖 .build/）
 #
 # 稳定性判据（XX-001）：连续 3 次全 PASS 且 retries=0 才算通过；
@@ -36,11 +36,14 @@ fi
 
 mkdir -p "$OUT"
 
-# 删目录用 python，不用 `rm -rf`：本机 rm 可能是安全删除包装器（bulk 阈值 50 个文件），
-# Chrome profile 一个 150+ 文件，会被拦成 SAFE_DELETE_BULK_CONFIRM_REQUIRED ——
-# 删除静默失败 → 复用上一轮 profile（带着旧 localStorage）→ 断言莫名少 1~2 条。
+# 删目录走 tests/clean_dir.py（XX-029），不用 `rm -rf`：本机 rm 可能是安全删除包装器
+# （bulk 阈值 50 个文件），Chrome profile 一个 150+ 文件，会被拦成
+# SAFE_DELETE_BULK_CONFIRM_REQUIRED。而原来那条 `shutil.rmtree(..., ignore_errors=True)`
+# 把"删失败"降级成"无事发生"——删不掉和本来就没有长得一模一样，于是"这次跑的是不是
+# 干净目录"变成不可观测变量，症状是"少几条断言"，人的第一反应是重跑一次。
+# 现在：目录不存在 → 0；删完仍在 → 打印 CLEAN_FAILED=<路径> 并返回 2。
 clean_dir() {
-  python3 -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$1"
+  python3 "$HERE/clean_dir.py" "$1"
 }
 
 # 单实例锁：同一工作区并发跑会互相覆盖 tests/.build/ 的 html/dom/profile，
@@ -49,7 +52,8 @@ lock="$OUT/.run.lock"
 if ! mkdir "$lock" 2>/dev/null; then
   holder="$(cat "$lock/pid" 2>/dev/null || echo "?")"
   if [ "$holder" != "?" ] && ! kill -0 "$holder" 2>/dev/null; then
-    clean_dir "$lock"                      # 上一个进程已死，锁是残骸
+    # 上一个进程已死，锁是残骸 —— 删不掉说明前置条件不成立，宁可不跑
+    clean_dir "$lock" || { echo "ERROR: 锁残骸删不掉，拒绝在不干净的状态下起跑：$lock" >&2; exit 2; }
     mkdir "$lock" 2>/dev/null || { echo "ERROR: 无法获取锁 $lock" >&2; exit 3; }
   else
     echo "ERROR: 另一个 run.sh 正在跑（pid=${holder}，锁 ${lock}）；并发跑会让结果不可信，等它结束再跑" >&2
@@ -68,12 +72,27 @@ echo $$ > "$lock/pid"
 # **不要把这里改回 $OUT 下面的固定路径**：那等于把"上一轮残留"写进判据前提。
 TMP_BASE="${TMPDIR:-/tmp}"
 TMP_BASE="${TMP_BASE%/}"                   # macOS 的 TMPDIR 带尾斜杠，去掉免得路径出现 //
-PROF_ROOT="$(mktemp -d "$TMP_BASE/xx-prd-profiles.XXXXXX")"
+PROF_ROOT="$(mktemp -d "$TMP_BASE/xx-prd-profiles.XXXXXX" 2>/dev/null)"
+if [ -z "$PROF_ROOT" ] || [ ! -d "$PROF_ROOT" ]; then
+  # profile 建不出来 → 每个 CASE 都会在 Chrome 那一步以"没有 __testout"收场，
+  # 症状是"断言少了几条"，而不是"环境不可用"。必须在这里就退 2。
+  echo "ERROR: \$TMPDIR 不可写，mktemp -d 失败（TMPDIR=${TMPDIR:-<未设置>}，实际用 ${TMP_BASE}）" >&2
+  clean_dir "$lock" || true
+  rm -f "$lock/pid" 2>/dev/null || true
+  exit 2
+fi
 echo "PROFILES_DIR=$PROF_ROOT"
 
+# 收尾清理：失败只留痕（CLEAN_FAILED 会自己打出来），不 exit 非 0。
+# **不收 `exit 2`**：这个函数由 trap EXIT 触发，里面的 exit 会覆盖被测命令的真实退出码，
+# 把 757 的成功洗成 ENV、把 FAIL 也洗成 ENV —— 那比不清理更坏，因为它给了一个假结论。
+# 验收要用「业务全过 + 清理必失败」锁住 rc 仍为 0（XX-029 acceptance 6）。
 cleanup() {
-  clean_dir "$lock"
-  clean_dir "$PROF_ROOT"
+  clean_dir "$lock" || true
+  # $PROF_ROOT 在 mktemp 失败时是空串，而空串传给 clean_dir 会被解析成当前目录 `.`
+  # —— 那一步就删到工作树上了。所以非空才清。
+  [ -n "$PROF_ROOT" ] && { clean_dir "$PROF_ROOT" || true; }
+  return 0
 }
 trap cleanup EXIT
 
@@ -114,8 +133,13 @@ for spec in "${CASES[@]}"; do
   errlog="$OUT/$name.chrome.err"
   runlog="$OUT/$name.chrome.log"
   : > "$runlog"
-  # 每轮先清掉该用例的全部 profile，保证从零状态起跑
-  clean_dir "$PROF_ROOT/$name"
+  # 每轮先清掉该用例的全部 profile，保证从零状态起跑。
+  # 删不掉就停在这里（退出码 2，且此前不会有任何 CASE 行）——放它过去的话，
+  # 结果是"757 变成 755"这种伪装成断言失败的形态，比直接 ENV 难查得多。
+  clean_dir "$PROF_ROOT/$name" || {
+    echo "ERROR: profile 目录删不掉，拒绝在不干净的状态下起跑：$PROF_ROOT/$name" >&2
+    exit 2
+  }
 
   python3 "$HERE/build_cases.py" "$example" "$HERE/harness.js" "$html" >/dev/null || {
     echo "CASE $name fails=1 ok=0 retry=0 (baseline=$base) [FAIL 构建失败]"
@@ -161,7 +185,7 @@ PY
     read -r fails oks <<< "$parsed"
     break
   done
-  clean_dir "$PROF_ROOT/$name"
+  clean_dir "$PROF_ROOT/$name" || true
 
   total_ok=$((total_ok + oks))
   total_fails=$((total_fails + fails))

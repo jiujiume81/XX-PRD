@@ -26,6 +26,10 @@ validate_prd_json.py — XX-PRD 产物结构校验器
      默认档把「缺失」降为 WARN，但「指向不存在的交互」两档都 ERROR。
      requirement.ui 与 transitions[].ui 同构，三选一：
        {"interactionId": "ix-xxx"} / {"kind": "system"} / {"kind": "page-enter"}
+ 14. 需求级前置/后置（XX-023）：guards[] / effects[] 是**可选**字段，但写了就必须写对 ——
+     guards[].kind 只有 block/warn，text 不得为空，整体必须是数组；effects[].text 必填。
+     缺失不报（存量产物没有它）。条数单独打在 `行为补充：guards=N effects=M` 这行：
+     "字段存在"和"里面有几条"是两件事，只报前者的话，guards:[] 与 7 条像话的守卫看不出差别。
 
 退出码: 0 = 无 ERROR, 1 = 存在 ERROR
 """
@@ -833,6 +837,41 @@ def validate(data, rep: Report, strict=False):
                 if rix not in avail:
                     rep.error(f"[XX-020] 需求 {rid} 的 ui.interactionId `{rix}` 不在页面 "
                               f"`{rpage}` 的 interactions 中（该页现有：{sorted(avail)}）（L2）")
+        # XX-023：guards[] / effects[] —— 前置校验与后置影响有地方写。
+        # 为什么需要它：规范要求「源文档每条必须/不得/否则都要落位」，但模型即使想到了
+        # 前置校验也**写不进去**——没有承载结构。QMS 实测里「发起检验要先编质检标准」
+        # 这类前置条件全靠散文，换个模型读就丢。
+        # 严重度：缺字段不报（存量产物没有它，与 XX-020 的分层同理）；
+        # 写了就必须写对——`kind` 只有 block/warn，写别的等于门不存在。
+        gs = r.get("guards")
+        if gs is not None:
+            if not isinstance(gs, list):
+                rep.error(f"[XX-023] 需求 {rid} 的 guards 应为数组，当前为 {type(gs).__name__}")
+                gs = []
+            for gi, g in enumerate(gs):
+                if not isinstance(g, dict):
+                    rep.error(f"[XX-023] 需求 {rid} 的 guards[{gi}] 应为对象 "
+                              f'{{"text":"…","kind":"block|warn"}}')
+                    continue
+                if not str(g.get("text") or "").strip():
+                    rep.error(f"[XX-023] 需求 {rid} 的 guards[{gi}] 缺少 text："
+                              f"一条前置校验必须能一句话说清")
+                if g.get("kind") not in ("block", "warn"):
+                    rep.error(f"[XX-023] 需求 {rid} 的 guards[{gi}].kind `{g.get('kind')}` 不合法："
+                              f"只能是 block（不满足就拦住）或 warn（提示但放行）")
+        es = r.get("effects")
+        if es is not None:
+            if not isinstance(es, list):
+                rep.error(f"[XX-023] 需求 {rid} 的 effects 应为数组，当前为 {type(es).__name__}")
+                es = []
+            for ei, e in enumerate(es):
+                if not isinstance(e, dict):
+                    rep.error(f"[XX-023] 需求 {rid} 的 effects[{ei}] 应为对象 "
+                              f'{{"text":"…","target":"…"}}')
+                    continue
+                if not str(e.get("text") or "").strip():
+                    rep.error(f"[XX-023] 需求 {rid} 的 effects[{ei}] 缺少 text："
+                              f"推进后系统自动做了什么必须写出来")
         if r.get("role") and r.get("role") not in user_ids and r.get("role") != "system":
             rep.warn(f"[{rid}] role `{r.get('role')}` 不在 users 中（系统行为请写 'system'）")
         if r.get("stateMachine") and r.get("stateMachine") not in sm_ids:
@@ -1248,6 +1287,15 @@ def validate(data, rep: Report, strict=False):
              f"requirements={len(data.get('requirements') or [])} "
              f"stateMachines={len(data.get('stateMachines') or [])} "
              f"nodes={len(node_ids)}")
+    # XX-023：guards / effects 的条数单独打一行。这不是装饰——"字段存在"和"里面有几条"
+    # 是两件事，只报前者的话，一个 `guards: []` 和 7 条像话的守卫在输出上完全一样。
+    reqs = data.get("requirements") or []
+    n_guards = sum(len(r.get("guards") or []) for r in reqs if isinstance(r.get("guards"), list))
+    n_effects = sum(len(r.get("effects") or []) for r in reqs if isinstance(r.get("effects"), list))
+    n_g_req = sum(1 for r in reqs if isinstance(r.get("guards"), list) and r["guards"])
+    n_e_req = sum(1 for r in reqs if isinstance(r.get("effects"), list) and r["effects"])
+    rep.info(f"行为补充：guards={n_guards}（{n_g_req}/{len(reqs)} 条需求） "
+             f"effects={n_effects}（{n_e_req}/{len(reqs)} 条需求）")
 
 
 def run(paths, as_json=False, profile="default"):

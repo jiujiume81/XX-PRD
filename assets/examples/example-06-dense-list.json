@@ -663,7 +663,6 @@
                   "rowClick": true,
                   "emptyAction": {
                     "text": "去建检验任务",
-                    "type": "primary",
                     "icon": "plus",
                     "id": "n-btn-empty-new"
                   }
@@ -909,7 +908,6 @@
               "prop": "emptyAction",
               "value": {
                 "text": "去建检验任务",
-                "type": "primary",
                 "icon": "plus",
                 "id": "n-btn-empty-new"
               }

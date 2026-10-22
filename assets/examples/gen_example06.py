@@ -15,7 +15,8 @@
 3. **行高**：`size:'xs'`，设计值 32 / 实测 34；评审态一屏 **9 折算行（8 整行，1440 档）/ 12 折算行（11 整行，1600 档）**，
    产品态 18 行。超长文本走按列 `ellipsis` + `title`，不撑行高。
 4. **抽屉详情**：`rowClick → showDrawer`（不是 navigate），抽屉 560 宽，内含 6 列子表。
-5. **空态与零结果的差别**：`s-empty` 给「去建检验任务」，`s-no-result` 给「清空筛选」。
+5. **空态与零结果的差别**：`s-empty` 给「去建检验任务」（**default** —— 标题带的「新建」占唯一 primary 位，
+   空态不再放 primary，见 references/08 §0.5），`s-no-result` 给「清空筛选」。
 
 刻意不用：`Statistic`（统计迁到独立页 page-iqc-stats）、`MasterDetail`（列表页形态不是它）。
 
@@ -172,7 +173,11 @@ def page_list():
         "data": rows(),
         "rowKey": "taskNo",
         "rowClick": True,
-        "emptyAction": {"text": "去建检验任务", "type": "primary", "icon": "plus",
+        # 空态动作**不写 type**：`.ant-btn` 不带 primary 就是 default。
+        # 为什么：标题带的「新建检验任务」已经占掉本页唯一的 primary 位（P12「标题带内恰 1 个」），
+        # 空态再放一个 primary，就成了同一屏两个主色按钮 —— 与 references/08 §0.5 的口径冲突。
+        # 教材的权重高于规范文字，这里必须和规范一致，否则模型会抄教材、忽略规范。
+        "emptyAction": {"text": "去建检验任务", "icon": "plus",
                         "id": "n-btn-empty-new"},
     }
 
@@ -301,7 +306,7 @@ def page_list():
                  {"target": "n-iqc-table", "prop": "data", "value": []},
                  {"target": "n-iqc-table", "prop": "emptyText", "value": "本月还没有来料检验任务"},
                  {"target": "n-iqc-table", "prop": "emptyAction",
-                  "value": {"text": "去建检验任务", "type": "primary", "icon": "plus",
+                  "value": {"text": "去建检验任务", "icon": "plus",
                             "id": "n-btn-empty-new"}},
              ]},
             {"id": "s-no-result", "name": "零结果态",

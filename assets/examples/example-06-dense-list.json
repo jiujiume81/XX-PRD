@@ -2186,13 +2186,13 @@
       "id": "c-dense-table",
       "name": "作业型列表表格",
       "antd": "Table",
-      "spec": "size:'xs' + tableLayout:'fixed' + 每列显式 width；行高 32，一屏 14 行以上",
+      "spec": "size:'xs' + tableLayout:'fixed' + 每列显式 width；设计行高 32 / 实测 34；1440 档 9 折算行（8 整行）",
       "variants": [
         {
           "name": "验收档 866（8 列）"
         },
         {
-          "name": "验收档 1026（9 列）"
+          "name": "验收档 1026（同一套 8 列拉伸）"
         }
       ],
       "states": [

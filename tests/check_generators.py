@@ -30,6 +30,10 @@ CASES = [
     ("example-03-nav-tree.json", "gen_example03.py", 6, 3),
     ("example-04-master-detail.json", "gen_example04.py", 3, 0),
     ("example-05-behavior-model.json", "gen_example05.py", 10, None),
+    # I-07 的新范本：不加这条，「示例不手改 JSON」对本轮唯一的新产物就没有约束
+    # （它不参与 run.sh 的 01–05 回归，手改过一次也不会有人发现）。
+    # caps=7：create/start/export/submit/approve/recheck/stats-export；system=0（全是人工触发）。
+    ("example-06-dense-list.json", "gen_example06.py", 7, 0),
 ]
 
 
@@ -94,7 +98,7 @@ def main():
     if bad:
         print("FAIL generators: %d 个用例漂移" % bad)
         return 1
-    print("PASS generators: 3/3 一致")
+    print("PASS generators: %d/%d 一致" % (len(CASES), len(CASES)))
     return 0
 
 

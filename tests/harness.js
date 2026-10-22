@@ -896,8 +896,27 @@
       var wsEl = document.querySelector('.workspace');
       var prdEl = $('#panePrd');
       var spEl = $('#splitter');
+      /* F6 起，作业型列表页**开页默认折叠 PRD**（保留导航）。本段测的是
+         「面板能显示 + 可拖到下限 + 能拖回来」，前提是它得先展开。
+         断言本身一条没放宽（仍是「有宽度 / 有下限 / 能恢复」），补的只是前提；
+         条数不变，所以 757 基线不受影响。
+
+         前置用 `=== 480` 而不是 `> 0`：容器是先清空再 append 的，中间态也会 >0，
+         「根本没展开」和「展开了」在 >0 下长得一模一样。480 是 run.sh 的视口
+         （1680×1000）下展开后的实测宽 —— 默认宽就 480、没被钳制。
+         前置不成立就不跑拖拽：带着错的初态跑出来的「拖不动 / 拖不回」不是产物的问题。 */
+      var PRD_EXPECT_W = 480;
+      var prdWasCollapsed = prdEl.classList.contains('collapsed');
+      if (prdWasCollapsed) {
+        info('F6：开页默认折叠 PRD（列表页），先展开再测面板宽度');
+        click($('#prdToggle'));
+      }
       var w0 = prdEl.offsetWidth;
-      w0 > 0 ? ok('PRD 面板默认可见，宽度 ' + w0 + 'px') : fail('PRD 面板初始宽度为 0');
+      var prdPreOk = (w0 === PRD_EXPECT_W);
+      prdPreOk
+        ? ok('PRD 面板可见，宽度 ' + w0 + 'px（'
+             + (prdWasCollapsed ? 'F6 自动折叠 → 手动展开' : '开页即展开') + '）')
+        : fail('前置不成立：展开后宽 = ' + w0 + 'px（期望 ' + PRD_EXPECT_W + '）—— 不带着这个宽度继续跑拖拽');
 
       function dragSplitter(clientX) {
         var sr = spEl.getBoundingClientRect();
@@ -907,17 +926,21 @@
       }
       var wsr = wsEl.getBoundingClientRect();
 
-      dragSplitter(wsr.right - 4);            /* 拖到最右 → PRD 收到最小 */
-      var wMin = prdEl.offsetWidth;
-      (wMin >= 280 && wMin <= w0 + 1)
-        ? ok('splitter 拖到最小：PRD 收缩到 ' + wMin + 'px（有下限，不塌成 0）')
-        : fail('PRD 最小宽度异常：' + wMin);
+      if (prdPreOk) {
+        dragSplitter(wsr.right - 4);            /* 拖到最右 → PRD 收到最小 */
+        var wMin = prdEl.offsetWidth;
+        (wMin >= 280 && wMin <= w0 + 1)
+          ? ok('splitter 拖到最小：PRD 收缩到 ' + wMin + 'px（有下限，不塌成 0）')
+          : fail('PRD 最小宽度异常：' + wMin);
 
-      dragSplitter(wsr.right - 760);          /* ★ 关键回归：还能不能拖回来 */
-      var wBack = prdEl.offsetWidth;
-      wBack > wMin + 100
-        ? ok('★ 拖到最小后可原路拖回：' + wMin + ' → ' + wBack + 'px（旧版百分比 flex 在此卡死）')
-        : fail('拖到最小后无法恢复：' + wMin + ' → ' + wBack);
+        dragSplitter(wsr.right - 760);          /* ★ 关键回归：还能不能拖回来 */
+        var wBack = prdEl.offsetWidth;
+        wBack > wMin + 100
+          ? ok('★ 拖到最小后可原路拖回：' + wMin + ' → ' + wBack + 'px（旧版百分比 flex 在此卡死）')
+          : fail('拖到最小后无法恢复：' + wMin + ' → ' + wBack);
+      } else {
+        info('前置不成立：跳过 splitter 拖拽三项（不带着错误初态造结论）');
+      }
 
       click($('#prdCollapse'));
       var collapsed = prdEl.classList.contains('collapsed');

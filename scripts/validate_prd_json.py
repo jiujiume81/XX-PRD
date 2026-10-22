@@ -187,6 +187,9 @@ def collect_node_ids(data):
             # 属性式 toolbar/queryActions 条目（{id,type:"primary",text}）也是可寻址节点
             for it in toolbar_items(n):
                 ids.add(it["id"])
+            # 筛选区渲染器打在按钮上的 id（queryId / resetId），同族
+            for iid in filter_button_ids(n):
+                ids.add(iid)
     return ids
 
 
@@ -199,6 +202,36 @@ def toolbar_items(node):
             if isinstance(it, dict) and it.get("id") and it.get("type") not in WHITELIST:
                 out.append(it)
     return out
+
+
+# ---------- 筛选区按钮的「合成 id」（REQ-I07-07 / I-07 需求单 §4 第 1 条） ----------
+# 容器 buildFilterBar 在 `filterBar:'grid3'` 且 `query` 非空时渲染「重置 → 查询」两个动作按钮，
+# 并把 props.resetId / props.queryId 打到按钮的 data-node-id 上。也就是说按钮**确实存在**，
+# 只是它没有独立的组件树节点 —— 与 toolbar / queryActions 的「属性式条目」是同一族。
+#
+# 这是**结构性接入**，不是白名单：白名单会把「按钮画不出来」这件事合法化；这里只是承认
+# 「容器生成的按钮也是可寻址节点」。所以必须配一条反向校验：声明了 id 而渲染器不会生成
+# 该按钮（无 query 字段 / 走的还是旧 query 条）时报 ERROR —— 只认 id 不验存在就是放宽。
+FILTER_SYNTH_KEYS = ("queryId", "resetId")
+
+
+def filter_button_ids(node):
+    """渲染器真的会打上 data-node-id 的筛选按钮 id（列表见上）。"""
+    if node.get("type") != "Table":
+        return []
+    pr = node.get("props") or {}
+    if not (pr.get("query") or []) or pr.get("filterBar") != "grid3":
+        return []
+    return [pr[k] for k in FILTER_SYNTH_KEYS if pr.get(k)]
+
+
+def filter_ids_not_rendered(node):
+    """声明了、但渲染器不会生成的筛选按钮 id（用于反向报错）。"""
+    if node.get("type") != "Table":
+        return []
+    pr = node.get("props") or {}
+    rendered = set(filter_button_ids(node))
+    return [(k, pr[k]) for k in FILTER_SYNTH_KEYS if pr.get(k) and pr[k] not in rendered]
 
 
 # 容器为某些组件内建了「合成节点 id」，可被 interactions.on.target / actions.scrollTo 引用：
@@ -501,6 +534,16 @@ def validate(data, rep: Report, strict=False):
                              f"容器会渲染成空列表")
         # 交互目标 / 覆写目标 / 标注锚点
         page_node_types = {n.get("id"): n.get("type") for n in nodes}
+        # 筛选区按钮的合成节点 + 反向校验（见 filter_button_ids 的说明）。
+        # 顺序很重要：先登记再校验交互，否则 ix-query 会先报「节点不存在」。
+        for n in nodes:
+            for iid in filter_button_ids(n):
+                page_node_types[iid] = "Button"
+            for key, iid in filter_ids_not_rendered(n):
+                rep.error(f"[{pid}] Table `{n.get('id')}` 声明了 props.{key} = `{iid}`，"
+                          f"但筛选区渲染器不会生成这个按钮 —— 只有 `filterBar:'grid3'` 且 "
+                          f"`query` 非空时容器才渲染「重置 / 查询」并挂 id；"
+                          f"否则这条 id 指向一个画不出来的按钮（只认 id 不验存在就是放宽）")
         # Table 的 props.rowClick / columns[].actions 决定合成 id 是否存在
         table_row_click = {}
         table_act_keys = {}

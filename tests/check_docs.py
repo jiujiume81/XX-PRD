@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """docs-consistency：I-01 约定的 5 项最小检查（不碰 guide.html）。
 
-1. 5 个示例文件存在
+1. 示例清单：`assets/examples/example-0N-*.json` 与 `EXPECTED_EXAMPLES` **逐个名字比对**
+   （缺一个 / 多一个 / 换一个都失败；不是数个数）
 2. README 引用可达：markdown 链接 + 行内代码文件名 + img src，输出 refs=N whitelist=M dead=0
 3. references/*.md 的文件数与 README 里的"NN 份参考文档"一致
 4. 版本一致：SKILL.md frontmatter = CHANGELOG.md 最新条目（本地若存在
@@ -67,12 +68,38 @@ WHITELIST = {
 FILE_EXT = re.compile(r"\.(html|json|md|py|png|zip|yml|yaml)$")
 
 
+# 示例库的**清单**（不是数量）。每一个都对应一份教材范本 + 一个 gen 脚本
+# （`assets/examples/gen_example0N.py`），并由 `tests/check_generators.py` 做归一化比对。
+#
+# 为什么写名字而不是数字（I-07 第二批裁定）：数量相等**不蕴含集合相等**。
+# 6 个文件里把 example-03 换成 example-09，`len()==6` 照样通过，而 README 与生成器
+# 全都对不上。所以这里逐名比对：缺一个 / 多一个 / 换一个都失败。
+# 加 `example-06-dense-list.json`（I-07 F3 的作业型列表页范本）是结构性同步：
+# 清单变长 = 要求更严，不是放宽。
+EXPECTED_EXAMPLES = (
+    "example-01-task-board.json",
+    "example-02-refund-flow.json",
+    "example-03-nav-tree.json",
+    "example-04-master-detail.json",
+    "example-05-behavior-model.json",
+    "example-06-dense-list.json",
+)
+
+
 def check_examples():
-    files = sorted((ROOT / "assets" / "examples").glob("example-0*.json"))
-    if len(files) == 5:
-        print("PASS examples: 5/5 存在")
+    actual = set(p.name for p in (ROOT / "assets" / "examples").glob("example-0*.json"))
+    expect = set(EXPECTED_EXAMPLES)
+    missing = sorted(expect - actual)      # 清单里有、盘上没有
+    extra = sorted(actual - expect)        # 盘上有、清单里没有（含「换了名字」）
+    if not missing and not extra:
+        print("PASS examples: %d/%d 存在（按名单逐个比对）"
+              % (len(actual), len(expect)))
         return True
-    print("FAIL examples: 期望 5 个 example-0*.json，实际 %d 个" % len(files))
+    if missing:
+        print("FAIL examples: 缺少 %d 个 —— %s" % (len(missing), ", ".join(missing)))
+    if extra:
+        print("FAIL examples: 多出 %d 个（不在清单里 / 被换过名）—— %s"
+              % (len(extra), ", ".join(extra)))
     return False
 
 

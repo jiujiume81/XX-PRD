@@ -118,6 +118,10 @@
 |---|---|
 | `Table` | `columns`(`[{title,dataIndex,width,align,type:'text'\|'tag'\|'avatar'\|'action'\|'progress'\|'index',actions?}]`)、`data`(`[{}]`)、`loading`、`empty`、`emptyText`、`bordered`、`size`、`rowSelection`、`radio`、`rowKey`、`rowClick`、`title` |
 | `Table` · 列表页三件套 | `query`(`[{label,type,props,placeholder}]` 查询条件区)、`queryExtra`(bool，默认 true，渲染「设置查询字段 / 搜索 / 展开」)、`queryActions`(`[{text,type,icon,id}]` 追加到查询条右侧)、`toolbar`(`[{text,type,icon,disabled,id}]` 或 `[{type:'Button',id,props}]`)、`toolbarRight`(bool，默认 true，渲染列设置图标)、`toolbarRightItems`、`pagination`(`{total,pageSize,current,maxShow,jump}` 或 `true`) |
+| `Table` · 密度与吸附（v0.8.0 新增） | `size`(`'xs'`\|`'small'`，渲成 `.xs` / `.sm` 类；**没有 `'sm'` 这个值**，`'sm'` 是类名)、`tableLayout`(`'fixed'`)、`stickyHeader`(bool，**须与 `maxHeight` 同时给**才生成吸附容器)、`stickyFooter`(bool，配合 `pagination` 把分页脚贴底)、`maxHeight`(CSS 长度，如 `calc(100vh - 438px)`，写进 `--tw-max`)、`rowClick`(bool，整行点击触发)、`ellipsisTitle`(bool，默认 true，截断列的 `title` 兜底) |
+| `Table` · 筛选区渲染器（v0.8.0 新增） | `filterBar`(`'grid3'` = 两行三列 + 独立动作行；**不写则沿用旧 `query` 单行路径**)、`queryId` / `resetId`(字符串，写入「查询 / 重置」按钮的 `data-node-id`，可被 `interactions.on.target` 引用) |
+| `Table` · 空态（v0.8.0 新增） | `emptyAction`(`{text, type?, icon?, id}`，渲染在空态文案下方；`text` 必填、`id` 用于挂交互)。空态（没有数据）与零结果（筛没了）必须用**不同的 `emptyText` 与 `emptyAction`** |
+| `Table` · 列定义补充（v0.8.0 新增） | `columns[]`：`width`(纯数字按 px 处理；**字符串必须自带单位**，写 `'48'` 会被浏览器丢弃)、`ellipsis`(bool，配 `cell-ellipsis`)、`fix`(`'left'`\|`'right'`)、`num`(bool，`tabular-nums` 右对齐)、`align`(`'left'`\|`'right'`) |
 | `MasterDetail` | `bind`(主表字段名)、`bindTo`(子表字段名，默认同 `bind`)、`detailTitle`、`collapsible`(默认 true)、`defaultCollapsed`、`autoSelectFirst`(默认 true)、`showAllWhenEmpty`、`emptyText`、`detailTools`(`[{text,icon,id}]`)；**children 必须正好 2 个**：`[主表 Table, 子表 Table]` |
 | `List` | `data`、`renderItem`(Node 模板，写在 **props 内**；占位 `{{item.字段}}` / `{{item}}` / `{{index}}`)、`bordered`、`loading`、`empty`、`size` |
 | `List.Item` | `title`、`description`、`extra`(插槽)、`avatar` |
@@ -146,6 +150,7 @@
 |---|---|
 | `Modal` | `title`、`open`、`width`、`okText`、`cancelText`、`footer`(bool)、`content`、`confirmLoading`、`centered`；底部按钮合成 id `<节点 id>__ok` / `__cancel`（`__cancel` 内建关闭弹窗） |
 | `Drawer` | `title`、`open`、`placement`(`right`\|`left`)、`width`、`content`、`footer`(插槽) |
+| `Drawer` · 宽档（v0.8.0 补充） | `width` 取 **560** 时为「详情抽屉」档（渲成 `.ant-drawer.w-lg`，默认 420）。**声明宽必须由渲染器读**：`R.Drawer` 读 `p.width`，≥560 走 `.w-lg`、其它数值用 inline，不写才吃默认 420 —— 漏读就会退回 420。验收必须打开抽屉量 `offsetWidth`，只贴 JSON 的 `width: 560` 不算证据（为什么与怎么量见 `08-container-choice.md` §0.8） |
 | `Popconfirm` | `title`、`description`、`okText`、`cancelText` |
 | `Spin` | `size`、`tip`、`spinning` |
 | `Result` | `status`(`success`\|`error`\|`info`\|`warning`\|`404`\|`403`\|`500`)、`title`、`subTitle`；插槽 `extra` |

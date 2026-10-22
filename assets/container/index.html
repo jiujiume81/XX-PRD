@@ -43,9 +43,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .btn.sm{height:24px;padding:0 8px;font-size:12px}
 .btn.icon{padding:0 8px}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
-.sel{height:30px;border-radius:var(--ant-radius);border:1px solid var(--ant-border);background:#fff;
+/* 顶栏下拉：**必须带元素名**（`select.sel`），不能只写 `.sel`。
+   只写 `.sel` 时这条规则会命中所有 class 含 sel 的元素 —— 包括分页的 `<span class="pg sel">`，
+   于是那个页码拿到 13px，成为页内第 4 档字号（P19 实测 13 就是从这来的，
+   改 `.ant-pagination{font-size:12px}` 改不掉它：`.sel`(0,1,0) 直接命中 span 本身，
+   而继承值永远输给直接声明）。同一个坑在卡片区已经踩过一次（见下面 co-cur 的注释）。 */
+select.sel{height:30px;border-radius:var(--ant-radius);border:1px solid var(--ant-border);background:#fff;
   padding:0 8px;font-size:13px;color:var(--ant-text);font-family:inherit;cursor:pointer;max-width:190px}
-.sel:hover{border-color:var(--ant-primary)}
+select.sel:hover{border-color:var(--ant-primary)}
 .badge-warn{display:none;align-items:center;gap:4px;color:var(--ant-warning);font-size:12px;cursor:help}
 .badge-warn.show{display:inline-flex}
 
@@ -210,7 +215,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .ant-step.cur .s-t,.ant-step.done .s-t{color:var(--ant-text)}
 .ant-step .s-d{font-size:12px;color:var(--ant-text-4)}
 
-.ant-pagination{display:flex;gap:6px;align-items:center;margin-top:14px;font-size:13px}
+/* 分页 13 → 12：分页是辅助信息，与页脚同档。
+   注意这条**不是**页内 13px 的唯一来源：`.pg.sel`（当前页码）还会被顶栏那条
+   `select.sel` 直接命中（见上面 `.sel` 的注释），继承值永远输给直接声明 ——
+   所以只改这里，P19 实测仍是 4 档。两处一起改才收口。 */
+.ant-pagination{display:flex;gap:6px;align-items:center;margin-top:14px;font-size:12px}
 .ant-pagination .pg{min-width:30px;height:30px;padding:0 6px;border:1px solid var(--ant-border);border-radius:var(--ant-radius);
   display:flex;align-items:center;justify-content:center;cursor:pointer;background:#fff;color:var(--ant-text-2)}
 .ant-pagination .pg.sel{border-color:var(--ant-primary);color:var(--ant-primary)}
@@ -259,7 +268,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .ant-input.warn{border-color:var(--ant-warning)}
 .ant-input.dis,.ant-select.dis,.ant-textarea.dis{background:var(--ant-fill);cursor:not-allowed;opacity:.75}
 .ant-input .afx{color:var(--ant-text-3);display:inline-flex}
-.ant-select .caret{margin-left:auto;color:var(--ant-text-3);font-size:10px}
+/* caret 不写死字号：写死 10px 会凭空多开一档（P19 实测的第 4 个值之一就是它），
+   而 ▾ 是纯装饰，跟着父级走即可（表格底栏 12 / 表单 14 各自合适）。 */
+.ant-select .caret{margin-left:auto;color:var(--ant-text-3)}
 .ant-select .tag{margin-left:6px}
 .ant-num{display:inline-flex;align-items:center;height:var(--ant-h);border:1px solid var(--ant-border);border-radius:var(--ant-radius);overflow:hidden}
 .ant-num span{padding:0 9px;color:var(--ant-text-3);cursor:pointer;line-height:var(--ant-h);background:#fff}
@@ -326,6 +337,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .ant-table.bordered th,.ant-table.bordered td{border-right:1px solid var(--ant-border-2)}
 .ant-table.bordered{border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);overflow:hidden}
 .ant-table.sm th,.ant-table.sm td{padding:8px 12px;font-size:13px}
+/* ============ 作业型表格：密度与吸附（I-07 D1–D5 / D9 / D12） ============
+   为什么新增 .xs 而不是改 .sm：列表页要 32、详情/抽屉子表要 36–39，两档都需要；
+   改 .sm 的默认值会静默改变所有已引用 .sm 的页面（含内置 demo 与既有断言基线）。
+   密度账见 项目治理/迭代/I-07-形态与密度方案.md §3.6。
+   口径变更（与方案 §3.6 的差异）：方案写 font-size:13px，实测那样会引入第 4 档字号，
+   与 P19「页内 ≤3 档（18/14/12）」冲突；改为 14px + 上下 5px，既守住密度又不多开一档。
+   行高：**32 是设计值（内容盒 5+5+21 + 1px 下边框），34 是实测值**
+   （实测 tr.offsetHeight = 34，多出的 2px 来自行内盒余量，即 5+5+21+3）。
+   P9 的阈值按实测 34 取 —— 拿设计值当阈值，真实行高会越线。 */
+.ant-table.xs th,.ant-table.xs td{padding:5px 12px;font-size:14px;line-height:21px}
+.ant-table.xs th{font-size:14px}
+/* 密集档的行内动作必须更紧：默认 gap:10 时「详情 开始」= 28+10+28 = 66px，
+   而 866 档操作列只有 88（列内 64）→ 必折行 → 该行行高从 34 跳到 63（P9 红）。
+   6px 是 28+6+28 = 62 ≤ 64 的最大整数解（再大就折行，再小就贴在一起点错）。
+   间距写在 CSS 而不是 inline style：inline 的特异性高于任何选择器，密集档覆盖不掉。 */
+.ant-td-action{display:flex;gap:10px;flex-wrap:wrap}
+.ant-table.xs .ant-td-action{gap:6px}
+/* 固定布局：列宽只由声明决定，不随数据抖。只在 .fixed 下生效，不改全局 td（否则会翻转横向滚动断言） */
+.ant-table.fixed{table-layout:fixed}
+.ant-table.fixed th,.ant-table.fixed td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 按列开关的省略号：只给会溢出的文本长列（≤3 列），不全局开 */
+.ant-table .cell-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 数值列等宽数字：否则「1286」与「986」宽窄不一，右对齐也扫不齐 */
+.ant-table td.num,.ant-stat .s-v{font-variant-numeric:tabular-nums}
+/* 吸附：表头 sticky（separate 布局下用 inset 补 1px 线，不用 border 免得双线），分页贴底 */
+.ant-table-wrap.sticky{max-height:var(--tw-max,100%);overflow:auto}
+.ant-table-wrap.sticky thead th{position:sticky;top:0;z-index:2;background:#fafafa;
+  box-shadow:inset 0 -1px 0 var(--ant-border-2)}
+.ant-table-root.sticky-pager .ant-table-foot{position:sticky;bottom:0;z-index:2;background:#fff}
+/* 横向滚动时的左右固定列（须给 background，否则下层内容会透出来） */
+.ant-table .col-fix-l{position:sticky;left:0;z-index:1;background:#fff}
+.ant-table .col-fix-r{position:sticky;right:0;z-index:1;background:#fff}
+.ant-table.xs .col-fix-l,.ant-table.xs .col-fix-r{box-shadow:inset -1px 0 0 var(--ant-border-2)}
 .ant-checkbox{width:16px;height:16px;border:1px solid var(--ant-border);border-radius:4px;background:#fff;display:inline-block}
 /* 单选列（Table props.radio）：圆点标记「当前行」，用于主子表的主表 */
 .ant-radio-dot{width:14px;height:14px;border:1px solid var(--ant-border);border-radius:50%;background:#fff;display:inline-block;position:relative}
@@ -350,12 +394,50 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .ant-query-bar .qf-extra{margin-left:auto;display:flex;align-items:center;gap:8px}
 .ant-query-bar .qf-link{color:var(--ant-primary);font-size:13px;cursor:pointer;white-space:nowrap}
 
+/* ============ 作业型筛选区：两行三列（I-07 §4.2 / D6） ============
+   为什么不给 .ant-query-bar 打补丁：一行式的天花板是「控件只能分到 124px」，
+   实测去掉 .qf 的 min-width 后仍是 3 行 90px，标签紧贴控件、每列左边界不齐。
+   要的是「3 条竖线 + 295px 控件」，那必须换结构（grid），不是加 CSS。
+   成本：比一行式多 99px（139 vs 40），换来全部条件常显 + 控件够宽。
+   收益：那一屏的其余 97px 是从统计卡（−272）与行高（48→32）里腾出来的。 */
+.ant-filter-bar{background:#fff;border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);
+  padding:14px 20px 12px}
+.ant-filter-bar .fb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  column-gap:24px;row-gap:10px}
+.ant-filter-bar .fb-field{display:flex;align-items:center;gap:8px;min-width:0}
+.ant-filter-bar .fb-field .lb{flex:0 0 76px;text-align:right;color:var(--ant-text-2);
+  font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 控件宽度由栅格列宽决定，上限 320：再宽就一眼扫不到头，行长难读。
+   **不得**声明 min-width —— 那正是旧 .qf{min-width:260} 把 6 个条件挤成 6 行的原因。 */
+.ant-filter-bar .fb-field .ctl{flex:1 1 auto;min-width:0;max-width:320px}
+.ant-filter-bar .fb-field .ctl>.ant-input,
+.ant-filter-bar .fb-field .ctl>.ant-select,
+.ant-filter-bar .fb-field .ctl>.ant-picker{width:100%}
+.ant-filter-bar .fb-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:10px}
+.ant-filter-bar .fb-actions .ant-btn.link{background:transparent;border-color:transparent;color:var(--ant-primary);padding:0 4px}
+.ant-filter-bar.collapsed .fb-field.more{display:none}
+
+/* 内容区节奏（I-07 D7）：子块之间只留一个 gap，不再靠每个组件自带 margin-bottom 堆叠。
+   加这条之后 .ant-alert 的 margin-bottom 必须归零，否则 12+16=28 的间距会把节奏打乱。 */
+.ant-content{display:flex;flex-direction:column;gap:var(--ant-content-gap,16px)}
+.ant-content>*{margin-top:0;margin-bottom:0}
+/* 列表页标题带（I-07 S11）：h1 取 18/600，与正文 14、辅助 12 构成三档。
+   不写这条，h1 会吃浏览器默认 2em = 32px —— 那是"没有设计"的默认值，不是选择；
+   而且 32 会跟统计卡的 24 一起把页内字号推到 4 档以上（P19）。
+   **特异性**：`.ant-content .ant-typography{14px}` 是 (0,2,0)，比 `.ant-content h1`
+   的 (0,1,1) 高 —— 只写后者的话 h1 实际渲染 14px（页面没有标题层级，实测如此）。
+   所以这里补 `h1.ant-typography`(0,2,1)，并把下面那条收窄成 `:not(h1)`，两头都堵。 */
+.ant-content h1,.ant-content h1.ant-typography{font-size:18px;line-height:26px;font-weight:600;margin:0;color:var(--ant-text)}
+.ant-content .ant-typography:not(h1){font-size:14px;line-height:22px}
+
 /* 列表工具条（截图「新增 / 导出 / 发布任务 / 废弃」那一行） */
 .ant-list-toolbar{display:flex;align-items:center;gap:8px;padding:8px 0 12px}
 .ant-list-toolbar .lt-right{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--ant-text-3)}
 
-/* 表格底部：共 N 条 / 每页显示 / 页码 */
-.ant-table-foot{display:flex;align-items:center;gap:12px;padding:12px 0 4px;font-size:13px;color:var(--ant-text-2);flex-wrap:wrap}
+/* 表格底部：共 N 条 / 每页显示 / 页码
+   font-size 13 → 12：分页是**辅助信息**，不是正文。13 会把页内字号多开一档，
+   与 P19「18/14/12 三档」冲突（I-07 §6.2 P19）。 */
+.ant-table-foot{display:flex;align-items:center;gap:12px;padding:12px 0 4px;font-size:12px;color:var(--ant-text-2);flex-wrap:wrap}
 .ant-table-foot .tf-size{display:inline-flex;align-items:center;gap:6px}
 .ant-table-foot .tf-size .ant-select{width:96px;height:28px}
 .ant-table-foot .ant-pagination{margin:0 0 0 auto}
@@ -390,7 +472,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .ant-list .li .li-title{font-size:14px;color:var(--ant-text)}
 .ant-list .li .li-desc{font-size:13px;color:var(--ant-text-3);margin-top:3px}
 
-.ant-card{background:#fff;border:1px solid var(--ant-border-2);border-radius:var(--ant-radius-lg);box-shadow:var(--ant-shadow-1)}
+/* 卡片只留一层（I-07 D8）：border + bg + shadow 三层叠在同一个白块上，是「每个块都一样重」
+   的直接来源 —— 全页 4 张统计卡就是全页唯一的叠三层元素（P5 量到 4）。AntD 5 默认卡片
+   是无边框 + 阴影，这里跟它对齐；需要强分块的地方用 `.bordered` 显式加回边框。 */
+.ant-card{background:#fff;border-radius:var(--ant-radius-lg);box-shadow:var(--ant-shadow-1)}
+.ant-card.bordered{border:1px solid var(--ant-border-2);box-shadow:none}
 .ant-card .c-head{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid var(--ant-border-2)}
 .ant-card .c-head .c-title{font-size:15px;font-weight:600;flex:1}
 .ant-card .c-body{padding:20px}
@@ -519,6 +605,10 @@ h5.ant-typography{font-size:14px;font-weight:600;margin:0 0 4px}
 .ant-modal .m-foot{padding:12px 22px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--ant-border-2)}
 .ant-drawer-mask{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;justify-content:flex-end}
 .ant-drawer{background:#fff;width:420px;max-width:90%;display:flex;flex-direction:column;box-shadow:var(--ant-shadow-2)}
+/* 详情抽屉加宽档（I-07 D12）：420 放不下 6 列子表，列表页详情用 w-lg。
+   为什么是 560：866 档内容宽 866−560=306，刚好还能看到「当前行在列表里的位置」；
+   再宽就变成「详情页」而不是「详情抽屉」了（见方案 T-5）。 */
+.ant-drawer.w-lg{width:560px}
 .ant-drawer .d-head{padding:16px 22px;font-size:16px;font-weight:600;border-bottom:1px solid var(--ant-border-2)}
 .ant-drawer .d-body{padding:20px 22px;flex:1;overflow:auto}
 .ant-drawer .d-foot{padding:12px 22px;border-top:1px solid var(--ant-border-2);display:flex;justify-content:flex-end;gap:8px}
@@ -754,6 +844,7 @@ h5.ant-typography{font-size:14px;font-weight:600;margin:0 0 4px}
           <button class="zbtn" id="zFit" title="适应宽度（⌘/Ctrl + 0）">适应宽度</button>
           <button class="zbtn" id="zPan" title="平移模式：按住拖拽移动画布（空格或鼠标中键同样可用）">✋ 平移</button>
         </div>
+        <button class="zbtn" id="fullWidth" title="全宽预览：同时收起左侧导航与右侧 PRD（再点恢复）">全宽预览</button>
         <button class="zbtn" id="prdToggle" title="显示 / 隐藏右侧 PRD 面板">PRD ‹</button>
         <span id="protoStateTag"></span>
       </div>
@@ -1164,18 +1255,31 @@ R.Sider=function(p,ctx,node){
 R.Content=function(p,ctx,node){ return h('div','ant-content',null,renderChildren(node,ctx)); };
 R.Footer=function(p,ctx,node){ return h('div','ant-footer',{text:p.text||''}); };
 R.Row=function(p,ctx,node){
-  var r=h('div','ant-row',{style:'gap:'+((p.gutter||0))+'px;justify-content:'+(p.justify||'flex-start')+';align-items:'+(p.align||'stretch')});
+  var g=(p.gutter||0);
+  /* gutter 写在 Row 上、栅格间距由 Col 承担（AntD 的约定）。Col 自己读不到 p.gutter，
+     所以在这里把父级 gutter 挂到子节点上，由 R.Col 回退取用 —— 否则 Col 算的是
+     `calc(50% - 0px)`，一行两列各自 50% 再叠上 Row 的 gap，实测溢出 254.75px（I-07 T-1）。 */
+  (node&&node.children||[]).forEach(function(c){
+    if(c&&typeof c==='object'){ c.__parentGutter=g; }
+  });
+  var r=h('div','ant-row',{style:'gap:'+g+'px;justify-content:'+(p.justify||'flex-start')+';align-items:'+(p.align||'stretch')});
   renderChildren(node,ctx).forEach(function(c){ r.appendChild(c); });
   return r;
 };
 R.Col=function(p,ctx,node){
+  var g=(p.gutter!=null)?p.gutter:((node&&node.__parentGutter)||0);
   var w=((p.span||24)/24*100);
-  return h('div','ant-col',{style:'flex:0 0 calc('+w+'% - '+((p.gutter||0))+'px);max-width:calc('+w+'% - '+((p.gutter||0))+'px)'},renderChildren(node,ctx));
+  return h('div','ant-col',{style:'flex:0 0 calc('+w+'% - '+g+'px);max-width:calc('+w+'% - '+g+'px)'},renderChildren(node,ctx));
 };
 R.Space=function(p,ctx,node){
   var d=p.direction==='vertical';
-  var s=h('div','ant-space'+(d?' v':'')+(p.wrap?' wrap':''),
-    {style:'gap:'+((p.size==null?8:p.size))+'px;align-items:'+(p.align||'center')});
+  var st='gap:'+((p.size==null?8:p.size))+'px;align-items:'+(p.align||'center');
+  /* justify / block：标题带需要「h1 + 计数在左、主操作在右」同一行。
+     没有这两个键就只能靠嵌套加占位 div，或者退化成「主操作自己占一行」——
+     后者正是表格被推到 476px 的原因之一（I-07 C1b）。 */
+  if(p.justify) st+=';justify-content:'+p.justify;
+  if(p.block) st+=';width:100%';
+  var s=h('div','ant-space'+(d?' v':'')+(p.wrap?' wrap':''),{style:st});
   renderChildren(node,ctx).forEach(function(c){ s.appendChild(c); });
   return s;
 };
@@ -1371,7 +1475,9 @@ function cellContent(col,row,nid,ri){
   if(col.type==='tag'){ return [h('span','ant-tag '+statusColor(v),{text:v==null?'':String(v)})]; }
   if(col.type==='avatar'){ return [h('span','ant-badge-wrap',null,[h('span','ant-avatar sm',{text:String(v||'?').slice(0,1)}),txt(v==null?'':String(v))])]; }
   if(col.type==='action'){
-    var box=h('span','ant-td-action',{style:'display:flex;gap:10px;flex-wrap:wrap'});
+    /* 行内动作的间距走 CSS（原来写死 inline `gap:10px`，inline 会盖掉密集档的 6px，
+       结果是 866 档操作列里两个动作必折行、行高从 34 跳到 63）。 */
+    var box=h('span','ant-td-action');
     actionDefs(col).forEach(function(a){
       var color=a.type==='danger'?'var(--ant-error)':(a.type==='muted'?'var(--ant-text-3)':'var(--ant-primary)');
       var s=h('span',null,{text:a.label||a.key,style:'color:'+color,title:(a.label||a.key)});
@@ -1437,6 +1543,43 @@ function buildQueryBar(p,ctx){
   bar.appendChild(ex);
   return bar;
 }
+/* 两行三列筛选区（I-07 §4.2 / D6）。结构固定 3 列栅格 + 独立动作行：
+   .ant-filter-bar > .fb-grid > .fb-field×N（label 76 右对齐 + 控件）
+                  > .fb-actions  重置 → 查询(primary) → ⌃收起
+   字段 4–6 个自然成 2 行；≤3 个成 1 行（不强行凑 6 个）。
+   `收起` 只折第 4 个起的字段 —— 折的是「不常改的条件」，不是把区整个藏掉。 */
+function buildFilterBar(p,ctx){
+  var fields=p.query||[];
+  var bar=h('div','ant-filter-bar');
+  var grid=h('div','fb-grid');
+  fields.forEach(function(q,i){
+    var f=h('div','fb-field'+(i>=3?' more':''));
+    f.appendChild(h('span','lb',{text:(q.label||'')+(q.label?'：':'')}));
+    f.appendChild(h('div','ctl',null,renderQueryField(q,ctx,i)));
+    grid.appendChild(f);
+  });
+  bar.appendChild(grid);
+  var act=h('div','fb-actions');
+  var rb=h('button','ant-btn',{type:'button'});
+  rb.appendChild(txt('重置'));
+  if(p.resetId) rb.setAttribute('data-node-id',p.resetId);
+  act.appendChild(rb);
+  var qb=h('button','ant-btn primary',{type:'button'});
+  qb.appendChild(icon('search',14)); qb.appendChild(txt('查询'));
+  if(p.queryId) qb.setAttribute('data-node-id',p.queryId);
+  act.appendChild(qb);
+  if(fields.length>3){
+    var tg=h('button','ant-btn link fb-toggle',{type:'button'});
+    tg.appendChild(txt('收起'));
+    tg.onclick=function(){
+      var on=bar.classList.toggle('collapsed');
+      tg.textContent=on?'展开':'收起';
+    };
+    act.appendChild(tg);
+  }
+  bar.appendChild(act);
+  return bar;
+}
 function buildListToolbar(p,ctx,node){
   var bar=h('div','ant-list-toolbar');
   (p.toolbar||[]).forEach(function(it,i){
@@ -1491,14 +1634,42 @@ function buildTableFoot(p,ctx){
   return foot;
 }
 
+/* 列级修饰：省略号 / 左右固定 / 数值右对齐（I-07 D3/D5/D9）。
+   语义写在 props.columns 上，不写全局 CSS —— 全局 `td{text-overflow:ellipsis}` 会让
+   28 列里只有 1 列真溢出（C7），其余 27 处是装饰，而真正的溢出列反而看不出来。 */
+function colClass(c){
+  var s=[];
+  if(c.ellipsis) s.push('cell-ellipsis');
+  if(c.fix==='left') s.push('col-fix-l');
+  if(c.fix==='right') s.push('col-fix-r');
+  if(c.align==='right'||c.num) s.push('num');
+  return s.join(' ');
+}
+/* 列宽写进 DOM 时**必须带单位**。
+   反面教材（I-07 §3.8 头号缺陷）：`style:'width:'+c.width` 生成 `width:48`，
+   这是非法 CSS，浏览器整条声明丢弃 → table-layout:fixed 把 8 列均分
+   （866÷8 = 108.25px），声明的 48 / 188 / 125 一列都没生效。
+   更坏的是它**看不出来**：P7 读 JSON 声明率、P17 只比 scrollWidth，两条判据同时绿。
+   数值补 px；已经带单位的字符串（'20%' / '120px'）原样保留。 */
+function colWidthStyle(c){
+  var w=c.width;
+  if(w===null||w===undefined||w==='') return null;
+  var s=String(w).trim();
+  if(!s) return null;
+  return /^[0-9.]+$/.test(s) ? ('width:'+s+'px') : ('width:'+s);
+}
+
 R.Table=function(p,ctx,node){
   var cols=p.columns||[], nid=node&&node.id?node.id:null;
-  var wrap=h('div','ant-table-wrap');
-  var t=h('table','ant-table'+(p.bordered?' bordered':'')+(p.size==='small'?' sm':''));
+  var sizeCls=(p.size==='xs')?' xs':((p.size==='small')?' sm':'');
+  var fixed=!!(p.tableLayout==='fixed'||p.fixed);
+  var wrapAttrs=(p.stickyHeader&&p.maxHeight)?{style:'--tw-max:'+p.maxHeight}:null;
+  var wrap=h('div','ant-table-wrap'+(p.stickyHeader?' sticky':''),wrapAttrs);
+  var t=h('table','ant-table'+(p.bordered?' bordered':'')+sizeCls+(fixed?' fixed':''));
   var thead=h('thead'), tr=h('tr');
   if(p.radio) tr.appendChild(h('th','ant-th-radio',null,[h('span','ant-radio-dot')]));
   if(p.rowSelection) tr.appendChild(h('th','ant-th-check',null,[h('span','ant-checkbox')]));
-  cols.forEach(function(c){ tr.appendChild(h('th',null,{text:c.title,style:c.width?'width:'+c.width:null})); });
+  cols.forEach(function(c){ tr.appendChild(h('th',colClass(c),{text:c.title,style:colWidthStyle(c)})); });
   thead.appendChild(tr); t.appendChild(thead);
   var tbody=h('tbody');
   if(p.loading){ for(var i=0;i<4;i++){ var r=h('tr'); if(p.radio) r.appendChild(h('td','ant-td-radio',null,h('div','ant-skel-line')));
@@ -1507,7 +1678,19 @@ R.Table=function(p,ctx,node){
   else if(!p.data||!p.data.length||p.empty){
     var span=cols.length+(p.rowSelection?1:0)+(p.radio?1:0);
     var td=h('td',null,{colspan:span});
-    td.appendChild(h('div','ant-empty-inline',null,[icon('file',26),h('span',null,{text:p.emptyText||'暂无数据'})]));
+    /* 空态与零结果是两件事：一件是「还没有数据」，一件是「筛掉了」。
+       文案与动作必须不同，否则用户不知道是该去新建，还是该去清空筛选（I-07 §4 / S11）。 */
+    var empty=h('div','ant-empty-inline',null,[icon('file',26),
+      h('span',null,{text:p.emptyText||(p.query&&p.query.length?'没有符合条件的记录，试试清空筛选':'暂无数据')})]);
+    td.appendChild(empty);
+    if(p.emptyAction){
+      var ea=h('div',null,{style:'margin-top:8px'});
+      var eb=h('button','ant-btn'+(p.emptyAction.type?' '+p.emptyAction.type:''),{type:'button'});
+      if(p.emptyAction.icon) eb.appendChild(icon(p.emptyAction.icon,14));
+      eb.appendChild(txt(p.emptyAction.text||''));
+      if(p.emptyAction.id) eb.setAttribute('data-node-id',p.emptyAction.id);
+      ea.appendChild(eb); td.appendChild(ea);
+    }
     tbody.appendChild(h('tr',null,null,td));
   } else {
     p.data.forEach(function(row,ri){
@@ -1517,23 +1700,33 @@ R.Table=function(p,ctx,node){
       r.__iprdRow=row;                       /* 行上下文（同上） */
       if(p.radio) r.appendChild(h('td','ant-td-radio',null,[h('span','ant-radio-dot')]));
       if(p.rowSelection) r.appendChild(h('td','ant-td-check',null,[h('span','ant-checkbox')]));
-      cols.forEach(function(c){ r.appendChild(h('td',null,{style:c.align?'text-align:'+c.align:null},cellContent(c,row,nid,ri))); });
+      /* 长文本截断后要能把全文读出来，否则「省略号」等于「信息丢失」：给 title 兜底 */
+      var titleTip=p.ellipsisTitle?cols.map(function(c){ return row[c.dataIndex]; }).filter(function(v){ return v!=null&&v!==''; }).join(' · '):null;
+      cols.forEach(function(c){
+        var tt=null;
+        if(c.ellipsis&&p.ellipsisTitle!==false){ var v=row[c.dataIndex]; tt=(v==null?'':String(v)); }
+        r.appendChild(h('td',colClass(c),{style:c.align?'text-align:'+c.align:null,title:tt},cellContent(c,row,nid,ri)));
+      });
       tbody.appendChild(r); });
   }
   t.appendChild(tbody); wrap.appendChild(t);
 
   var hasShell=(p.query&&p.query.length)||(p.toolbar&&p.toolbar.length)||p.title||p.pagination;
   if(!hasShell) return wrap;               /* 老写法：保持 DOM 原样 */
-  var root=h('div','ant-table-root');
-  if(p.query&&p.query.length) root.appendChild(buildQueryBar(p,ctx));
+  var root=h('div','ant-table-root'+(p.stickyFooter?' sticky-pager':''));
+  if(p.query&&p.query.length){
+    /* 两条筛选区路径并存：filterBar:'grid3' 走新结构（两行三列），
+       不写这个键的旧产物继续走 buildQueryBar —— 一次改渲染器不带走所有旧页。 */
+    root.appendChild(p.filterBar==='grid3'?buildFilterBar(p,ctx):buildQueryBar(p,ctx));
+  }
   if(p.toolbar&&p.toolbar.length) root.appendChild(buildListToolbar(p,ctx,node));
   if(p.title){
-    var tt=h('div','ant-table-title');
-    tt.appendChild(txt(p.title));
+    var tt2=h('div','ant-table-title');
+    tt2.appendChild(txt(p.title));
     var tl=h('span',null,{style:'display:inline-flex;gap:8px;margin-left:auto'});
     tl.appendChild(icon('setting',15));
-    tt.appendChild(tl);
-    root.appendChild(tt);
+    tt2.appendChild(tl);
+    root.appendChild(tt2);
   }
   root.appendChild(wrap);
   if(p.pagination) root.appendChild(buildTableFoot(p,ctx));
@@ -1853,7 +2046,20 @@ R.Drawer=function(p,ctx,node){
   if(!open) return null;
   var body=h('div','d-body'); renderChildren(node,ctx).forEach(function(c){body.appendChild(c)});
   var foot=slotFirst(node,'footer',ctx);
-  var dr=h('div','ant-drawer',null,[h('div','d-head',{text:p.title||''}),body,foot?h('div','d-foot',null,foot):null]);
+  /* R10：抽屉宽必须**读声明**。原实现 class 写死 ant-drawer，而 CSS 默认 420、
+     `.ant-drawer.w-lg{560}` 又从来没人加 —— 于是「声明 560 / 渲染 420」长期并存，
+     而 P11 读的是 JSON 声明，两边一起绿。这和 R1「width:48 缺 px」是同一个模式：
+     声明与渲染脱钩，判据锚在声明上。
+     口径：≥560 走 CSS 档 w-lg；其它数值用 inline，保证「声明 = 渲染」；
+     不写才吃默认 420。作者自己写了 w-lg 就不重复加（class 会重复但不致命，
+     这里仍然判断一次，免得 `.ant-drawer.w-lg.w-lg` 这种脏类名进 DOM）。 */
+  var cls='ant-drawer';
+  var w=Number(p.width);
+  var authored=String(p.class||p.className||'');
+  var lg=isFinite(w)&&w>=560&&authored.indexOf('w-lg')<0;
+  if(lg) cls+=' w-lg';
+  var dr=h('div',cls,null,[h('div','d-head',{text:p.title||''}),body,foot?h('div','d-foot',null,foot):null]);
+  if(isFinite(w)&&w>0&&!lg&&!(authored.indexOf('w-lg')>=0&&w===560)) dr.style.width=w+'px';
   return h('div','ant-drawer-mask',null,dr);
 };
 R.Popconfirm=function(p,ctx,node){ return h('span','ant-btn',{text:p.title||'确认?'}); };
@@ -3771,6 +3977,9 @@ function applyPage(id,opts){
   /* hash 是当前页的第一真源；LS 仅作为「hash 被抹掉」时的兜底 */
   LS.pageId=RT.pageId; LS.stateId=RT.stateId;
   lsSave();
+  /* F6：切到作业型列表页就折 PRD（不写 LS）。放在 renderAll 之后 ——
+     pane 的 offsetWidth 要在布局出来后才量得准。 */
+  try{ maybeAutoFoldPrd(); }catch(e){}
   return true;
 }
 /* 跳转页面（默认入栈）。opts.noPush=true 用于返回/外部驱动，避免污染栈 */
@@ -3976,14 +4185,95 @@ function revealCurrent(){
   m[pageModuleId(page)]=true;
   pageChain(page).forEach(function(a){ m[a.id]=true; });
 }
-function setNavCollapsed(v){
+function setNavCollapsed(v,persist){
   var pane=$('#paneNav'); if(!pane) return;
   pane.classList.toggle('collapsed',!!v);
-  LS.navCollapsed=!!v; lsSave();
+  if(persist!==false){ LS.navCollapsed=!!v; lsSave(); }
   var b=$('#btnNav'); if(b) b.classList.toggle('on',!v);
   try{ applyZoom(); positionBubbles(); }catch(e){}
   /* 导航宽度变化会改变中栏可用宽，右栏 PRD 需要重新钳制一次 */
   try{ setPrdWidth($('#panePrd').offsetWidth||LS.prdWidth||480, false); }catch(e){}
+}
+
+/* =====================================================================
+   F6 · A 层：作业型列表页自动折叠 PRD（保留导航）
+   ---------------------------------------------------------------------
+   为什么要有它：P15 量的是「默认态评审面板宽」——三栏全开时 pane 只有 856
+   （1600 档）/ 696（1440 档），目标 1342 / 1182。作业型列表页的价值在「一屏多行」，
+   默认就摆一块 PRD 等于把 480px 永久租给一个还没看的文档。
+   折叠后保留导航（P15 的目标数就是「保留 nav」下算出来的）。
+   ===================================================================== */
+function contentDirectTables(page){
+  /* 与 tests/check_ui_shape.py 的 content_direct_tables **同口径**：
+     只下钻 Space/Row/Col/Divider/Content，不钻 Card/Form/Drawer/Table ——
+     详情页的明细表被 Card 包着，不该算「列表页」。
+     改这里必须同时改判据，否则「今天几个列表页」两边会各说各的。 */
+  if(!page) return [];
+  var C=null;
+  (function find(n){
+    if(!n||C) return;
+    if(n.type==='Content'){ C=n; return; }
+    (n.children||[]).forEach(find);
+  })(page.componentTree||{});
+  if(!C) return [];
+  var out=[], stack=(C.children||[]).slice();
+  while(stack.length){
+    var n=stack.shift();
+    if(!n||typeof n!=='object') continue;
+    if(n.type==='Table') out.push(n);
+    else if(n.type==='Space'||n.type==='Row'||n.type==='Col'||n.type==='Divider'||n.type==='Content'){
+      stack=stack.concat(n.children||[]);
+    }
+  }
+  return out;
+}
+function isWorkListPage(page){
+  /* 取判据口径里**更严的那一半**：Content 直属有 Table 且带 pagination。
+     check_ui_shape 还允许「≥5 行数据」兜底（给没有分页的老产物），容器不采用 ——
+     自动折叠是主动行为，宁可少折一次，也不要在详情页上突然把 PRD 收走。 */
+  return contentDirectTables(page).some(function(t){
+    return !!(t.props&&t.props.pagination);
+  });
+}
+var PRD_AUTOFOLD_HINTED=false;   /* 每个产物只提示一次；内存变量，**不落 localStorage**（D-1） */
+/* 每页只做一次「初态」：key 是 pageId。为什么要记这个 ——
+   F6 只决定「首次进入这类页面时谁折叠」，不决定「用户显式展开之后的结果」。
+   不记的话，用户手动点开 PRD、切到新建页再切回来，PRD 又会被自动收走，
+   看起来像「点了没用」。同理，第二次进入也不该再弹一次提示。 */
+var PRD_AUTOFOLD_SEEN={};
+function maybeAutoFoldPrd(){
+  var page=curPage();
+  if(!page) return;
+  var pid=page.id||'';
+  if(PRD_AUTOFOLD_SEEN[pid]) return;          /* 本页已初始化：之后的开/合全由用户决定 */
+  if(!isWorkListPage(page)) return;           /* 非列表页不记账：将来若改成列表页，仍能折一次 */
+  PRD_AUTOFOLD_SEEN[pid]=true;
+  var pane=$('#panePrd');
+  if(!pane) return;
+  if(pane.classList.contains('collapsed')) return;   /* 已经折了（含用户手动折的）就别再动 */
+  setPrdCollapsed(true,false);
+  if(!PRD_AUTOFOLD_HINTED){
+    PRD_AUTOFOLD_HINTED=true;
+    toast('已切到全宽：列表页默认收起 PRD，点右上角「PRD」可展开','info');
+  }
+}
+/* 「全宽预览」：一键折 nav + PRD，用于临时换到最大画布（再点退出） */
+var FULLW_ON=false, FULLW_PRV=null;
+function setFullWidth(v){
+  var on=!!v;
+  if(on&&!FULLW_ON){
+    /* 进来前先记住两侧原状，退出时按**原样**还原，不按「页面类型的默认态」还原：
+       用户如果先手动展开了 PRD 再点全宽，退出时不该被收走。 */
+    var pn=document.querySelector('#paneNav'), pp=document.querySelector('#panePrd');
+    FULLW_PRV={nav:!!(pn&&pn.classList.contains('collapsed')),
+               prd:!!(pp&&pp.classList.contains('collapsed'))};
+  }
+  FULLW_ON=on;
+  setNavCollapsed(FULLW_ON,false);
+  setPrdCollapsed(FULLW_ON?true:(FULLW_PRV?FULLW_PRV.prd:isWorkListPage(curPage())),false);
+  if(!FULLW_ON&&FULLW_PRV) setNavCollapsed(FULLW_PRV.nav,false);
+  var b=$('#fullWidth');
+  if(b){ b.classList.toggle('on',FULLW_ON); b.textContent=FULLW_ON?'退出全宽':'全宽预览'; }
 }
 
 /* ---------- 右栏 PRD 面板：像素制定宽 + 折叠 ----------
@@ -4014,7 +4304,7 @@ function setPrdWidth(px,persist){
   pane.style.flex='0 0 '+w+'px'; pane.style.width=w+'px';
   if(persist!==false){ LS.prdWidth=w; lsSave(); }
 }
-function setPrdCollapsed(v){
+function setPrdCollapsed(v,persist){
   var ws=document.querySelector('.workspace'), pane=$('#panePrd'); if(!ws||!pane) return;
   if(v){
     if(!pane.classList.contains('collapsed')){ LS.prdWidth=pane.offsetWidth||LS.prdWidth||PRD_DEFAULT_W; }
@@ -4023,7 +4313,9 @@ function setPrdCollapsed(v){
     pane.classList.remove('collapsed'); ws.classList.remove('prd-collapsed');
     setPrdWidth(LS.prdWidth||PRD_DEFAULT_W,false);
   }
-  LS.prdCollapsed=!!v; lsSave();
+  /* persist===false 时不写 LS —— F6 的「自动折叠」用它：
+     默认折叠是每次打开都一致的体验（D-1），不是用户偏好，落盘会让下次打开别的页也保持折叠。 */
+  if(persist!==false){ LS.prdCollapsed=!!v; lsSave(); }
   var t=$('#prdToggle'); if(t) t.textContent=v?'PRD ›':'PRD ‹';
   try{ applyZoom(); positionBubbles(); }catch(e){}
 }
@@ -4066,6 +4358,8 @@ function init(){
   $$('#coDir button').forEach(function(x){ x.classList.toggle('on',x.getAttribute('data-dir')===RT.coDir); });
   if(LS.canvasPos&&typeof LS.canvasPos==='object'&&Object.keys(LS.canvasPos).length) RT.coAuto=false;
   renderAll();
+  /* F6：首屏若是作业型列表页，进页即折 PRD（与 applyPage 里的同一处理） */
+  try{ maybeAutoFoldPrd(); }catch(e){}
   try{ setupZoomPan(); }catch(e){ warn('缩放/平移初始化失败: '+e.message); }
 
   $('#stateSelect').onchange=function(){ RT.stateId=this.value; applyState(); renderProto(); renderPrd(); };
@@ -4219,6 +4513,8 @@ function init(){
   var pt=$('#prdToggle'); if(pt) pt.onclick=function(){ setPrdCollapsed(!$('#panePrd').classList.contains('collapsed')); };
   var pc=$('#prdCollapse'); if(pc) pc.onclick=function(){ setPrdCollapsed(true); };
   var pr=$('#prdRestore'); if(pr) pr.onclick=function(){ setPrdCollapsed(false); };
+  /* 全宽预览：折 nav + PRD（再点恢复）。不写 LS —— 它是临时视图，不是默认态。 */
+  var fw=$('#fullWidth'); if(fw) fw.onclick=function(){ setFullWidth(!FULLW_ON); };
   window.addEventListener('resize',function(){
     applyZoom(); positionBubbles();
     try{ setPrdWidth($('#panePrd').offsetWidth||LS.prdWidth||PRD_DEFAULT_W,false); }catch(e){}

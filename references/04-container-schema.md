@@ -169,6 +169,11 @@
 | `<Table 节点 id>__row_<i>` | `Table` | `props.rowClick: true` | 第 i 行（0 起） |
 | `<Table 节点 id>__act_<i>_<key>` | `Table` | `columns[].actions` 里声明了 `key` | 第 i 行操作列的第 `key` 个按钮 |
 | `<Modal 节点 id>__ok` / `__cancel` | `Modal` | `props.footer !== false` | 弹窗底部「确定」/「取消」。`__cancel` **内建关闭该弹窗** |
+| `props.queryId`（**作者声明，非合成**） | `Table` | `props.filterBar === 'grid3'` 且写了 `queryId` | 「查询」按钮的节点 id，渲成 `data-node-id`，可被 `on.target` 引用 |
+| `props.resetId`（**作者声明，非合成**） | `Table` | 同上 | 「重置」按钮的节点 id，同上 |
+
+> ⚠️ 最后两行与上面几行**性质不同**：`__back` / `__row_*` / `__act_*` / `__ok` 是容器按基节点 id 合成的；`queryId` / `resetId` 是**作者自己起的名字**，容器只负责把它写到按钮的 `data-node-id` 上。
+> 因此写错不会被「合成规则」兜住 —— 校验器会做**反向校验**：声明了 `queryId` / `resetId` 却在产物里找不到对应按钮，直接报 ERROR（悬空引用）。
 
 > ⚠️ 弹窗按钮的合成 id 用的是 **Modal 节点 id**，不是 `props.modalId`。两者常常同名但**语义不同**：`showModal` / `hideModal` 引用 `modalId`，交互寻址引用节点 id。校验器会对写错的基节点直接报 ERROR。
 

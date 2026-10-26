@@ -8,7 +8,7 @@
     "reviewMode": false,
     "currentPageId": "page-iqc-list",
     "defaultPanel": "both",
-    "note": "P9 B 分支样本：2 行数据，第 1 行单行、第 2 行（批次号 wrap+maxLines:2）多行 —— 两组各 1 行，极差无从算"
+    "note": "P9 B 分支样本：2 行数据，第 1 行 = 1 行盒、第 2 行 = **实测 3 行盒**（列 lot 配了 wrap:true / maxLines:2，但 146px 下这个值断成 3 行；maxLines 只是视觉裁切，不改行盒数）—— 两组各 1 行，极差无从算，故 P9 只能报条件式 SKIP"
   },
   "product": {
     "name": "来料检验管理系统",

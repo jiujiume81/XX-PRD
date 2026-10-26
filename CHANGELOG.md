@@ -299,7 +299,9 @@
   - **DoD 11 `check_shape_gate()`**：目标**写死** `assets/examples/example-06-dense-list.json`，
     不跟着 `default_targets()` 走 —— 哪天 example-06 掉出默认目标，门会安静地去判别的文件还说 PASS。
     detail 自带 scope，防止被读成「全量通过」：
-    `fixture=example-06-dense-list.json rc=0 PASS=55 FAIL=0 SKIP=1 ｜ 唯一 SKIP=P17（列宽预算闭合）｜ 未判：其余示例（全量模式另跑）`。
+    `fixture=example-06-dense-list.json rc=0 PASS=55 FAIL=0 SKIP=1 ｜ 唯一 SKIP=P17「列宽预算闭合（验收态 866）」｜ 未判：其余示例（全量模式另跑）`。
+    （标题里那对括号是**范围信息**——P17 只判 866 档；削掉它这条 detail 就答不了「判的是哪一档」，
+    所以嵌套时改**外层括号**形态，不删标题内容。）
     那条 `SKIP=1` **必须点名**：`skip_allowed()` 的静态白名单只有 `P8/P13/P17`，`P2a/P2b` 靠值里的
     `SKIP(行数 N < M，` 条件放行；哪天那 1 条换了**理由**、id 还在名单里，行数与结论都已不同。
     所以「数得出 SKIP 条数却点不出是哪一条」直接判 FAIL。
@@ -309,6 +311,17 @@
   - **编号只追加不插队**：DoD 10/11 排在 9 之后，1–9 的编号一个字没动 —— `release.md` 与历史交付说明按编号引用。
     另**不并进 `run.sh`**：`run.sh` 的语义是容器回归（757 基线），退出码三义已定，混进去就分不清了。
   - **两项各自 status、各自 detail**，不出现「检查通过」这种合并结论（INV-13）。
+- **`DoD 2` 偶发红必须留下 CASE 名（四支判定）**：`run.sh` 是确定性断言，确定性测试偶发红
+  只可能是环境噪声，或 CASE 自己非确定（时间/随机/顺序依赖）—— 两种都得先拿到 CASE 名才谈得上修。
+  原来的 `first_lines(text, 8)` 取的是**开头 8 行**，而失败信息在末尾，于是那条偶发红一个字都没留下
+  （「没有输出 ≠ 没有失败」的现场版）。现在：
+  - 摘要抓含 `FAIL` / `✗` / `CASE` / `Error` 的行（取前 8 行），抓不到再退回最后 5 行；
+  - `rc=1` 时**再跑一次**，两段摘要都打印（`RUN1 └` / `RUN2 └`），**不许只留第二次** —— 那是用重跑换绿；
+  - 判定五支：都绿 PASS ｜ 都红且首个失败 CASE 相同 **FAIL**（确定性红）｜ 都红但 CASE 不同 **ENV** ｜
+    一绿一红 **ENV**（本轮不可信，**不是**"重跑后绿了"）｜ 有 `SAFE_DELETE` 拦截 **ENV**（原分支保持）；
+  - `rc∈{2,3}`（run.sh 自己的环境/锁）仍直接 ENV，不重跑。
+  自证：纯函数 `_two_run_verdict` 逐支断言，另用**有状态假 run.sh**（第一次红、第二次绿）走真 subprocess
+  路径，断言 `ENV 一绿一红` 且两段摘要都在。
 - **接线自证「会红」**（只证明新增项是绿的，等于没证明）：
   - DoD 10：往 `expected-fails.json` 某档塞不存在的 `P99_not_exist` →
     `FAIL  pages=2 有 1 档不符（16/15✗ 16/16 16/16 12/12）`、`少红 1 条：P99_not_exist`，其余十项状态不变 → 还原；
@@ -316,12 +329,14 @@
     `FAIL  fixture=CAPA-PRD.data.json rc=1 PASS=15 FAIL=31 SKIP=10 ｜ 原句：FAIL` → 还原。
   - 现状如实：`RESULT FAIL 10/11（未通过：安装副本同步）｜TREE DIRTY(n)` —— 旧的那条真红没变，
     新增两项绿，**不拿它把整体包装成绿**。
-- **`example-05` 教材数据自洽（XX-046）：`total 1286 → 6`、`pageSize 10 → 6`，走生成器不手改 JSON**。
+- **`example-05` 教材数据自洽（XX-046）：采纳「改 `total`」，否决「补数据」**。
+  做法：`gen_example05.py` 的 `pagination` 由 `total:1286 / pageSize:10` 改为真实行数 6
+  （代码写 `len(ORDER_ROWS)`，total 与 pageSize 同源），重跑生成器出 JSON，**不手改**。
   根因不是「少写几行」，是 **`total` 一个字段承担两个语义**（分页演示 / 数据量证据，`P2a/P2b` 读后者）——
-  同族：`width` 声明 vs 渲染、`Σ col.offsetWidth ≡ 表宽`。**补数据那条路被否**：`ORDERS` 六条
-  `status` 是 `草稿/待审批/已审批/部分到货/已关闭/已取消`，两两不同且与 `STATUS_COLORS` 六键一一对应，
-  补到 14 行只能靠重复状态 —— 那是改掉这份「行为模型」教材的用途，不是修数据。
-  `pageSize` 必须一起改：`pageSize 10 > total 6` 本身自相矛盾。
+  同族：`width` 声明 vs 渲染、`Σ col.offsetWidth ≡ 表宽`。
+  **① 补数据被否**：`ORDERS` 六条 `status` 是 `草稿/待审批/已审批/部分到货/已关闭/已取消`，两两不同且与
+  `STATUS_COLORS` 六键一一对应；补到 14 行进来的只能是**重复状态** —— 那是改掉这份「行为模型」
+  教材的用途，不是修数据。`pageSize` 必须一起改：`pageSize 10 > total 6` 本身自相矛盾。
   - **`P13@1440/1600` 移出 `EXPECTED_FAIL`，这是「条件消失」，不是判据放宽**：`P13` 的
     `total < 100 → SKIP`（`:1931`）先后被假 `total` 挡住，真实 `total=6` 时「`pageSize ≥ 20`」
     这个要求根本不成立（一页放 6 条就是全部）。阈值一个字没动，`SKIP_WHITELIST` 也没新增 P13。

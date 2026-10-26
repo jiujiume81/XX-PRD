@@ -185,6 +185,47 @@ def _safe_delete_note(line):
         return line.strip()[:120]
 
 
+def _run_digest(text):
+    """从 `run.sh` 输出里取「失败在哪」——**取末尾的失败行，不取开头**。
+
+    原来用 `first_lines(text, 8)`：取的是**开头 8 行**，而 run.sh 的失败信息在末尾，
+    于是 DoD 2 偶发红时一个字都没留下 —— 「没有输出 ≠ 没有失败」的现场版。
+    抓含 `FAIL` / `✗` / `CASE` / `Error` 的行，最多 8 行；一个都抓不到就退回最后 5 行。
+    """
+    rows = [l.rstrip() for l in text.splitlines() if l.strip()]
+    hits = [l for l in rows if re.search(r"FAIL|✗|CASE|Error", l)]
+    return [l.strip()[:160] for l in (hits[:8] or rows[-5:])]
+
+
+def _first_bad_case(text):
+    """失败 CASE 名。四支判定靠它区分「确定性红」（同一 CASE）与「不确定红」（不同 CASE）。"""
+    for line in text.splitlines():
+        if not re.search(r"\[FAIL\]|fails=[1-9]|✗", line):
+            continue
+        m = re.search(r"CASE\s+(\S+)", line)
+        if m:
+            return m.group(1)
+    m = re.search(r"CASE\s+(\S+)", text)
+    return m.group(1) if m else "?"
+
+
+def _two_run_verdict(rc1, rc2, case1, case2):
+    """两次回归的判定（纯函数，便于逐支自证）。调用方已排除 SAFE_DELETE 与 rc∈{2,3}。
+
+    | 两次 | 判 | 理由 |
+    |---|---|---|
+    | 都绿 | PASS | 由调用方在单次就返回，走不到这里 |
+    | 都红且 CASE 相同 | FAIL | 确定性红，是真红 |
+    | 都红但 CASE 不同 | ENV | 不确定，须人查 |
+    | 一绿一红 | ENV | 本轮结果不可信，**不是**"重跑后绿了" |
+    """
+    if rc2 == 0:
+        return STATUS_ENV, "一绿一红，本轮结果不可信（不是「重跑后绿了」）"
+    if case1 != case2:
+        return STATUS_ENV, "两次红在不同 CASE，须人查"
+    return STATUS_FAIL, "两次同一 CASE，确定性红"
+
+
 def check_regression(_docs, _ph, _gen):
     """DoD 2：容器回归全绿，且 retries 不得超过上限（勘误 E-03）。
 
@@ -194,27 +235,61 @@ def check_regression(_docs, _ph, _gen):
     `[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]` 就是它留下的痕迹。
     这种红不是"回归失败"而是"本轮结果不可信"，必须判 ENV，不许判 FAIL——
     否则会把环境问题报成代码问题，正是 E-01/E-02/E-03 同型的混淆。
+
+    **偶发红必须留下 CASE 名**（2026-10-26，四支）。`run.sh` 是**确定性断言**：
+    确定性测试偶发红只可能是环境噪声，或 CASE 自己非确定（时间/随机/顺序依赖）——
+    两种都得先拿到 CASE 名才谈得上修，所以 instrument 不是可选项。
+    `rc != 0` 时**再跑一次**，按两次结果判：
+
+    | 两次结果 | 判 | 理由 |
+    |---|---|---|
+    | 都绿 | PASS | — |
+    | 都红且首个失败 CASE 相同 | FAIL | 确定性红，是真红 |
+    | 都红但 CASE 不同 | ENV | 不确定，须人查 |
+    | 一绿一红 | ENV | 本轮结果不可信，**不是**"重跑后绿了" |
+    | 有 SAFE_DELETE 拦截 | ENV | 已有分支，保持 |
+
+    **不许只保留第二次的结果** —— 那是用重跑换绿；两段摘要都必须在 detail 或后续行里。
     """
     bash = shutil.which("bash")
     if not bash:
         return STATUS_ENV, "找不到 bash", []
-    proc = subprocess.run([bash, os.path.join(TESTS, "run.sh")], capture_output=True, text=True)
-    text = proc.stdout + proc.stderr
-    total = [l for l in text.splitlines() if l.startswith("TOTAL ")]
-    retries = [l for l in text.splitlines() if l.startswith("RETRIES=")]
-    detail = " ".join(retries) if retries else (total[0] if total else "无 TOTAL/RETRIES 行")
+
+    def once():
+        p = subprocess.run([bash, os.path.join(TESTS, "run.sh")], capture_output=True, text=True)
+        t = p.stdout + p.stderr
+        tot = [l for l in t.splitlines() if l.startswith("TOTAL ")]
+        rty = [l for l in t.splitlines() if l.startswith("RETRIES=")]
+        return p.returncode, t, (rty[0] if rty else (tot[0] if tot else "无 TOTAL/RETRIES 行"))
+
+    rc, text, brief = once()
     blocked = [l for l in text.splitlines() if "SAFE_DELETE" in l]
     if blocked:
         note = "`.build` 清理被拦截，本轮结果不可信（%s）" % _safe_delete_note(blocked[0])
         if len(blocked) > 1:
             note += "，共 %d 处" % len(blocked)
-        lines = [l.strip()[:160] for l in blocked[:2]] + ([total[0]] if total else [])
-        return STATUS_ENV, note, lines
-    if proc.returncode in (2, 3):
-        return STATUS_ENV, detail + "（run.sh rc=%d，环境或锁）" % proc.returncode, first_lines(text, 3)
-    if proc.returncode != 0:
-        return STATUS_FAIL, detail, first_lines(text, 8)
-    return STATUS_PASS, detail, []
+        return STATUS_ENV, note, _run_digest(text)[:2]
+    if rc == 0:
+        return STATUS_PASS, brief, []
+    if rc in (2, 3):
+        # run.sh 自己的退出码三义：2/3 = 环境或锁，不是回归失败。重跑没有意义。
+        return STATUS_ENV, brief + "（run.sh rc=%d，环境或锁）" % rc, _run_digest(text)
+
+    # 红了：再跑一次，**两段都留下**。
+    rc2, text2, brief2 = once()
+    blocked2 = [l for l in text2.splitlines() if "SAFE_DELETE" in l]
+    case1, case2 = _first_bad_case(text), _first_bad_case(text2)
+    # rc=0 的那次没有「首个失败」，别硬填一个 CASE 名（读数不支撑结论）。
+    head = "第1次 rc=%d 首个失败 %s ｜ 第2次 rc=%d 首个失败 %s" % (
+        rc, case1, rc2, case2 if rc2 else "无")
+    lines = ([l.strip()[:160] for l in blocked2[:1]]
+             + ["RUN1 └ " + x for x in _run_digest(text)]
+             + ["RUN2 └ " + x for x in _run_digest(text2)])
+    if blocked2:
+        return STATUS_ENV, head + " ｜ 第2次 `.build` 清理被拦截，本轮结果不可信", lines
+    st, why = _two_run_verdict(rc, rc2, case1, case2)
+    extra = ("（%s）" % brief2) if st == STATUS_FAIL else ""
+    return st, head + " ｜ " + why + extra, lines
 
 
 def _import_check_modules():
@@ -477,7 +552,7 @@ def check_shape_gate(_docs, _ph, _gen):
         return STATUS_FAIL, scope + " ｜ SKIP=%d 但打不出是哪一条（读数不支撑结论）" % nskip, first_lines(out, 6)
     skip_s = ("无 SKIP" if not nskip else
               "%s SKIP=%s" % ("唯一" if nskip == 1 else "共",
-                              "、".join("%s（%s）" % (i, titles.get(i, "?")) for i in skip_ids)))
+                              "、".join("%s「%s」" % (i, titles.get(i, "?")) for i in skip_ids)))
     tail = " ｜ 未判：其余示例（全量模式另跑）"
     if proc.returncode != 0:
         ow = re.search(r"SKIP-OUT-OF-WHITELIST=\[[^\]]*\]", out)

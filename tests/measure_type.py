@@ -23,6 +23,8 @@
 - **S-01**：上述元素 `getComputedStyle().fontSize` 的**去重集合**与各档节点数。
 - **S-02 ①**：表格 `tbody tr` 的高度（**排除 `thead`**：表头 34 与数据行 34 不是同一件事），
   报集合、最高值、表头行高（单列参考值，不计入）。
+  一页可能有两张表（CAPA 的 `page-capa-list` 就是），所以**按表分桶、定位串带 `table[n]>`**，
+  再合并上报；不分桶会把「两张表各自整齐」读成「一张表行高不一致」。
 - **S-02 ②**：**表格外**有文字元素的 `line-height ÷ font-size`（分母是 `font-size`，不是行盒高）；
   `line-height: normal` 的元素单独计数，不混进比值里。被排除的表格内文字元素数单独打。
 
@@ -144,20 +146,29 @@ EXTRA_JS = r"""
     out.fonts.buckets=_cap(fm, 4); out.fonts.total=total;
     out.fonts.sizes=Object.keys(fm).map(Number).sort(function(a,b){return a-b;});
 
-    /* S-02 ①：tbody 行高（排除表头） */
-    var trs=root.querySelectorAll('.ant-table tbody tr'), hm={}, hmax=null, hn=0;
-    for(var j=0;j<trs.length;j++){
-      var h=trs[j].offsetHeight;
-      if(!(h>0)) continue;
-      var b=hm[h]||(hm[h]={n:0,locs:{}});
-      b.n++; hn++;
-      var rk=trs[j].getAttribute('data-row-key');
-      var rl='tbody tr'+(rk?('[data-row-key="'+rk+'"]'):('['+j+']'));
-      b.locs[rl]=(b.locs[rl]||0)+1;
-      if(hmax===null || h>hmax) hmax=h;
+    /* S-02 ①：tbody 行高（排除表头）。
+       一页可能有两张表（CAPA 的 page-capa-list 就是），所以**按表分桶**再合并上报：
+       定位串带 `table[n]>`，否则「tbody tr[0]」说不清是哪张表的第 0 行，
+       两表行高不同时人也分不清那是设计差还是缺陷。 */
+    var tabs=root.querySelectorAll('.ant-table'), hm={}, hmax=null, hn=0, tinfo=[];
+    for(var ti=0; ti<tabs.length; ti++){
+      if(tabs[ti].parentElement && tabs[ti].parentElement.closest('.ant-table')) continue;  /* 嵌套表不重复计 */
+      var trs=tabs[ti].querySelectorAll('tbody tr'), tj=0;
+      for(var j=0;j<trs.length;j++){
+        var h=trs[j].offsetHeight;
+        if(!(h>0)) continue;
+        var b=hm[h]||(hm[h]={n:0,locs:{}});
+        b.n++; hn++;
+        var rk=trs[j].getAttribute('data-row-key');
+        var rl='table['+(ti+1)+']>tbody tr'+(rk?('[data-row-key="'+rk+'"]'):('['+j+']'));
+        b.locs[rl]=(b.locs[rl]||0)+1; tj++;
+        if(hmax===null || h>hmax) hmax=h;
+      }
+      tinfo.push({i:ti+1, rows:tj});
     }
     out.tableRows.counts={}; for(var hk in hm) out.tableRows.counts[hk]=hm[hk].n;
     out.tableRows.buckets=_cap(hm, 3); out.tableRows.max=hmax; out.tableRows.total=hn;
+    out.tableRows.tables=tinfo;
     out.tableRows.sizes=Object.keys(hm).map(Number).sort(function(a,b){return a-b;});
     var ths=root.querySelectorAll('.ant-table thead tr');
     for(var t=0;t<ths.length;t++){ out.tableRows.headH.push(ths[t].offsetHeight); }
@@ -286,10 +297,12 @@ def _block(s, label):
     L.append("  S-01 font-size 去重 %s" % _fmt_set(
         s["fonts"]["sizes"], s["fonts"]["counts"], s["fonts"].get("buckets")))
     tr = s["tableRows"]
-    L.append("  S-02① 数据行高 最高 %s ｜ 表头行高 %s（不计入）｜ 数据行 %d 行"
+    tabs = tr.get("tables") or []
+    L.append("  S-02① 数据行高 最高 %s ｜ 表头行高 %s（不计入）｜ 数据行 %d 行（%s）"
              % (tr["max"],
                 ("{%s}" % "、".join(str(x) for x in tr["headH"])) if tr["headH"] else "（无表头）",
-                tr.get("total", 0)))
+                tr.get("total", 0),
+                " / ".join("table[%d] %d 行" % (x["i"], x["rows"]) for x in tabs) or "无表"))
     L.append(_fmt_set(tr["sizes"], tr["counts"], tr.get("buckets"), "px"))
     lr = s["lineRatios"]
     denom = (s.get("meta") or {}).get("denom", 0)

@@ -284,18 +284,44 @@
     `P2b INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6`。
   两条成对存在：摘掉 total 那一支才是 `SKIP`，留着 total 才是「造少」——
   只有一条的话，「SKIP 与 INCOMPLETE 的分界」就只剩文档里那句话。
-- **发布门 9 → 10 项：反样本守卫进闸门（DoD 10）**（team-lead 裁定，发布门口径变更）。
+- **发布门 9 → 11 项：反样本守卫 + 形态判据进闸门（DoD 10 / DoD 11）**（team-lead 裁定，发布门口径变更）。
   CAPA 反样本能到 `PASS=11 FAIL=21` 还发得出去，不是判据没做，是**闸门里没有它** ——
-  与「四处 ERROR 无人实现」同型：规范写了、代码零命中。新增 `check_reject_guard()`：
-  调用 `tests/check_reject.py` 的 `main()`（比对面「集合相等」只写在这一处，不复制），
-  **rc 三义分开**：`0 → PASS`（逐条相等）/ `1 → FAIL`（集合不符、基线没登记）/ `2 → ENV`（Chrome 找不到）。
-  混色的后果与 E-01/E-02/E-03 同型：Chrome 没装会被读成「反样本没问题」，或反过来把真缺陷藏进「环境问题」。
-  detail 必须能自证：`pages=2 逐条相等（15/15 16/16 16/16 12/12）｜页 …`；
-  `rc=0` 但解析不到任何逐档比对行 → **FAIL**（比了 0 条不许算通过）。
-  **编号只追加不插队**：DoD 10 排在 9 之后，1–9 的编号一个字没动 —— `release.md` 与历史交付说明按编号引用。
-  另**不并进 `run.sh`**：`run.sh` 的语义是容器回归（757 基线），退出码三义已定，混进去就分不清了。
-  接线自证（造红）：临时往 `expected-fails.json` 某档塞一个不存在的 id → DoD 10 必须 FAIL、
-  其余项状态不变 → 还原。**只证明新增项是绿的等于没证明**。
+  与「四处 ERROR 无人实现」同型：规范写了、代码零命中。
+  - **DoD 10 `check_reject_guard()`**：调用 `tests/check_reject.py` 的 `main()`（比对面「集合相等」
+    只写在这一处，不复制），**rc 三义分开**：`0 → PASS`（逐条相等）/ `1 → FAIL`（集合不符、基线没登记）/
+    `2 → ENV`（Chrome 找不到）。混色的后果与 E-01/E-02/E-03 同型：Chrome 没装会被读成「反样本没问题」，
+    或反过来把真缺陷藏进「环境问题」。detail 自证：`pages=2 逐条相等（15/15 16/16 16/16 12/12）｜页 …`；
+    **不符那档也必须进括号**（`16/15✗`）—— 全是相等对的括号会把 FAIL 读成「多了一个通过项」，
+    第一版正是这样：解析只认相等行，恰恰把不符那档漏掉了。
+    `rc=0` 但解析不到任何逐档比对行 → **FAIL**（比了 0 条不许算通过）；
+    `import check_reject` 失败单独成一句 FAIL（与「守卫发现反样本变绿」处置相反：一个修路径/环境，
+    一个改产物或改基线，同色就是让读的人自己猜）。
+  - **DoD 11 `check_shape_gate()`**：目标**写死** `assets/examples/example-06-dense-list.json`，
+    不跟着 `default_targets()` 走 —— 哪天 example-06 掉出默认目标，门会安静地去判别的文件还说 PASS。
+    detail 自带 scope，防止被读成「全量通过」：
+    `fixture=example-06-dense-list.json rc=0 PASS=55 FAIL=0 SKIP=1 ｜ 唯一 SKIP=P17（列宽预算闭合）｜ 未判：其余示例（全量模式另跑）`。
+    那条 `SKIP=1` **必须点名**：`skip_allowed()` 的静态白名单只有 `P8/P13/P17`，`P2a/P2b` 靠值里的
+    `SKIP(行数 N < M，` 条件放行；哪天那 1 条换了**理由**、id 还在名单里，行数与结论都已不同。
+    所以「数得出 SKIP 条数却点不出是哪一条」直接判 FAIL。
+    `rc=2` 的两种来源分开：`find_chrome()` 抛 → ENV；`main()` 的「没有可跑的产物」→ **FAIL**
+    （那是产物/路径缺陷，映射成 ENV 就把它藏进「环境问题」）。`rc=1` 时 `RESULT INCOMPLETE`
+    与 `RESULT FAIL` 都映射 FAIL，但 detail 带原句。
+  - **编号只追加不插队**：DoD 10/11 排在 9 之后，1–9 的编号一个字没动 —— `release.md` 与历史交付说明按编号引用。
+    另**不并进 `run.sh`**：`run.sh` 的语义是容器回归（757 基线），退出码三义已定，混进去就分不清了。
+  - **两项各自 status、各自 detail**，不出现「检查通过」这种合并结论（INV-13）。
+- **接线自证「会红」**（只证明新增项是绿的，等于没证明）：
+  - DoD 10：往 `expected-fails.json` 某档塞不存在的 `P99_not_exist` →
+    `FAIL  pages=2 有 1 档不符（16/15✗ 16/16 16/16 12/12）`、`少红 1 条：P99_not_exist`，其余十项状态不变 → 还原；
+  - DoD 11：临时把目标改成 `reject-01-capa-qms/CAPA-PRD.data.json` →
+    `FAIL  fixture=CAPA-PRD.data.json rc=1 PASS=15 FAIL=31 SKIP=10 ｜ 原句：FAIL` → 还原。
+  - 现状如实：`RESULT FAIL 10/11（未通过：安装副本同步）｜TREE DIRTY(n)` —— 旧的那条真红没变，
+    新增两项绿，**不拿它把整体包装成绿**。
+- **`example-05` 的 `INCOMPLETE(INSUFFICIENT_ROWS)` 不改判据、本轮不修**（team-lead 裁定，落 XX-046）：
+  根因不在「少写几行」，在 **`total` 一个字段承担两个语义**（分页演示 / 数据量证据，`P2a/P2b` 读后者）——
+  同族：`width` 声明 vs 渲染、`Σ col.offsetWidth ≡ 表宽`。改 `total` 的方案被否，因为它**直接后果**
+  是 `P13@1440/1600` 两条真实 FAIL 变 SKIP（`EXPECTED_FAIL` 里躺着），重登后 diff 只会被读成「改样本换绿」。
+  正确做法是 `gen_example05.py` 的 `ORDERS` 补到 ≥14 并同步 `pageSize`（现在 `pageSize:10` 配 14 行自相矛盾），
+  走生成器 + 基线重登。**这不许被记成「已知可忽略」**：全量模式看到它，答案就是「教材造少了，见 XX-046」。
 - 第一阶段的 `V-01` 只做式子验证、不做判据（需求单第二阶段）；第二阶段已接入（见上）。
   `cause` 的定位仍在一套算式里，没有另立阈值；`N-c` 不可达的理由见上一条通用纪律。
 

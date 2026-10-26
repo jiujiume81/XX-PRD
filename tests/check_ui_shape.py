@@ -421,7 +421,10 @@ PROBE = r"""
        于是「减法导航 208 − 真实 0 = 归因差 208」，合格产物被误红。三条同时成立才算：
          ① 纵向重叠（`r.top < c.bottom && r.bottom > c.top`）—— 上面一整行的页头不是横向占位；
          ② 水平不相交（`r.right <= c.left + 1 || r.left >= c.right - 1`）—— 必须并排，不能叠着；
-         ③ `position ∈ {static, relative, sticky}` —— absolute/fixed 是浮层，打开着的抽屉不算。
+         ③ `position ∈ {static, relative, sticky}` —— absolute/fixed **不占流式宽**，是浮层；
+            **排除 fixed 与排除 absolute 是同一个理由，不是遗漏**（team-lead 2026-10-26 定，驳回翻案）：
+            抽屉/浮层常用 `position:fixed`，算进真实导航的话，CAPA 那种页面一开抽屉归因差直接爆红 ——
+            它的宽度不是「从内容区减出去的那块」，而是「盖在内容区上的一层」。
        代入：example-06 的 `div.ant-sider`（208，左、并排、static）✓；
        CAPA 的 `div.ant-header` 纵向不重叠 ✗（不判重叠就会把 1440 全算进导航 → 误红）；
        抽屉 `absolute` 被 ③ 排除，不虚增。 */

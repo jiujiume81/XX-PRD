@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""DoD 1–10 发布准入检查：一条命令给出逐项名称与结论（XX-016）。
+"""DoD 1–11 发布准入检查：一条命令给出逐项名称与结论（XX-016）。
 
 为什么需要它：
   治理 §8.2 的第 1–9 项原本散在 4 个脚本与若干裸命令里，靠人逐条记得跑。
   分散 + 人工的检查不会被真正执行——E-01/E-02/E-03 三条勘误都证明了这一点。
   这里把它们收敛成一个退出码：非 0 即不许发布。
 
-  第 10 项（反样本守卫）是 I-09 第二阶段追加的，**编号必须排在 9 之后、不许插队**：
-  `release.md` 与历史交付说明都按编号引用，改动既有编号等于让所有历史记录指向错的项。
-  它单独存在的理由与上一条同源——**门一直知道产物不达标、产物照样交付**：
+  第 10、11 项（反样本守卫 / 形态判据）是 I-09 第二阶段追加的，**编号必须排在 9 之后、
+  不许插队**：`release.md` 与历史交付说明都按编号引用，改动既有编号等于让所有历史记录指向错的项。
+  它们单独存在的理由与上一条同源——**门一直知道产物不达标、产物照样交付**：
   CAPA 反样本能到 `FAIL=21` 还发得出去，不是判据没做，是闸门里没有它。
+  两项各自 status、各自 detail，**不许合并成一句「检查通过」**（INV-13）。
 
 设计原则（对应 I-02 preflight 的结论）：
   - **调用而不是复制**：能与既有脚本复用的一律 import 其函数（check_docs 的 5 个 check_*、
@@ -34,8 +35,8 @@
     RETRIES_MAX=1 python3 scripts/check_release.py     # 透传给 tests/run.sh
 
 退出码:
-    0 = 十项均 PASS 或 SKIP（SKIP 会在 RESULT 行计数）
-    1 = 任一项 FAIL（含 DoD 10 的"反样本红错了地方"——那与产物缺陷同责）
+    0 = 十一项均 PASS 或 SKIP（SKIP 会在 RESULT 行计数）
+    1 = 任一项 FAIL（含 DoD 10 的"反样本红错了地方"与 DoD 11 的"教材变红"——那与产物缺陷同责）
     2 = 环境不可用（找不到 Chrome / python3 / bash，run.sh 被锁，
         或 `.build` 清理被 safe-delete 拦截导致本轮结果不可信）
     3 = 用法错误
@@ -374,16 +375,31 @@ def check_reject_guard(_docs, _ph, _gen):
     detail 不只写 PASS：要能自证比的是哪几页、每档几条
     （`pages=2 逐条相等（15/15 16/16 16/16 12/12）`）——
     只打 PASS 的话，"比了 0 条也算 PASS"这种退化看不出来。
+    **不符的那档也要在括号里**（`16/15✗`）：全是相等对的括号会把 FAIL 读成"多了一个通过项"。
     """
-    import check_reject as rej          # 局部 import：既有九项都是三参签名，不为新增项改调用约定
+    try:
+        import check_reject as rej      # 局部 import：既有九项都是三参签名，不为新增项改调用约定
+    except Exception as ex:
+        # import 失败与"守卫发现反样本变绿"都是 FAIL，但**处置相反**（一个修路径/环境，
+        # 一个改产物或改基线）—— detail 必须自己说清，同色就是让读的人自己猜。
+        return STATUS_FAIL, "import check_reject 失败：%s: %s" % (type(ex).__name__, ex), []
     try:
         rej.S.find_chrome()             # 自己先判环境，别指望子调用替本项认领 ENV
     except rej.S.EnvError as ex:
         return STATUS_ENV, "Chrome 不可用：%s" % ex, []
     rc, out = silence(rej.main, [])
     pages = [l.split("== page ", 1)[1].strip() for l in out.splitlines() if l.startswith("== page ")]
-    pairs = re.findall(r"^\s+(\d{4}) 期望 (\d+) 条 / 实际 (\d+) 条", out, re.M)
-    counts = " ".join("%s/%s" % (exp, act) for _vw, exp, act in pairs)
+    # 两种行都要收：相等行是 `1440 期望 15 条 / 实际 15 条`，不符行是
+    # `1440 不符（期望 16 条 / 实际 15 条）`。只认前一种时，**恰恰是不符那档被漏掉**，
+    # 括号里只剩三对相等数，于是"有 1 档不符"这句结论在读数里找不到依据。
+    pairs = []
+    for line in out.splitlines():
+        m = re.match(r"\s+(\d{4})\s+(?:期望 (\d+) 条 / 实际 (\d+) 条"
+                     r"|不符（期望 (\d+) 条 / 实际 (\d+) 条）)", line)
+        if m:
+            exp, act = (m.group(2), m.group(3)) if m.group(2) is not None else (m.group(4), m.group(5))
+            pairs.append((m.group(1), exp, act, exp != act))
+    counts = " ".join("%s/%s%s" % (exp, act, "✗" if bad else "") for _vw, exp, act, bad in pairs)
     resline = next((l for l in out.splitlines() if l.startswith("RESULT ")), "")
     if rc == 0:
         if not pairs:
@@ -394,10 +410,85 @@ def check_reject_guard(_docs, _ph, _gen):
         bad = [l.strip() for l in out.splitlines()
                if ("少红" in l or "多红" in l or "不符" in l or "量具不可信" in l
                    or "没有登记" in l or "找不到反样本" in l or "没有可跑" in l)]
-        nbad = len([l for l in out.splitlines() if "不符" in l])
+        nbad = sum(1 for p in pairs if p[3])
         detail = "pages=%d 有 %d 档不符（%s）" % (len(pages), nbad, counts or "无可比档")
         return STATUS_FAIL, detail, bad[:8] or first_lines(resline, 1)
     return STATUS_ENV, "check_reject rc=%d：%s" % (rc, resline or "无 RESULT 行"), []
+
+
+# DoD 11 的目标**写死**（需求单 :884 定的是 example-06）。不参数化、不跟着
+# `default_targets()` 走：哪天 example-06 从默认目标里掉出去（`is_work_list_page`
+# 认不出它了），门会安静地去判**别的文件**还说 PASS —— 那正是本节要防的假绿。
+SHAPE_TARGET = os.path.join(ROOT, "assets", "examples", "example-06-dense-list.json")
+
+
+def check_shape_gate(_docs, _ph, _gen):
+    """DoD 11：形态判据在 `example-06` 上必须绿（`PASS=55 FAIL=0 SKIP=1` 这一组）。
+
+    为什么这条必须在门里：与 DoD 10 同源 —— CAPA 产物 `PASS=11 FAIL=21` 照样交付，
+    说明**判据即便做了，也没人替发布签字**。DoD 10 管"反样本还红不红"，这条管"教材还绿不绿"。
+
+    **scope 必须写进 detail**：门只判 example-06，不判其余示例，更不能被读成"全量通过"。
+    全量模式（不带参数）不是门的一部分 —— 它对 `example-05` 的 `RESULT INCOMPLETE`
+    是**真实答案**（教材只造了 6 行、自称 1286 条，见 XX-046），不该由门来背，
+    也不许在这里被"平均"掉。
+
+    `SKIP=1` 那条**必须点名**。理由：`skip_allowed()` 的静态白名单只有 `P8/P13/P17`，
+    `P2a/P2b` 靠值里的 `SKIP(行数 N < M，` 条件放行。哪天那 1 条 SKIP 换了**理由**、
+    id 还在名单里，行数与结论都已不同 —— 不打出来没人看得见。所以"数得出 SKIP 条数、
+    却点不出是哪一条"直接判 FAIL（读数不支撑结论）。
+
+    rc 语义（两种 rc=2 必须分开）：
+      0                      → PASS
+      1（含 RESULT INCOMPLETE）→ FAIL，detail 带原句
+      2 且 `find_chrome()` 抛  → ENV（wrapper 自己先判，不指望子进程）
+      2 其它（"没有可跑的产物"）→ **FAIL**：那是产物/路径缺陷，映射成 ENV 就把它藏进"环境问题"，
+                                与 E-01/E-02/E-03 同型。
+    """
+    try:
+        import check_ui_shape as su
+    except Exception as ex:
+        return STATUS_FAIL, "import check_ui_shape 失败：%s: %s" % (type(ex).__name__, ex), []
+    try:
+        su.find_chrome()
+    except su.EnvError as ex:
+        return STATUS_ENV, "Chrome 不可用：%s" % ex, []
+    if not os.path.isfile(SHAPE_TARGET):
+        return STATUS_FAIL, "目标产物不存在：%s（写死的目标不许静默换成别的文件）" % \
+            os.path.relpath(SHAPE_TARGET, ROOT), []
+    proc = subprocess.run([sys.executable, os.path.join(TESTS, "check_ui_shape.py"), SHAPE_TARGET],
+                          cwd=ROOT, capture_output=True, text=True)
+    out = proc.stdout + proc.stderr
+    scope = "fixture=%s rc=%d" % (os.path.basename(SHAPE_TARGET), proc.returncode)
+    m = re.search(r"^TOTAL PASS=(\d+) FAIL=(\d+) SKIP=(\d+)", out, re.M)
+    if not m:
+        # 走的是 main() 的"没有可跑的产物"（rc=2，TOTAL 行之前就返回）或其他未预期路径。
+        return STATUS_FAIL, scope + " ｜ 没有判出结论（无 TOTAL 行）", first_lines(out, 6)
+    npass, nfail, nskip = (int(x) for x in m.groups())
+    resline = next((l for l in out.splitlines() if l.startswith("RESULT")), "")
+    ids = re.search(r"SKIP 判据 = \[(.*?)\]", out)
+    skip_ids = [x.strip() for x in ids.group(1).split(",") if x.strip()] if ids else []
+    titles = {}
+    for line in out.splitlines():
+        mm = re.match(r"\s+(P\w+)\s+(.+?)\s{2,}现值", line)
+        if mm:
+            titles[mm.group(1)] = mm.group(2).strip()
+    if nskip and not skip_ids:
+        return STATUS_FAIL, scope + " ｜ SKIP=%d 但打不出是哪一条（读数不支撑结论）" % nskip, first_lines(out, 6)
+    skip_s = ("无 SKIP" if not nskip else
+              "%s SKIP=%s" % ("唯一" if nskip == 1 else "共",
+                              "、".join("%s（%s）" % (i, titles.get(i, "?")) for i in skip_ids)))
+    tail = " ｜ 未判：其余示例（全量模式另跑）"
+    if proc.returncode != 0:
+        ow = re.search(r"SKIP-OUT-OF-WHITELIST=\[[^\]]*\]", out)
+        bad = [l.strip() for l in out.splitlines()
+               if re.match(r"\s+P\w+\s", l) and re.search(r"(FAIL|INC!)\s*$", l)]
+        detail = "%s PASS=%d FAIL=%d SKIP=%d ｜ 原句：%s%s%s" % (
+            scope, npass, nfail, nskip, resline.replace("RESULT ", "", 1) or "无 RESULT 行",
+            (" ｜ " + ow.group(0)) if ow else "", tail)
+        return STATUS_FAIL, detail, bad[:8] or first_lines(out, 6)
+    return STATUS_PASS, "%s PASS=%d FAIL=%d SKIP=%d ｜ %s%s" % (
+        scope, npass, nfail, nskip, skip_s, tail), []
 
 
 # ---------------------------------------------------------------- 骨架
@@ -413,6 +504,7 @@ ITEMS = [
     ("无未填写的占位符", check_placeholders),
     ("语法检查通过", check_syntax),
     ("反样本守卫（红在登记项上）", check_reject_guard),
+    ("形态判据（示例 example-06）", check_shape_gate),
 ]
 
 

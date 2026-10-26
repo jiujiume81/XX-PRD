@@ -121,7 +121,7 @@
 | `Table` · 密度与吸附（v0.8.0 新增） | `size`(`'xs'`\|`'small'`，渲成 `.xs` / `.sm` 类；**没有 `'sm'` 这个值**，`'sm'` 是类名)、`tableLayout`(`'fixed'`)、`stickyHeader`(bool，**须与 `maxHeight` 同时给**才生成吸附容器)、`stickyFooter`(bool，配合 `pagination` 把分页脚贴底)、`maxHeight`(CSS 长度，如 `calc(100vh - 438px)`，写进 `--tw-max`)、`rowClick`(bool，整行点击触发)、`ellipsisTitle`(bool，默认 true，截断列的 `title` 兜底) |
 | `Table` · 筛选区渲染器（v0.8.0 新增） | `filterBar`(`'grid3'` = 两行三列 + 独立动作行；**不写则沿用旧 `query` 单行路径**)、`queryId` / `resetId`(字符串，写入「查询 / 重置」按钮的 `data-node-id`，可被 `interactions.on.target` 引用) |
 | `Table` · 空态（v0.8.0 新增） | `emptyAction`(`{text, type?, icon?, id}`，渲染在空态文案下方；`text` 必填、`id` 用于挂交互)。空态（没有数据）与零结果（筛没了）必须用**不同的 `emptyText` 与 `emptyAction`** |
-| `Table` · 列定义补充（v0.8.0 新增） | `columns[]`：`width`(纯数字按 px 处理；**字符串必须自带单位**，写 `'48'` 会被浏览器丢弃)、`ellipsis`(bool，配 `cell-ellipsis`)、`fix`(`'left'`\|`'right'`)、`num`(bool，`tabular-nums` 右对齐)、`align`(`'left'`\|`'right'`) |
+| `Table` · 列定义补充（v0.8.0 新增；v0.9.0 补 `wrap`/`maxLines`） | `columns[]`：`width`(纯数字按 px 处理；**字符串必须自带单位**，写 `'48'` 会被浏览器丢弃。两种写法等价，**判据必须都认** —— 视觉判据用 `float(w)` 单种解析会把 `'150px'` 判成「未声明」)、`ellipsis`(bool，配 `cell-ellipsis`)、`wrap`(bool，允许换行，须与 `maxLines` 同时给)、`maxLines`(**只允许 2**；≥3 会把行高预算吃光)、`fix`(`'left'`\|`'right'`)、`num`(bool，`tabular-nums` 右对齐)、`align`(`'left'`\|`'right'`) |
 | `MasterDetail` | `bind`(主表字段名)、`bindTo`(子表字段名，默认同 `bind`)、`detailTitle`、`collapsible`(默认 true)、`defaultCollapsed`、`autoSelectFirst`(默认 true)、`showAllWhenEmpty`、`emptyText`、`detailTools`(`[{text,icon,id}]`)；**children 必须正好 2 个**：`[主表 Table, 子表 Table]` |
 | `List` | `data`、`renderItem`(Node 模板，写在 **props 内**；占位 `{{item.字段}}` / `{{item}}` / `{{index}}`)、`bordered`、`loading`、`empty`、`size` |
 | `List.Item` | `title`、`description`、`extra`(插槽)、`avatar` |

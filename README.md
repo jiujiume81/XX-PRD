@@ -159,7 +159,7 @@ XX-PRD/
 ├── CHANGELOG.md                  版本变更记录（每条含 breaking 字段）
 ├── LICENSE                       MIT 许可
 ├── guide.html                    自解释说明指南（工作流 · 设计准则 · PRD 结构 · 产物功能）
-├── references/                   11 份参考文档
+├── references/                   13 份参考文档
 │   ├── 01-clarification.md       澄清提问与 4 份 shaping 文档
 │   ├── 02-ears-spec.md           EARS 句式与门禁
 │   ├── 03-prd-structure.md       PRD 五层结构 + 12 章大纲
@@ -170,7 +170,9 @@ XX-PRD/
 │   ├── 08-container-choice.md    承载容器选型准则
 │   ├── 09-behavior-model.md      行为建模（命令策略 / 状态 × 角色 × 动作）
 │   ├── 10-page-decomposition.md  页面职责与功能切分（合并判据 / 拆分信号）
-│   └── 11-slice-delivery.md      切片交付（用户故事最小闭环 / 单片上限 / 合并规则）
+│   ├── 11-slice-delivery.md      切片交付（用户故事最小闭环 / 单片上限 / 合并规则）
+│   ├── 12-visual-standard.md     视觉下限（不折行 / 列宽 / 字号 / 留白 / 色彩，逐条可测量）
+│   └── 13-requirements-accuracy.md 需求准确性 R1–R4（字段登记 / 一对多 / 角色待办 / 执行验证）
 ├── assets/
 │   ├── container/index.html      交付容器本体（单文件、零依赖）
 │   └── examples/                 5 个全链路示例 JSON

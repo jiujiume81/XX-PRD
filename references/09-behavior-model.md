@@ -95,6 +95,7 @@
 | `policy` | ✓ | 不满足时怎么办：`hidden` / `disabled` / `reject` |
 | `reason` | ✓（policy≠reject 时） | 为什么不能执行，写给用户看 |
 | `to` | | 执行成功后进入的状态 |
+| `stage` | 条件 | **仅"措施 / 任务"类实体用**：`submit`（执行人提交，带佐证）/ `verify`（验收人出结论）。枚举只有两个值。见 `13-requirements-accuracy.md` R4 —— 同一实体的 `submit.actor` 与 `verify.actor` **交集必须为空** |
 | `effect` | | 副作用（写审批人、发通知、扣库存） |
 | `page` | | 主要出现位置 |
 | `requirement` | | 对应哪条 EARS 需求 |
@@ -385,6 +386,13 @@
 12. 把顶部「单据状态」逐个切一遍，页面上的按钮是否都符合预期？
 13. **每条需求**的 `ui` 是否指明它落在哪个按钮 / 哪次进入（`interactionId` / `system` / `page-enter`）？
     需求侧的 `ui` 不写 `pageId`，靠同级 `pageId` 定位（见 §2.4）。
+14. **每个角色都有地方干活吗**（R3）？`capabilities[].actor` 里出现过的每个 role，
+    是否都有一个页面以它为主体（`contract.actor` 含它 + 对应 `task.actor` 含它 + 有入口）？
+    有 `stage:"submit"` 的角色，那个页面的 `doneWhen` 是否描述"提交完成"？
+    校验器会打 `角色待办覆盖：u-qa✓ u-dept✗ (1/2)`。**没地方干活的角色 = 缺一个页面**。
+15. **执行与验证是两个角色吗**（R4）？每个措施 / 任务实体的 `submit` 与 `verify` 两条
+    capability 的 `actor` 交集是否为空？`verify.from` 是否包含 `submit.to`？
+    `verify` 生效后主单据状态有没有变化？细节见 `13-requirements-accuracy.md` §4。
 
 ---
 

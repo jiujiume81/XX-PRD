@@ -270,6 +270,14 @@ SHORT_FIELD_MAX_UNITS = 6.0       # P20/P23 的分母口径：整格文本 / 表
 CELL_MAX_LINES = 2                # P22：单元格行数上限（T-03，与 T-02 的 maxLines:2 同源）
 PANE_MIN = {1440: 1182, 1600: 1342}   # P15：A 层默认 pane 宽
 
+# ---- L / C / A 组（12 §5–§7，XX-048 / XX-044）。
+# 三个阈值**逐字抄自规范**，不是本轮新定：规范改口径要开变更单，代码不许先斩后奏。
+GRID_ALLOW = (0, 4, 8, 12, 16, 24, 32, 40, 48)   # L-01：4px 栅格（含 0）
+CHROMA_GRAY = 12          # C-01：max(r,g,b) − min(r,g,b) ≤ 12 判灰阶剔除
+CHROMA_ALPHA = 0.1        # C-01：alpha < 0.1 剔除（注意与 isGray() 的 0.05 不是同一个口径）
+CHROMA_MAX = 6            # C-01：有彩度颜色去重上限
+ALIGN_TOL = 1.0           # A-01 / A-02① / A-03：极差 ≤1px
+
 # P4 的预算常数：**从盒模型推出来的，不是拍的数**（I-07 §3.4）。
 # .ant-filter-bar 的盒：padding 20×2 + border 1×2 + column-gap 24×2 → 3 等分列宽
 #   列宽 = (内容宽 − 2×20 − 2×1 − 2×24) / 3 = (内容宽 − 90) / 3
@@ -324,6 +332,18 @@ def skip_allowed(row):
     if row.get("id") == "P9":
         return bool(re.match(r"SKIP\((有效数据行 \d+ < 2|无任一行盒组 ≥2 行)",
                              row.get("value") or ""))
+    # ⑤ L-01 / C-01 / A-01 / A-03（XX-048 / XX-044）：四种 SKIP 都是「分母为空」，
+    #    不是「判不了」—— 没有非零间距、没有有彩度颜色、没有 ≥2 行的列、区块不足 2 个。
+    #    同样只认值里的条件：`A-03` 在 CAPA 明细页 1 个区块是真事实，而在别的页上
+    #    「1 个区块」也可能是抽取失败 —— 值里带实测数，人看得出来是哪一种。
+    if row.get("id") == "L-01":
+        return bool(re.match(r"SKIP\(无非零间距", row.get("value") or ""))
+    if row.get("id") == "C-01":
+        return bool(re.match(r"SKIP\(无有彩度颜色", row.get("value") or ""))
+    if row.get("id") == "A-01":
+        return bool(re.match(r"SKIP\(无 ≥2 行的列", row.get("value") or ""))
+    if row.get("id") == "A-03":
+        return bool(re.match(r"SKIP\(区块 \d+ 个 < 2", row.get("value") or ""))
     return False
 
 # V8（I-07 第二批裁定）：example-05 的期望 FAIL 集，**逐条写死**。
@@ -1025,6 +1045,190 @@ PROBE = r"""
         b[r]=(b[r]||0)+1;
       }
       return {body:body, head:head, ctl:ctl, normal:normal, counts:cnt};
+    })();
+
+    /* ================= XX-048 / XX-044 量具：只出分布，不出阈值 =================
+       为什么先量后判（与 `afb2211` 同一条纪律）：阈值写进代码之前，没有人知道现有产物
+       落在哪一档。先接线就会得到「教材红了，但不知道是自己口径错还是教材真错」——
+       而这时候的人一定会去改教材，把口径错误固化下来。
+       所以本块只把**读数**吐出来，判定在 `evaluate()` 里另写，且只在读数与人工真值
+       对得上之后才接。 */
+
+    /* ---- L-01：区块级 margin / padding / gap 的取值分布（12 §5 L-01）
+       范围按 §5 写死的三类：`.ant-content` 直接子元素的 4 边 margin、其容器 gap、
+       卡片内 padding。**不做除法**（10 能被 2 整除但不是栅格值）。 */
+    out.spaceAudit=(function(){
+      var vals={}, sample={}, slots=0, nonzero=0;
+      function add(v, src){
+        if(!isFinite(v)) return;          /* gap:'normal' → NaN，block 容器不进分母 */
+        v=Math.round(v*10)/10;
+        slots++;
+        if(v===0) return;
+        nonzero++;
+        vals[v]=(vals[v]||0)+1;
+        if(!sample[v]) sample[v]=[];
+        if(sample[v].length<3) sample[v].push(src);
+      }
+      function tagOf(el){
+        var cl=String(el.className||'').split(/\s+/), c=null;
+        for(var i=0;i<cl.length;i++) if(cl[i].indexOf('ant-')===0){ c=cl[i]; break; }
+        return el.tagName.toLowerCase()+(c?('.'+c):'');
+      }
+      var kids=C.children;
+      for(var i=0;i<kids.length;i++){
+        var s=cs(kids[i]), t=tagOf(kids[i]);
+        add(parseFloat(s.marginTop), t+'.margin-top');
+        add(parseFloat(s.marginRight), t+'.margin-right');
+        add(parseFloat(s.marginBottom), t+'.margin-bottom');
+        add(parseFloat(s.marginLeft), t+'.margin-left');
+        add(parseFloat(s.rowGap), t+'.row-gap');
+        add(parseFloat(s.columnGap), t+'.column-gap');
+      }
+      var bodies=C.querySelectorAll('.ant-card-body');
+      for(var k=0;k<bodies.length;k++){
+        var s2=cs(bodies[k]);
+        add(parseFloat(s2.paddingTop), '.ant-card-body.padding-top');
+        add(parseFloat(s2.paddingRight), '.ant-card-body.padding-right');
+        add(parseFloat(s2.paddingBottom), '.ant-card-body.padding-bottom');
+        add(parseFloat(s2.paddingLeft), '.ant-card-body.padding-left');
+      }
+      return {values:vals, sample:sample, slots:slots, nonzero:nonzero,
+              kids:kids.length, cardBodies:bodies.length};
+    })();
+
+    /* ---- L-02：卡片用边框、浮层用投影（12 §5 L-02）
+       ️这里**不是**「二选一」：卡片必须 shadow==='none' **且** borderWidth>=1；
+       写成「有一个就行」等于没有规范（两个相反的做法都能自称合规）。 */
+    out.layerAudit=(function(){
+      function sh(el){ return (cs(el).boxShadow||'none').trim(); }
+      function bw(el){ return parseFloat(cs(el).borderTopWidth||0)||0; }
+      var cards=[], badCard=[], cardEls=C.querySelectorAll('.ant-card');
+      for(var i=0;i<cardEls.length;i++){
+        var e=cardEls[i], s=sh(e), w=bw(e), ok=(s==='none' && w>=1);
+        cards.push({i:i, shadow:s.slice(0,30), borderW:num(w), ok:ok});
+        if(!ok) badCard.push({i:i, shadow:s.slice(0,30), borderW:num(w)});
+      }
+      var layerSel='.ant-modal-content, .ant-drawer-content, .ant-dropdown, .ant-tooltip';
+      var ls=document.querySelectorAll(layerSel), badLay=[], lay=[];
+      for(var j=0;j<ls.length;j++){
+        var t=String(ls[j].className||'').split(/\s+/)[0], s2=sh(ls[j]), ok2=(s2!=='none');
+        lay.push({kind:t, shadow:s2.slice(0,30), ok:ok2});
+        if(!ok2) badLay.push({kind:t});
+      }
+      return {cards:cards.length, badCards:badCard, layers:lay.length, badLayers:badLay,
+              cardSamples:cards.slice(0,4), layerSamples:lay.slice(0,4)};
+    })();
+
+    /* ---- C-01：有彩度颜色去重数（12 §6）
+       口径照 §6 原文：`color` / `backgroundColor` / `borderColor`，彩度 = max−min；
+       **差值 ≤12 判灰阶剔除**、`alpha<0.1` 剔除。
+       注意 `isGray()` 的 alpha 阈值是 **0.05**（那是 Tag 底色判定，历史读数，本轮不动），
+       §6 要 0.1，所以这里独立实现并**在读数里打出两个剔除数** —— 两个阈值同时存在
+       这件事本身必须可见，否则下一个人会以为只有一套「灰阶」定义。 */
+    out.colorAudit=(function(){
+      function parse(v){
+        var m=/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(v||'');
+        if(!m) return null;
+        return {r:+m[1], g:+m[2], b:+m[3], a:(m[4]===undefined?1:parseFloat(m[4]))};
+      }
+      var seen={}, order=[], gray=0, faint=0, checked=0, elsWithChroma=0;
+      var all=C.querySelectorAll('*');
+      for(var i=0;i<all.length;i++){
+        var s=cs(all[i]), hit=false;
+        var props=[s.color, s.backgroundColor, s.borderTopColor, s.borderLeftColor];
+        for(var p=0;p<props.length;p++){
+          var c=parse(props[p]); if(!c) continue;
+          checked++;
+          if(c.a<0.1){ faint++; continue; }
+          if(Math.max(c.r,c.g,c.b)-Math.min(c.r,c.g,c.b)<=12){ gray++; continue; }
+          var key=[Math.round(c.r),Math.round(c.g),Math.round(c.b)].join(',');
+          if(!seen[key]){ seen[key]=0; order.push(key); }
+          seen[key]++;
+          hit=true;
+        }
+        if(hit) elsWithChroma++;
+      }
+      var list=[];
+      for(var q=0;q<order.length;q++) list.push({rgb:order[q], n:seen[order[q]]});
+      list.sort(function(a,b){ return b.n-a.n; });
+      return {checked:checked, gray:gray, faint:faint, count:list.length,
+              colors:list, elements:elsWithChroma};
+    })();
+
+    /* ---- A-01 / A-02 / A-03：对齐（12 §7）
+       三条锚点各不相同，别混：
+         A-01 同列文本起始边（左对齐取 left、右对齐取 right）极差 ≤1  → 对齐列
+         A-02 数值列数字右边界极差 ≤1 **且** 数字与单位不得粘连       → 数值列
+         A-03 区块（卡片/表格/筛选区）左边界极差 ≤1                  → 块与块之间
+       A-01 与 P6（筛选项 label 右对齐 ≤4）是**控件级 vs 列级**，并存不冲突。 */
+    out.alignAudit=(function(){
+      function firstRect(el){
+        var tw=document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), n;
+        while((n=tw.nextNode())){
+          if(!(n.nodeValue||'').trim()) continue;
+          var r=document.createRange(); r.selectNodeContents(n);
+          var rs=r.getClientRects();
+          for(var i=0;i<rs.length;i++) if(rs[i].width>0.5)
+            return {left:rs[i].left, right:rs[i].right};
+        }
+        return null;
+      }
+      var tabs=[], tbls=C.querySelectorAll('.ant-table');
+      for(var ti=0;ti<tbls.length;ti++){
+        var rows=tbls[ti].querySelectorAll('tbody tr'), cols=[];
+        for(var ri=0;ri<rows.length;ri++){
+          var tds=rows[ri].children;
+          for(var ci=0;ci<tds.length;ci++){
+            var td=tds[ci], al=cs(td).textAlign, box=firstRect(td);
+            if(!cols[ci]) cols[ci]={lefts:[], rights:[], align:al, n:0, glued:0, gluedSample:null};
+            if(box){
+              cols[ci].lefts.push(box.left);
+              cols[ci].rights.push(box.right);
+              cols[ci].n++;
+            }
+            if(cols[ci].align!==al) cols[ci].align='mixed';
+            /* A-02②：同一格既出现数字又紧跟单位 —— 只对 `num`/右对齐列生效，
+               否则「超期 3 天」这种正常文案会被误判（口径见 §7 A-02） */
+            if(al==='right' || al==='end'){
+              var t=txt(td);
+              if(/\d\s*(?:kg|件|元|%|天|小时)/.test(t)){
+                cols[ci].glued++;
+                if(!cols[ci].gluedSample) cols[ci].gluedSample=t.slice(0,16);
+              }
+            }
+          }
+        }
+        var outCols=[];
+        for(var k=0;k<cols.length;k++){
+          var c=cols[k];
+          var lo=c.lefts.length?Math.min.apply(null,c.lefts):null;
+          var hi=c.lefts.length?Math.max.apply(null,c.lefts):null;
+          var rlo=c.rights.length?Math.min.apply(null,c.rights):null;
+          var rhi=c.rights.length?Math.max.apply(null,c.rights):null;
+          outCols.push({col:k+1, n:c.n, align:c.align,
+                        leftSpread:(lo==null?null:num(hi-lo)),
+                        rightSpread:(rlo==null?null:num(rhi-rlo)),
+                        glued:c.glued, gluedSample:c.gluedSample});
+        }
+        tabs.push({table:ti+1, cols:outCols});
+      }
+      /* A-03：区块左边界。取卡片 / 表格 / 筛选区三类，**排除浮层**（另一个栈） */
+      var blockSel='.ant-card, .ant-table, .ant-filter-bar';
+      var bs=C.querySelectorAll(blockSel), lefts=[], blockSamples=[];
+      for(var b=0;b<bs.length;b++){
+        var r2=bs[b].getBoundingClientRect();
+        if(!r2.width) continue;
+        lefts.push(r2.left);
+        if(blockSamples.length<6){
+          var cl=String(bs[b].className||'').split(/\s+/)[0];
+          blockSamples.push({kind:cl, left:num(r2.left)});
+        }
+      }
+      var blo=lefts.length?Math.min.apply(null,lefts):null;
+      var bhi=lefts.length?Math.max.apply(null,lefts):null;
+      return {tables:tabs, blocks:lefts.length, blockLeftMin:num(blo),
+              blockLeftMax:num(bhi),
+              blockSpread:(blo==null?null:num(bhi-blo)), blockSamples:blockSamples};
     })();
 
     /* ---- P11 的另一半：抽屉宽（R10）——**打开再量**，不读声明。
@@ -2355,6 +2559,118 @@ def evaluate(props, dom, page, vw):
                                           sum(n for _, n in outside2)) if outside2 else "") +
                 "正文 = 表格外、非控件（`line-height:1` 是控件规范值）、非标题（紧行高属标题 token）")
 
+    # ================= XX-048 / XX-044：L-01 / C-01 / A-01 / A-03 =================
+    # 与量具的关系写死：下面**只读** `spaceAudit` / `colorAudit` / `alignAudit`，
+    # 不重新遍历 DOM。两处各量一遍必然分叉 —— `S-02①` 与 `P9` 共用一份 `rowMeta`
+    # 就是为了这个（那次分叉把 example-06 的 20 行全读成「多行」，分母直接归零）。
+    # 档位：本节四条都取自**评审态**（PRD 面板打开时），与产品态是两个观感；
+    # 选评审态的理由是「用户默认看到的就是它」，所以报告里必须标出档位（见 12 §10.6）。
+    # 未接线：`L-02`（需要带卡片的产物，现有判页全是列表页，卡片 0 个）、
+    # `A-02`（数值列的 `type:'num'` 与 `text-align:right` 不是等价口径，要先定）、
+    # `C-02`（跨页比同一状态词，需要跨页聚合，本函数是单页的）。三条都在 XX-044/XX-048 里。
+
+    # ---- L-01 4px 栅格
+    sa = dom.get("spaceAudit") or {}
+    L01_vals = {}
+    for _k, _v in (sa.get("values") or {}).items():
+        L01_vals[float(_k)] = int(_v)
+    if not sa or not sa.get("nonzero"):
+        verdict(rows, "L-01", "区块间距 4px 栅格（评审态）",
+                "SKIP(无非零间距：检查 %s 处全为 0)" % (sa.get("slots") or 0),
+                "取值 ⊆ %s" % (GRID_ALLOW,), "SKIP",
+                "「全为 0」与「判不出」是两件事：0 本身在允许集内，这里只是没有可比基数")
+    else:
+        _smp = sa.get("sample") or {}
+        out1 = sorted(k for k in L01_vals if k not in GRID_ALLOW)
+        why1 = ["%g→%s×%d" % (k, "、".join((_smp.get("%g" % k) or [])[:2]), L01_vals[k])
+                for k in out1]
+        verdict(rows, "L-01", "区块间距 4px 栅格（评审态）",
+                "取值 {%s}（非零 %d/%s 处）｜越界 %d 档%s"
+                % ("、".join("%g" % k for k in sorted(L01_vals)),
+                   int(sa.get("nonzero") or 0), sa.get("slots"), len(out1),
+                   ("：" + "；".join(why1)) if why1 else ""),
+                "取值 ⊆ %s" % (GRID_ALLOW,), "PASS" if not out1 else "FAIL",
+                "范围按 12 §5 写死的三类：`.ant-content` 直接子元素的 4 边 margin、"
+                "其容器 `gap`、卡片内 `padding`。**不做除法** —— 10 能被 2 整除但不是栅格值，"
+                "这正是「枚举」与「取模」的差别")
+
+    # ---- C-01 有彩度颜色去重数
+    ca = dom.get("colorAudit") or {}
+    C01_colors = ca.get("colors") or []
+    if not C01_colors:
+        verdict(rows, "C-01", "有彩度颜色 ≤%d 种（评审态）" % CHROMA_MAX,
+                "SKIP(无有彩度颜色：检查 %s 处，灰阶剔除 %s、alpha<%.1f 剔除 %s)"
+                % (ca.get("checked") or 0, ca.get("gray") or 0, CHROMA_ALPHA, ca.get("faint") or 0),
+                "≤%d 种" % CHROMA_MAX, "SKIP",
+                "分母为 0 时「0 种」不等于达标")
+    else:
+        def _hex(c):
+            r, g, b = [int(x) for x in c["rgb"].split(",")]
+            return "#%02x%02x%02x" % (r, g, b)
+        _names = "、".join("%s×%d" % (_hex(c), c["n"]) for c in C01_colors[:8])
+        verdict(rows, "C-01", "有彩度颜色 ≤%d 种（评审态）" % CHROMA_MAX,
+                "有彩度 %d 种（检查 %s 处，灰阶剔除 %s、alpha<%.1f 剔除 %s）｜%s%s"
+                % (len(C01_colors), ca.get("checked") or 0, ca.get("gray") or 0,
+                   CHROMA_ALPHA, ca.get("faint") or 0, _names,
+                   " 等 %d 种" % len(C01_colors) if len(C01_colors) > 8 else ""),
+                "≤%d 种" % CHROMA_MAX,
+                "PASS" if len(C01_colors) <= CHROMA_MAX else "FAIL",
+                "彩度 = `max(r,g,b) − min(r,g,b)`，≤%d 判灰阶剔除（灰阶是层级工具，不是颜色）；"
+                "`alpha<%.1f` 剔除。**色值清单必须打出来**：只报「9 种」时改的人得自己去 4000 行 CSS 里找。"
+                "注意 `isGray()` 的 alpha 阈值是 0.05（Tag 底色用，历史读数），与本节不是同一口径"
+                % (CHROMA_GRAY, CHROMA_ALPHA))
+
+    # ---- A-01 同列起始边极差
+    aa = dom.get("alignAudit") or {}
+    A01_cols, A01_thin = [], 0
+    for _t in (aa.get("tables") or []):
+        for _c in (_t.get("cols") or []):
+            if (_c.get("n") or 0) < 2:
+                A01_thin += 1
+                continue
+            _right = (_c.get("align") in ("right", "end"))
+            _sp = _c.get("rightSpread") if _right else _c.get("leftSpread")
+            if _sp is None:
+                A01_thin += 1
+                continue
+            A01_cols.append((_t.get("table"), _c.get("col"), _sp, _right, _c.get("n")))
+    if not A01_cols:
+        verdict(rows, "A-01", "同列起始边极差（≤%g）" % ALIGN_TOL,
+                "SKIP(无 ≥2 行的列：%d 列只有 1 行或量不到文本)" % A01_thin,
+                "极差 ≤%g" % ALIGN_TOL, "SKIP",
+                "1 行的列没有「同列」可言 —— 不是因为判不了，是分母本来为空")
+    else:
+        bad1 = [x for x in A01_cols if x[2] > ALIGN_TOL]
+        mx1 = max(x[2] for x in A01_cols)
+        verdict(rows, "A-01", "同列起始边极差（≤%g）" % ALIGN_TOL,
+                "%d 列进判 ｜ 最大极差 %s ｜ 越界 %d 列%s"
+                % (len(A01_cols), fmt(mx1), len(bad1),
+                   ("（%s）" % "、".join("table%d 第%d列 %s" % (a[0], a[1], fmt(a[2])) for a in bad1[:6])
+                    if bad1 else "")),
+                "极差 ≤%g" % ALIGN_TOL, "PASS" if not bad1 else "FAIL",
+                "取**文本 Range** 的首个 rect（不用元素盒：元素盒含 padding，"
+                "`padding-left:4` 这类注入会被它吃掉）；右对齐列取 `right`、其余取 `left`。"
+                "与 `P6` 是**控件级 vs 列级**，两条并存")
+
+    # ---- A-03 区块左边界极差
+    A03_n = int(aa.get("blocks") or 0)
+    A03_sp = aa.get("blockSpread")
+    if A03_n < 2 or A03_sp is None:
+        verdict(rows, "A-03", "区块左边界极差（≤%g）" % ALIGN_TOL,
+                "SKIP(区块 %d 个 < 2，极差无从算)" % A03_n,
+                "极差 ≤%g" % ALIGN_TOL, "SKIP",
+                "一个区块没有「边界一致性」可言；分母为 0 不许判绿")
+    else:
+        verdict(rows, "A-03", "区块左边界极差（≤%g）" % ALIGN_TOL,
+                "区块 %d 个 ｜ 左边界 %s–%s 极差 %s（%s）"
+                % (A03_n, fmt(aa.get("blockLeftMin")), fmt(aa.get("blockLeftMax")), fmt(A03_sp),
+                   "、".join("%s=%s" % (b.get("kind"), fmt(b.get("left")))
+                            for b in (aa.get("blockSamples") or [])[:4])),
+                "极差 ≤%g" % ALIGN_TOL, "PASS" if A03_sp <= ALIGN_TOL else "FAIL",
+                "范围 = 卡片 / 表格 / 筛选区三类，**排除浮层**（浮层是另一个栈，"
+                "它偏出去是设计意图）。与 `P6`（筛选项 label 右对齐 ≤4）不同层，并存")
+
+
     # ================= I-09 第一阶段新增：T-01~T-04 / W-01 / W-02 =================
     # P 号是运行时行号，注释里的 T-xx / W-xx 是 references/12-visual-standard.md 的条款号。
     # 一条 P 只承载一条条款（P7 例外：它承载 W-00，理由见该条 note）。
@@ -3036,6 +3352,10 @@ INJECTIONS = [
     # 表格变窄 → P17 渲染宽连带红），那样「多翻」来自注入手段而不是判据重叠。
     # transform 不影响布局，只移动盒子 —— P6 量的正是盒子左边界。
     {"name": "P6_filter_shift", "kind": "css", "want": ["P6"],
+     "allow": ["A-03"],
+     "allowWhy": "把整个筛选区左移 12px，它的**左边界**当然跟着动 → A-03（区块左边界极差）从 0 变 12。"
+                 "这正是一次**区块级**错位，A-03 抓它是对的，不是两条在测同一件事："
+                 "P6 量的是筛选项 label 的右对齐（控件级，阈值 4），A-03 量的是区块与区块之间（阈值 1）",
      "payload": ".ant-content .ant-filter-bar{transform:translateX(-12px)}"},
     # P9 只判「同行盒数组内极差」之后，**撑高全部行不再能红它**（全变 54 → 组内极差仍是 0）。
     # 所以注入改成**只撑高奇数行**，让「1 行盒组」内部真的出现极差；断言也不看 PASS/FAIL 了，
@@ -3241,6 +3561,39 @@ INJECTIONS = [
     # 读得出来就说明判据量的是这一个商，而不是别的东西。
     {"name": "S02b_line_height_1", "kind": "css", "want": ["S-02b"],
      "payload": ".ant-content span.lb{line-height:1!important}"},
+    # ---- XX-048 / XX-044：L-01 / C-01 / A-01 / A-03
+    # L-01：把 `.ant-space` 的 gap 从 12 改成 18。**必须留下证据说明「18 不在集合里」**——
+    # 18 是 4 的倍数，取模判法会放过它，这正是「枚举 vs 除法」的差别。
+    {"name": "L01_gap_18", "kind": "css", "want": ["L-01"],
+     "allow": ["P12", "P16"],
+     "allowWhy": "`.ant-space` 的 gap 12→18，筛选区一行变高 6px：标题带相对顶边（P12 的 Δtop）"
+                 "与分页 bottom（P16）跟着往下走。**间距变大把下面的东西推下去**是必然后果，"
+                 "不是 L-01 与它们在测同一件事（L-01 量的是取值集合，不看位置）",
+     "payload": ".ant-content .ant-space{row-gap:18px!important;column-gap:18px!important}"},
+    # C-01：教材本来只有 1 种有彩度色（#1677ff）。只加 1 种不会超限（≤6 仍然 PASS），
+    # 所以必须一次加到 7 种以上 —— 注入量要按阈值算，不按「加一个颜色看看」。
+    # 用表头 th 的 `background`：它是纯色、`getComputedStyle` 能精确读到，且不改几何。
+    {"name": "C01_seven_colors", "kind": "css", "want": ["C-01"],
+     "payload": (".ant-content .ant-table thead th:nth-child(1){background:#eb2f96!important}"
+                 ".ant-content .ant-table thead th:nth-child(2){background:#fa8c16!important}"
+                 ".ant-content .ant-table thead th:nth-child(3){background:#a0d911!important}"
+                 ".ant-content .ant-table thead th:nth-child(4){background:#13c2c2!important}"
+                 ".ant-content .ant-table thead th:nth-child(5){background:#2f54eb!important}"
+                 ".ant-content .ant-table thead th:nth-child(6){background:#722ed1!important}"
+                 ".ant-content .ant-table thead th:nth-child(7){background:#f5222d!important}")},
+    # A-01：只给**第一个数据行**的第 2 列加 `padding-left`。
+    # 给整列加是没用的 —— 整列一起移，同列内极差仍是 0（与 P9「全行一起撑高」同一个坑）。
+    {"name": "A01_one_cell_pad", "kind": "css", "want": ["A-01"],
+     "payload": ".ant-content .ant-table tbody tr:nth-child(1) td:nth-child(2){padding-left:16px!important}"},
+    # A-03：把表格整体右移 8px，与筛选区错开。用 `transform` 而不是 `margin`：
+    # margin 会改表格可用宽 → P17 渲染宽连带红，那时「多翻」来自注入手段而不是判据重叠
+    # （与 P6 注入选 transform 同一条理由）。
+    {"name": "A03_table_shift", "kind": "css", "want": ["A-03"],
+     "allow": ["P8"],
+     "allowWhy": "表格右移 8px 后右缘超出内容区 → P8（横向溢出）红。"
+                 "**这正是 A-03 抓的那种错的真实代价**：区块没对齐通常连带溢出，"
+                 "两条的锚点不同（A-03 量左边界极差，P8 量 scrollWidth），不是同一件事",
+     "payload": ".ant-content .ant-table{transform:translateX(8px)}"},
 ]
 
 

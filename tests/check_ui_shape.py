@@ -158,8 +158,9 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
        ⑥ 自证里有 `V01_zoom`（N-d 独立红）、`V01_maxw`（N-a 盲区）与三条 `INCOMPLETE` 造红；
           加上 `P7` 两个方向、`P21`、`P22` 各一条，再有 `P2b` 的两条**第三态**注入
           （`SKIP(… total 未声明)` 与 `INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6`），
-          共 25 条注入，另加 N-c 手写壳样本 1 条、`P2a/P2b` 条件式 SKIP 样本 1 条、XX-047 结论段 1 条，
-          自证覆盖 **28 条** ——
+          共 28 条注入，另加 N-c 手写壳样本 1 条、`P9` B 分支夹具 1 条、`P2a/P2b`
+          条件式 SKIP 样本 1 条、XX-047 结论段 1 条，
+          自证覆盖 **32 条** ——
           **「新增判据每一条都要有一条能红的注入」**，P7 是本轮抓 CAPA 的主力，
           它自己没被证过能红，等于「门能判 ≠ 门会拦」。N-c 那条不进 `INJECTIONS`：它改的是整份 DOM
           而不是 JSON/CSS，塞进「基线产物 + 注入」那套循环里会让 P1–P25 一起把手写壳当产物判。
@@ -199,8 +200,10 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
        —— `{12,13,14}` 是 3 档但含 13。`P19` 本轮不动（P1–P19 冻结），重叠如实登记进自证。
     t) **S-02a 的行高判据只对「单行行」成立**。`T-02` 允许 `wrap + maxLines:2`，而合规的两行行
        必然 >34（14×1.57×2+padding≈58）。对全部 `tr` 判 ≤34 会把合规两行判成缺陷 ——
-       CAPA `page-capa-list` 的 `58/68/78` 就是这件事，**`P9` 在它上面是假红**（本轮不动 P9，
-       只把这条事实登记进反样本重登说明）。分母 = 行内文本行盒数 == 1 的数据行；
+       CAPA `page-capa-list` 的 `58/68/78` 就是这件事：8 行里 7 行是 2 行盒（h58）、1 行是
+       3 行盒（h78），那 20px 的差**全部来自换行数**。`P9` 原先正是被这个差判红的，
+       v) 里把它改成逐行盒数分组后翻绿 —— 不是判据放宽，是同一个数原先被当成了两种意思。
+       分母 = 行内文本行盒数 == 1 的数据行；
        分母 0 → `SKIP(分母 0：无单行数据行…)`，走条件式白名单（值里带条件，不许裸 SKIP）。
        行盒数**按每个文本节点各自量**：对整格 `selectNodeContents` 取 rects 会把单元格盒子自己
        也算一个 rect（top 与文字不同），单行格全被读成 2 行 —— 实测 example-06 的 20 行全变「多行」，
@@ -210,6 +213,14 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
        不排除时三份产物会各红 6/4/3 条 —— 全是按钮。比值分母是 **font-size**，不是行盒高。
        这条目前三份产物**全绿**（正文比只有 1.57），所以它必须配一条能红的注入
        （正文 `line-height:1` → 读 1.00），否则又是「判据在跑，判的不是它宣称的东西」。
+    v) **`P9` 本轮由 team-lead 明示解冻，只动形态、不动阈值**（`极差≤2` 一个字没改）：
+       ① 删 `mx <= ROW_MAX_H` —— 上限归 `S-02a`，两处都判上限时同一次超标会被两条各报一次，
+       `EXPECTED_FAIL` 里还会出现两条同因红，读报告的人不知道该改哪条；
+       ② 极差改为按**行盒数逐值**分组（1 行盒比 1 行盒、2 行盒比 2 行盒），不是「单行/多行」
+       两桶 —— 两桶写法会把「2 行盒 h58 vs 3 行盒 h78」的 20 读成组内不一致，那正是要排除的
+       形态差，而且表面上「分组了」，比不分组更难发现；
+       ③ 加两处条件式 `SKIP`（A 无数据行 / B 无任一组 ≥2 行），条件写进 `value`，
+       `P9` 仍**不在** `SKIP_WHITELIST` 里。
 """
 
 import argparse
@@ -307,6 +318,12 @@ def skip_allowed(row):
         return bool(re.match(r"SKIP\(分母 0：无单行数据行", row.get("value") or ""))
     if row.get("id") == "S-02b":
         return bool(re.match(r"SKIP\(分母 0：无正文元素", row.get("value") or ""))
+    # ④ `P9`：两处 SKIP 都是「本来就没有可比基数」，不是「判不了」。条件写进 value：
+    #    A 数据行 < 2；B 有行但没有任何一组 ≥2 行（跨组比是拿两种形态互比，结论恒定）。
+    #    **不许把 "P9" 加进 SKIP_WHITELIST** —— 那等于它在任何原因下都能 SKIP。
+    if row.get("id") == "P9":
+        return bool(re.match(r"SKIP\((有效数据行 \d+ < 2|无任一行盒组 ≥2 行)",
+                             row.get("value") or ""))
     return False
 
 # V8（I-07 第二批裁定）：example-05 的期望 FAIL 集，**逐条写死**。
@@ -725,6 +742,34 @@ PROBE = r"""
     })();
 
     // ---- 表格
+    /* 行内文本行盒数：**P9 分组**与 **S-02a 分母**共用这一个量法，不许各写一份。
+       量法 = 每个文本节点各自 `getClientRects()`，按 `top` 四舍五入去重（与 T-01 同口径：
+       数 rect 个数会把被 ellipsis 裁出的第二个 rect 读成第二行；对整格
+       `selectNodeContents` 取 rects 又会把单元格盒子自己算一个 rect，单行格全变两行）。 */
+    function _lineBoxes(tr){
+      /* **每格各数各的、取最大**，不要把整行的 top 并成一个集合：同一行里
+         Tag 的文字比 td 文字低 1~2px，四舍五入后落在不同的 top 上，
+         并集会把每个单行格都算成两行（实测 example-06 的 20 行全变多行）。 */
+      var tds=tr.querySelectorAll('td'), mx=0;
+      for(var ti2=0; ti2<tds.length; ti2++){
+        var tops={}, n=0;
+        var tw2=document.createTreeWalker(tds[ti2], NodeFilter.SHOW_TEXT, null), t2;
+        while((t2=tw2.nextNode())){
+          if(!(t2.nodeValue||'').trim()) continue;
+          var pe=t2.parentElement;
+          if(!pe || !pe.getClientRects().length) continue;
+          var r2=document.createRange(); r2.selectNodeContents(t2);
+          var rs2=r2.getClientRects();
+          for(var k2=0;k2<rs2.length;k2++){
+            if(rs2[k2].height<=0) continue;
+            var ky=Math.round(rs2[k2].top);
+            if(!tops[ky]){ tops[ky]=1; n++; }
+          }
+        }
+        if(n>mx) mx=n;
+      }
+      return mx;
+    }
     var tables=[], tlist=C.querySelectorAll('.ant-table');
     for(var ti=0; ti<tlist.length; ti++){
       var t=tlist[ti];
@@ -732,11 +777,12 @@ PROBE = r"""
       var wrap=t.closest('.ant-table-wrap')||t.parentElement;
       var wr=wrap.getBoundingClientRect();
       var rows=t.querySelectorAll('tbody tr');
-      var hs=[];
+      var hs=[], rowMeta=[];
       for(var ri=0;ri<rows.length;ri++){
         var cells=rows[ri].querySelectorAll('td');
         if(cells.length<2) continue;              /* 空态/加载态那一行 colspan，不参与 */
         hs.push(rows[ri].offsetHeight);
+        rowMeta.push({h:rows[ri].offsetHeight, lines:_lineBoxes(rows[ri]), idx:ri});
       }
       var firstRowH = hs.length?hs[0]:null;
       var visH = Math.max(0, Math.min(wr.bottom, window.innerHeight) - Math.max(wr.top, 0));
@@ -880,7 +926,7 @@ PROBE = r"""
         i:ti, id:t.id||'', tableLayout: cs(t).tableLayout,
         wrapClientW:num(wrap.clientWidth), wrapScrollW:num(wrap.scrollWidth),
         wrapTop:num(wr.top), wrapBottom:num(wr.bottom), visibleH:num(visH),
-        rowCount:rows.length, rowHeights:hs, firstRowH:firstRowH,
+        rowCount:rows.length, rowHeights:hs, rowMeta:rowMeta, firstRowH:firstRowH,
         visibleRows: (firstRowH&&firstRowH>0)?Math.floor(visH/firstRowH):0,
         fullRows: fullRows,
         cols:colsInfo,
@@ -929,46 +975,19 @@ PROBE = r"""
       return sizes;
     })();
 
-    /* ---- S-02①：数据行的「行内文本行盒数」。
-       T-02 允许 `wrap + maxLines:2`，而**合规的两行行必然 >34**（14×1.57×2+padding≈58）。
-       所以「行高 ≤34」不能对全部 tr 判 —— 那一刀会把合规的两行判成缺陷
-       （CAPA 的 58/68/78 就是这件事，P9 在它上面是假红）。分母只能是**单行行**。
-       行盒数用 Range 的 client rects 数**不同 top**：一个 inline 盒可能被拆成多个 rect
-       （Tag 里的文字、带 padding 的 span），数 rect 个数会把单行读成多行。 */
+    /* ---- S-02①：数据行按「行内文本行盒数」分组。**不重算行盒** —— 直接用上面
+       `tables[].rowMeta`（那一份与 P9 分组共用同一个 `_lineBoxes`，两处量法分叉过：
+       对整格 `selectNodeContents` 取 rects 会把单元格盒子自己算一个 rect，
+       example-06 的 20 行全被读成「多行」，S-02a 分母直接归零）。 */
     out.rowLines=(function(){
-      var tabs=C.querySelectorAll('.ant-table'), res=[];
-      /* 行盒数只能按**每个文本节点**各自量：对整格 `selectNodeContents` 取 rects，浏览器会把
-         单元格盒子自己也返回一个 rect（与文字行盒的 top 不同），于是每个单行格都读成 2 行
-         —— 实测 example-06 的 20 行全部被读成「多行」，S-02a 分母直接变 0。 */
-      function lines(td){
-        var tops={}, n=0;
-        var tw=document.createTreeWalker(td, NodeFilter.SHOW_TEXT, null), t;
-        while((t=tw.nextNode())){
-          if(!(t.nodeValue||'').trim()) continue;
-          var el=t.parentElement;
-          if(!el || !el.getClientRects().length) continue;
-          var r=document.createRange(); r.selectNodeContents(t);
-          var rs=r.getClientRects();
-          for(var i=0;i<rs.length;i++){
-            if(rs[i].height<=0) continue;
-            var k=Math.round(rs[i].top);
-            if(!tops[k]){ tops[k]=1; n++; }
-          }
+      var res=[];
+      for(var ti=0; ti<tables.length; ti++){
+        var tb=tables[ti], arr=[];
+        for(var j=0;j<(tb.rowMeta||[]).length;j++){
+          var r=tb.rowMeta[j];
+          arr.push({table:tb.i+1, idx:(r.idx===undefined?j:r.idx), h:r.h, lines:r.lines});
         }
-        return n;
-      }
-      for(var ti=0; ti<tabs.length; ti++){
-        /* 嵌套表跳过：否则外层 querySelectorAll 会把内层行再数一遍 */
-        if(tabs[ti].parentElement && tabs[ti].parentElement.closest('.ant-table')) continue;
-        var trs=tabs[ti].querySelectorAll('tbody tr'), arr=[];
-        for(var j=0;j<trs.length;j++){
-          var tds=trs[j].querySelectorAll('td');
-          if(tds.length<2) continue;                 /* 与 P9 / P2 同口径：<2 格不算数据行 */
-          var mx=0;
-          for(var k2=0;k2<tds.length;k2++){ var l=lines(tds[k2]); if(l>mx) mx=l; }
-          arr.push({table:ti+1, idx:j, h:trs[j].offsetHeight, lines:mx});
-        }
-        res.push({i:ti+1, rows:arr});
+        res.push({i:tb.i+1, rows:arr});
       }
       return res;
     })();
@@ -1963,16 +1982,62 @@ def evaluate(props, dom, page, vw):
         verdict(rows, "P8", "横向溢出（验收态 %s）" % fmt(cw), "scroll %s / client %s" % (fmt(sw), fmt(cl)),
                 "≤client+2", "PASS" if ok else "FAIL")
 
-    # ---- P9 行高一致性
-    hs = [h for h in (t0 or {}).get("rowHeights") or [] if h]
-    if len(hs) < 2:
-        verdict(rows, "P9", "行高一致性", "—", "极差≤2 且 ≤%d" % ROW_MAX_H, "SKIP", "有效数据行 <2")
+    # ---- P9 行高一致性（**只判极差，不判上限**）
+    #
+    # 归属唯一化（team-lead 2026-10-26 裁定，幻神写进 `12` §S-02）：`≤34` 这个「行高上限」
+    # 归 `S-02a`，P9 只管「跨 tr 一致性」。两处都判上限时，同一次超标会被两条各报一次，
+    # 读报告的人不知道该改哪一条 —— 而 `EXPECTED_FAIL` 里也会出现两条同因红。
+    # **别把 `mx <= ROW_MAX_H` 加回来**：那不是「更严格」，是同一条判据写了两遍。
+    #
+    # 极差还必须**按行内行盒数分组**（1 行盒比 1 行盒、2 行盒比 2 行盒，**逐值分组**）：
+    # 一个合规的两行格夹在一堆单行里，跨组极差必然 >2 —— 那是必然事件，不是缺陷。
+    # 注意是**逐值**不是「单行 / 多行」两桶：CAPA 列表页 `@1600` 是 7 行 2 行盒（h58）
+    # 加 1 行 3 行盒（h78），并成「多行」桶会读出极差 20，而这 20 全部来自换行数不同 ——
+    # 那正是这条判据要排除的东西。两桶写法还会让人以为「分组了」，比不分组更难发现。
+    p9_rows = [r for r in (t0 or {}).get("rowMeta") or [] if (r.get("h") or 0) > 0]
+    p9_unk = [r for r in p9_rows if not r.get("lines")]
+    p9_by = {}
+    for r in p9_rows:
+        if r.get("lines"):
+            p9_by.setdefault(int(r["lines"]), []).append(r)
+    p9_keys = sorted(p9_by)
+    p9_scored = [(k, p9_by[k]) for k in p9_keys if len(p9_by[k]) >= 2]
+    if len(p9_rows) < 2:
+        # A 分支：连数据行都不够。条件写进 value，白名单只认条件（不认 id）——
+        # 旧版把条件塞在 note、value 写 `—`，那行一旦走到就是 SKIP-OUT-OF-WHITELIST。
+        verdict(rows, "P9", "行高一致性（跨 tr 极差）",
+                "SKIP(有效数据行 %d < 2，无表格数据行)" % len(p9_rows),
+                "极差≤2", "SKIP",
+                "没有数据行就没有可比对象；「0 条不一致」不等于达标")
+    elif not p9_scored:
+        # B 分支：有行，但没有任何一组 ≥2 行（含「1 行盒 1 行 + 2 行盒 1 行」这种
+        # len(p9_rows)==2 却无从算极差）。它不是 A 换个说法：旧判据在这种页上会跨组算
+        # 极差（34 对 58 → 24）直接判 FAIL，把两种形态的差读成「不一致」。新判据说「无从算」。
+        p9_parts = ["%d 行盒 %d" % (k, len(p9_by[k])) for k in p9_keys]
+        if p9_unk:
+            p9_parts.append("行盒 0 的 %d 行量不到" % len(p9_unk))
+        verdict(rows, "P9", "行高一致性（跨 tr 极差）",
+                "SKIP(无任一行盒组 ≥2 行：%s)" % " / ".join(p9_parts),
+                "极差≤2", "SKIP",
+                "跨组比（不同行盒数）是拿两种形态互比，结论恒定 —— 那不是一致性")
     else:
-        spread = max(hs) - min(hs)
-        mx = max(hs)
-        verdict(rows, "P9", "行高一致性（跨 tr）", "极差 %s / 最高 %s" % (fmt(spread), fmt(mx)),
-                "极差≤2 且 ≤%d" % ROW_MAX_H, "PASS" if spread <= 2 and mx <= ROW_MAX_H else "FAIL",
-                "n=%d" % len(hs))
+        def _g(k):
+            g = p9_by[k]
+            if len(g) < 2:
+                return "%d 行盒 n=%d（未判）" % (k, len(g))
+            vs = [r["h"] for r in g]
+            return "%d 行盒 n=%d 极差 %s" % (k, len(g), fmt(max(vs) - min(vs)))
+        bad9 = [(k, p9_by[k]) for k, g in p9_scored
+                if (max(r["h"] for r in g) - min(r["h"] for r in g)) > 2]
+        val9 = " ｜ ".join(_g(k) for k in p9_keys)
+        if p9_unk:
+            val9 += " ｜ 行盒 0 的 %d 行量不到" % len(p9_unk)
+        verdict(rows, "P9", "行高一致性（跨 tr 极差）", val9, "极差≤2",
+                "PASS" if not bad9 else "FAIL",
+                ("超差组：%s ｜ " % "、".join("%d 行盒（极差 %s）"
+                                            % (k, fmt(max(r["h"] for r in g) - min(r["h"] for r in g)))
+                                            for k, g in bad9) if bad9 else "") +
+                "上限 ≤%d 归 S-02a，P9 不判上限；极差只在同行盒数的组内比" % ROW_MAX_H)
 
     # ---- P10 表头吸附
     if not t0:
@@ -2967,12 +3032,21 @@ INJECTIONS = [
     # transform 不影响布局，只移动盒子 —— P6 量的正是盒子左边界。
     {"name": "P6_filter_shift", "kind": "css", "want": ["P6"],
      "payload": ".ant-content .ant-filter-bar{transform:translateX(-12px)}"},
-    {"name": "P9_row_high", "kind": "css", "want": ["P9"],
-     "allow": ["P2a", "P2b", "P18", "P20", "P21", "P22"],
-     "allowWhy": "行高变大 → 一屏行数必然减少（P2a/P2b）；white-space:normal 让短字段折行（P20）、"
-                 "长文本折成 3 行（P21/P22），且不再横向溢出 → 配了 ellipsis 的两列变成「装饰」，"
-                 "P18 的集合相等必然不成立。全部是这个注入的真实后果，不是判据重叠",
-     "payload": ".ant-table td{white-space:normal!important;padding-top:16px!important;padding-bottom:16px!important}"},
+    # P9 只判「同行盒数组内极差」之后，**撑高全部行不再能红它**（全变 54 → 组内极差仍是 0）。
+    # 所以注入改成**只撑高奇数行**，让「1 行盒组」内部真的出现极差；断言也不看 PASS/FAIL 了，
+    # 直接读值里的数（`1 行盒 n=20 极差 22 ｜ …`）—— 只断言 FAIL 的话，
+    # 「全组一起变高」那种注入也能 PASS/FAIL 翻转，证明不了它量的是极差。
+    {"name": "P9_row_spread", "kind": "css", "want_rows": {
+        # 基线 20 行全是 1 行盒 → 值里只有一组，没有 ` ｜ ` 分隔符。断言整串相等，
+        # 不为「凑出分隔符」去别处塞一条多行行 —— 那会让这条注入同时改两件事。
+        "P9": ("FAIL", r"^1 行盒 n=\d+ 极差 (?:[3-9]|[1-9]\d+)$")},
+     "allow": ["P2a", "P2b", "S-02a"],
+     "allowWhy": "奇数行 padding 各加 16px → 那 10 行从 34 涨到 56，1 行盒组内极差 22"
+                 "（实测 20 行两值 34/56，不是「各涨一点」）；行变大必然挤掉一屏行数（P2a/P2b），"
+                 "且这 10 行同时越过 34 的单行上限（S-02a）"
+                 "—— 三条都是「把这半张表撑高」的真实后果，不是 P9 与它们在测同一件事",
+     "payload": ".ant-table tbody tr:nth-child(odd) td"
+                "{padding-top:16px!important;padding-bottom:16px!important}"},
     {"name": "P10_sticky_off", "kind": "css", "want": ["P10"],
      "payload": ".ant-table th{position:static!important}"},
     # ---- js 类（在 measure 前塞元素）
@@ -3151,9 +3225,11 @@ INJECTIONS = [
     # 这样分母仍是那 20 行单行行，红的是「单行行超过了 34」本身。
     # 连带 P9（极差/最高）、P2a/P2b（一屏行数）是行高变大的必然结果。
     {"name": "S02a_row_high", "kind": "css", "want": ["S-02a"],
-     "allow": ["P9", "P2a", "P2b"],
-     "allowWhy": "td 上下 padding 各加到 14px → 单行行从 34 涨到 50：P9 的最高行高、P2a/P2b 的一屏行数"
-                 "都跟着变，这是「行变高」的必然后果，不是 S-02a 与它们在测同一件事",
+     "allow": ["P2a", "P2b"],
+     "allowWhy": "td 上下 padding 各加到 14px → 单行行从 34 涨到 50：P2a/P2b 的一屏行数跟着变，"
+                 "这是「行变高」的必然后果，不是 S-02a 与它们在测同一件事。"
+                 "**P9 不在此列**：P9 已不判上限（上限归 S-02a），全行等高时组内极差为 0，它不该红 —— "
+                 "留在这里会把一个已经改对的行为判成回归",
      "payload": ".ant-table td{padding-top:14px!important;padding-bottom:14px!important}"},
     # 正文行高比 1.57 → 1.00：只动表单标签（span.lb，表格外、非控件、非标题），
     # 让「正文」这一桶里出现越界值。若不降字号，比值恒为 line-height/font-size 的商，
@@ -3374,7 +3450,9 @@ def selfcheck(chrome, base_file=None):
                     if not (st == exp_st and re.match(exp_re, val)):
                         bad_rows.append("%s 实测 %s %s ｜ 期望 %s 匹配 %s"
                                         % (pid, st, val or "—", exp_st, exp_re))
-                extra = flipped - allow
+                # 目标判据本身**允许出现在 FAIL 集里**（这一支的旧写法只在目标是 SKIP 时成立，
+                # 一旦有目标的期望态是 FAIL，它就会被算成「多翻」—— 判据测对了反而自证失败）。
+                extra = flipped - allow - set(want_rows)
                 print("  %-18s 实测 %s %s%s"
                       % ("", ", ".join("%s %s" % (p, now_val.get(p)) for p in want_rows),
                          "  OK" if not bad_rows and not extra else "  SELFCHECK-FAIL",
@@ -3431,6 +3509,12 @@ def selfcheck(chrome, base_file=None):
         else:
             ok_all = False
         total += 1
+        # ---- P9 B 分支：有数据行但没有任何一组 ≥2 行 → 条件式 SKIP 必须被放行
+        if p9_branch_check(chrome, tmp):
+            covered += 1
+        else:
+            ok_all = False
+        total += 1
         # ---- XX-045 验收 ①：行数不足 + total 未声明 → 条件式 SKIP 必须被白名单放行
         if p2_skip_fixture_check(chrome, tmp):
             covered += 1
@@ -3452,6 +3536,55 @@ def selfcheck(chrome, base_file=None):
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def p9_branch_check(chrome, tmp):
+    """`P9` B 分支自证：**有数据行、但没有任何一组 ≥2 行** 时必须 SKIP 且被放行。
+
+    样本 `tests/fixtures/fixture-p9-mixed-lines.json`：2 行数据，第 1 行单行、第 2 行
+    （批次号 `wrap+maxLines:2` + 长值）多行 —— 两组各 1 行，**极差无从算**。
+    第 2 行的行盒数实测是 3（不是 2）：列宽够不够它折两行取决于视口，所以正则只锚
+    「`1 行盒 1 / N 行盒 1`」这个**结构**（两组、各 1 行），不锚死 N —— 反过来若是把
+    「1/2 两组」写死，换个视口就会判自证失败，而判据其实是对的。
+
+    为什么 B 不是 A 换个说法：旧判据在这种页上会**跨组**算极差（34 对 58 → 24）直接判 FAIL，
+    把「1 行盒 vs 2 行盒两种形态之差」读成「同一张表行高不一致」。新判据说「无从算」。
+    这条样本拦的就是这一类误判，所以断言的是**值里的条件 + 各组各自的行盒数与 n**，
+    不是「它 SKIP 了」—— 后者用 1 行数据也能过，证明不了「分组」这件事。
+
+    另断 `bad_skip` 为空：`P9` 不在 `SKIP_WHITELIST` 里，条件写错就会变 SKIP-OUT-OF-WHITELIST。
+    """
+    fx = Path(__file__).with_name("fixtures") / "fixture-p9-mixed-lines.json"
+    if not fx.is_file():
+        print("  %-18s SELFCHECK-FAIL ｜ 样本缺失：%s" % ("P9 B 分支", fx))
+        return False
+    data = json.loads(fx.read_text(encoding="utf-8"))
+    page = pick_page(data)
+    if page is None:
+        print("  %-18s SELFCHECK-FAIL ｜ fixture 里没有作业型列表页" % "P9 B 分支")
+        return False
+    hp = tmp / "p9-b.html"
+    build_case(CONTAINER, data, page["id"], hp)
+    rx = r"^SKIP\(无任一行盒组 ≥2 行：1 行盒 1 / \d 行盒 1\)$"
+    ok_all, seen, bad_all = True, [], set()
+    for w, h in VIEWPORTS:
+        d = run_viewport(chrome, hp, w, h)
+        rows = evaluate(props_of(page, d), d, page, w)
+        bad_all |= {r["id"] for r in rows if r["status"] == "SKIP" and not skip_allowed(r)}
+        r0 = next((x for x in rows if x["id"] == "P9"), None)
+        st, val = (r0 or {}).get("status") or "—", (r0 or {}).get("value") or ""
+        good = st == "SKIP" and bool(re.match(rx, val))
+        seen.append("%dx%d %s%s" % (w, h, val or st, "" if good else " ✗"))
+        if not good:
+            ok_all = False
+    ok = ok_all and not bad_all
+    print("  %-18s %s ｜ 白名单外 SKIP=%s ｜ %s"
+          % ("P9 B 分支（2 行混合）", " ｜ ".join(seen), sorted(bad_all) or "[]",
+             "OK" if ok else "SELFCHECK-FAIL"))
+    if not ok:
+        print("          ↳ 期望两档都是 `SKIP(无任一行盒组 ≥2 行：1 行盒 1 / N 行盒 1)`，"
+              "且不出现在白名单外 —— 改成「1 行数据」或放宽正则都不许")
+    return ok
 
 
 def conclude_check():

@@ -296,8 +296,8 @@
                     }
                   ],
                   "pagination": {
-                    "total": 1286,
-                    "pageSize": 10,
+                    "total": 6,
+                    "pageSize": 6,
                     "current": 1,
                     "jump": true
                   },

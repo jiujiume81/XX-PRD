@@ -102,7 +102,14 @@ def page_list():
                             {"type": "Button", "id": "n-btn-export",
                              "props": {"text": "导出", "icon": "download"}},
                         ],
-                        "pagination": {"total": 1286, "pageSize": 10, "current": 1, "jump": True},
+                        # XX-046：`total` 必须等于**真实行数**。P2a/P2b 把 total 当「数据量证据」
+                        # 读（`_rows_gate`），写 1286 而只造 6 行，判据只能报
+                        # `INCOMPLETE(INSUFFICIENT_ROWS)` —— 那是**教材自相矛盾**，不是判据太严。
+                        # 也不能补造到 14 行：`ORDERS` 六条 status 两两不同、与 `STATUS_COLORS`
+                        # 六键一一对应，补进来的只能是重复状态，等于改掉这份「行为模型」教材的用途。
+                        # `pageSize` 跟着一起改：`pageSize 10 > total 6` 本身自相矛盾。
+                        "pagination": {"total": len(ORDER_ROWS), "pageSize": len(ORDER_ROWS),
+                                       "current": 1, "jump": True},
                         "columns": [
                             {"title": "采购单号", "dataIndex": "poNo", "width": 150},
                             {"title": "状态", "dataIndex": "status", "type": "tag"},

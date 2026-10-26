@@ -316,12 +316,32 @@
     `FAIL  fixture=CAPA-PRD.data.json rc=1 PASS=15 FAIL=31 SKIP=10 ｜ 原句：FAIL` → 还原。
   - 现状如实：`RESULT FAIL 10/11（未通过：安装副本同步）｜TREE DIRTY(n)` —— 旧的那条真红没变，
     新增两项绿，**不拿它把整体包装成绿**。
-- **`example-05` 的 `INCOMPLETE(INSUFFICIENT_ROWS)` 不改判据、本轮不修**（team-lead 裁定，落 XX-046）：
-  根因不在「少写几行」，在 **`total` 一个字段承担两个语义**（分页演示 / 数据量证据，`P2a/P2b` 读后者）——
-  同族：`width` 声明 vs 渲染、`Σ col.offsetWidth ≡ 表宽`。改 `total` 的方案被否，因为它**直接后果**
-  是 `P13@1440/1600` 两条真实 FAIL 变 SKIP（`EXPECTED_FAIL` 里躺着），重登后 diff 只会被读成「改样本换绿」。
-  正确做法是 `gen_example05.py` 的 `ORDERS` 补到 ≥14 并同步 `pageSize`（现在 `pageSize:10` 配 14 行自相矛盾），
-  走生成器 + 基线重登。**这不许被记成「已知可忽略」**：全量模式看到它，答案就是「教材造少了，见 XX-046」。
+- **`example-05` 教材数据自洽（XX-046）：`total 1286 → 6`、`pageSize 10 → 6`，走生成器不手改 JSON**。
+  根因不是「少写几行」，是 **`total` 一个字段承担两个语义**（分页演示 / 数据量证据，`P2a/P2b` 读后者）——
+  同族：`width` 声明 vs 渲染、`Σ col.offsetWidth ≡ 表宽`。**补数据那条路被否**：`ORDERS` 六条
+  `status` 是 `草稿/待审批/已审批/部分到货/已关闭/已取消`，两两不同且与 `STATUS_COLORS` 六键一一对应，
+  补到 14 行只能靠重复状态 —— 那是改掉这份「行为模型」教材的用途，不是修数据。
+  `pageSize` 必须一起改：`pageSize 10 > total 6` 本身自相矛盾。
+  - **`P13@1440/1600` 移出 `EXPECTED_FAIL`，这是「条件消失」，不是判据放宽**：`P13` 的
+    `total < 100 → SKIP`（`:1931`）先后被假 `total` 挡住，真实 `total=6` 时「`pageSize ≥ 20`」
+    这个要求根本不成立（一页放 6 条就是全部）。阈值一个字没动，`SKIP_WHITELIST` 也没新增 P13。
+    **不写这句，V8 少 2 条读起来就是「改样本换绿」**。
+  - `P2a/P2b` 从 `INCOMPLETE(INSUFFICIENT_ROWS)` 变
+    `SKIP(行数 6 < 所需，total 6 < 所需)`（`P2a` 所需 14；`P2b` 按档 9/12，各自传自己的 need）；
+  - `P16` 仍 PASS —— 容器 `index.html:1757` 只看 `pagination` 这个 prop 在不在（对象为真），
+    `total/pageSize` 改了也照渲分页脚，所以不落 `SKIP(无分页脚)`；
+  - **验收口径（team-lead/幻神重写）**：全量模式**不得出现** `INCOMPLETE`、**不得出现**
+    `SKIP-OUT-OF-WHITELIST`、**V8 FAIL 集逐条相等** —— 达标看这三件，**不看结论行颜色**。
+    `RESULT FAIL` 是预期结论（example-05 还有 18 条登记红），不许为它变绿去改判据或把
+    example-05 摘出 `default_targets()`（那是把登记红样本踢出覆盖）。
+- **结论段不再早退（XX-047）**：原来 `bad_skip → tinc → v8_bad` 三级 `return 1`，
+  后果是**只要有一条 INCOMPLETE，V8 的比对结论就永远进不了结论段** —— example-05 造少那段时间
+  正是如此，「红的是不是该红的那几条」被一句 INCOMPLETE 压掉了。现在抽成 `conclude()`：
+  三条事实先全部算完，第一句按优先级（判据没跑 > 量具不可信 > V8 不符），**其余事实同段打出**。
+  文案改成两个数：`3 行 INCOMPLETE（P2a、P2b）` —— 只打条数时「2 判据 × 2 档 = 4」会被读成
+  「4 条判据」，幻神就是这样误判「P2b 的分母也是 14」（实际 `TARGET_ROWS_REVIEW = {1440: 9, 1600: 12}`，
+  `_rows_gate` 由调用点各自传 need）。自证 26 → **27** 条：构造**同时**有 INCOMPLETE 与 V8 不符的输入，
+  断言结论段**两个关键词都在**（只断言一个，早退回来照样过）。
 - 第一阶段的 `V-01` 只做式子验证、不做判据（需求单第二阶段）；第二阶段已接入（见上）。
   `cause` 的定位仍在一套算式里，没有另立阈值；`N-c` 不可达的理由见上一条通用纪律。
 

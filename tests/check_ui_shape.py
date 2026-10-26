@@ -158,12 +158,14 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
        ⑥ 自证里有 `V01_zoom`（N-d 独立红）、`V01_maxw`（N-a 盲区）与三条 `INCOMPLETE` 造红；
           加上 `P7` 两个方向、`P21`、`P22` 各一条，再有 `P2b` 的两条**第三态**注入
           （`SKIP(… total 未声明)` 与 `INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6`），
-          共 25 条注入，另加 N-c 手写壳样本 1 条，自证覆盖 **26 条** ——
+          共 25 条注入，另加 N-c 手写壳样本 1 条与 XX-047 结论段 1 条，自证覆盖 **27 条** ——
           **「新增判据每一条都要有一条能红的注入」**，P7 是本轮抓 CAPA 的主力，
           它自己没被证过能红，等于「门能判 ≠ 门会拦」。N-c 那条不进 `INJECTIONS`：它改的是整份 DOM
           而不是 JSON/CSS，塞进「基线产物 + 注入」那套循环里会让 P1–P25 一起把手写壳当产物判。
           两条 `P2b` 注入用 `want_rows` 断言 **(状态, 值)** 而不是 FAIL 集合：这两条的第三态
           （SKIP / INCOMPLETE）根本不进 FAIL 集，只比 FAIL 集的话「少造几行换个 SKIP」永远绿。
+          XX-047 那条直接调 `conclude()` 喂构造输入（**同时**给 INCOMPLETE 与 V8 不符），
+          断言结论段**两个关键词都在** —— 只断言一个，早退回来照样过。
     q) **`main_table()` 改名 `resolve_list_table()`，与 `is_work_list_page()` 拆开**：
        前者答「哪张表是主表」（任何页都该能答，只用于取原始量），后者答「算不算作业型列表页」
        （形态类判据的适用范围，**定义不变**）。混在一起时只能靠放宽「列表页」定义去迁就
@@ -190,6 +192,7 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
 
 import argparse
 import html as htmlmod
+import io
 import json
 import math
 import os
@@ -198,6 +201,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -279,8 +283,9 @@ def skip_allowed(row):
 # 否则「把一条红的挪进名单」和「放宽判据」是同一个效果。
 EXPECTED_FAIL = {
     "example-05-behavior-model.json": {
-        # 9 条判据 × 两档 = 18 条，两档同红：说明是产物问题，不是某一档的偶然。
+        # 8 条判据 × 两档 = 16 条，两档同红：说明是产物问题，不是某一档的偶然。
         # P15 已不在名单里：F6 之后它真实翻绿（判据未改），见交付说明第二批 §4。
+        # P13 已移出（XX-046），理由写在下面那一行，不是「顺手少一条」。
         "P3a@1440", "P3a@1600",
         "P4@1440",  "P4@1600",
         "P7@1440",  "P7@1600",
@@ -288,7 +293,10 @@ EXPECTED_FAIL = {
         "P10@1440", "P10@1600",
         "P11@1440", "P11@1600",
         "P12@1440", "P12@1600",
-        "P13@1440", "P13@1600",
+        # P13 已移出（XX-046）：这两个红是**假 total 触发的** —— 教材原写 `total:1286`，
+        # 于是 `:1931` 的 `total < 100 → SKIP` 分支走不到，只能判 `pageSize ≥ 20` 的红。
+        # 真实 `total=6` 时那个要求根本不成立（一页放 6 条就是全部）。它是**条件消失，
+        # 不是判据放宽**：阈值一个字没动，SKIP 白名单里也没有 P13 的新增项。
         "P18@1440", "P18@1600",
         # I-09 第一阶段新增：P24 承载 W-01（列宽下限）。它在 example-05 上红是**前置红**，
         # 不是「列宽算错了」—— 该页 P7 本就红（2/7 声明率 + auto），按 W-03 的顺序，
@@ -2491,7 +2499,7 @@ def run_one(chrome, json_path, page_id=None, keep=False, why=None):
     if page is None:
         print("\nCASE %s —— SKIP（无列表页候选；判页依据：%s）"
               % (Path(json_path).name, why))
-        return 0, 0, 0, [], set(), set(), 0
+        return 0, 0, 0, [], set(), set(), []
     tmp = Path(tempfile.mkdtemp(prefix="xx-prd-shape-"))
     html = tmp / "case.html"
     try:
@@ -2506,8 +2514,10 @@ def run_one(chrome, json_path, page_id=None, keep=False, why=None):
         # V8 的比对单位是「判据@视口」：同一判据只在一档红、另一档绿，本身就是要看的信号。
         fails = set("%s@%d" % (r["id"], w)
                     for w, rs in rows_by_vp.items() for r in rs if r["status"] == "FAIL")
-        # INCOMPLETE 必须单独回传：它既不是绿也不是红，合并进 PASS 就是静默绿
-        inc = sum(1 for rs in rows_by_vp.values() for r in rs if r["status"] == "INCOMPLETE")
+        # INCOMPLETE 必须单独回传：它既不是绿也不是红，合并进 PASS 就是静默绿。
+        # 回传的是**判据 id 列表**（不是条数）：结论段要打「几行 + 去重后的哪几条」，
+        # 只回条数时「2 判据 × 2 档 = 4 行」会被读成「4 条判据」（XX-047 的起因）。
+        inc = [r["id"] for rs in rows_by_vp.values() for r in rs if r["status"] == "INCOMPLETE"]
         return render_case(Path(json_path).name, page, dom_by_vp, rows_by_vp,
                            why, cand_ids) + (fails, inc)
     finally:
@@ -2551,9 +2561,9 @@ def main_all_pages(chrome, files, keep=False):
         for page, kind in cands:
             p, fl, s, sk, _bad, _fs, inc = run_one(chrome, f, page.get("id"), keep,
                                         why="逐页全判（--all-pages）")
-            got.append((page.get("id"), kind, p, fl, s, inc))
+            got.append((page.get("id"), kind, p, fl, s, len(inc)))
             bad_skip.update(_bad)
-            any_fail = any_fail or fl > 0 or inc > 0
+            any_fail = any_fail or fl > 0 or bool(inc)
         print("\n  ---- 分页小计（%s，**不合并**）----" % Path(f).name)
         print("  %-26s %-16s %6s %6s %6s %6s" % ("page", "kind", "PASS", "FAIL", "SKIP", "INC"))
         for pid, kind, p, fl, s, inc in got:
@@ -2604,7 +2614,8 @@ def main(argv=None):
     if args.all_pages:
         return main_all_pages(chrome, files, args.keep)
 
-    tp = tf = ts = tinc = 0
+    tp = tf = ts = 0
+    inc_ids = []
     skip_seen = set()
     bad_seen = set()
     fails_by_file = {}
@@ -2617,14 +2628,14 @@ def main(argv=None):
         tp += p
         tf += fl
         ts += s
-        tinc += inc
+        inc_ids.extend(inc)
         skip_seen.update(sk)
         bad_seen.update(bad_one)
         fails_by_file[Path(f).name] = fs
 
     print("\n" + "-" * 78)
     print("TOTAL PASS=%d FAIL=%d SKIP=%d%s"
-          % (tp, tf, ts, (" INCOMPLETE=%d" % tinc) if tinc else ""))
+          % (tp, tf, ts, (" INCOMPLETE=%d" % len(inc_ids)) if inc_ids else ""))
 
     # V8：不是「FAIL 数够不够」，是「红的是不是原来那几条」。
     # 少一条 = 判据被放宽或失效；多一条 = 新缺陷或判据变严。两种都要人说清楚。
@@ -2672,26 +2683,57 @@ def main(argv=None):
     if bad_skip:
         print("SKIP-OUT-OF-WHITELIST=[%s]  白名单只允许 %s"
               % (",".join(bad_skip), ",".join(SKIP_WHITELIST)))
-        print("RESULT INCOMPLETE  —— 有判据在没有正当理由的情况下没跑，"
-              "这不是「产物达标」，是「判据没判」")
-        return 1
-    if tinc:
-        # 量具自己不可信（父节点不可见 / 加数口径不一致 / 导航宽越界）→ 既不能判绿也不能判红。
-        # 落成 PASS 是静默绿，落成 FAIL 是把工具 bug 算到产物头上 —— 只能报 INCOMPLETE 并退非 0。
-        print("RESULT INCOMPLETE  —— 有 %d 条判据报 INCOMPLETE（上方 INC! 行）："
-              "量具不可信，或夹具造少（INSUFFICIENT_ROWS）。"
-              "先修这一半，再谈产物达不达标" % tinc)
-        return 1
+    return conclude(tf, inc_ids, bad_skip, v8_bad, v8_missing)
+
+
+def conclude(tf, inc_ids, bad_skip, v8_bad, v8_missing):
+    """结论段：**三条事实先全部算完，再决定第一句说什么**（XX-047）。
+
+    原来的写法是三级早退（`bad_skip` → `tinc` → `v8_bad` 依次 `return 1`），后果是
+    **只要有一条 INCOMPLETE，V8 的比对结论就永远进不了结论段** —— example-05 造少那段时间
+    正是如此：「红的是不是该红的那几条」这个唯一有价值的结论被一句 INCOMPLETE 压掉了。
+    现在按优先级给第一句（判据没跑 > 量具不可信 > V8 不符），**其余事实同段打出**。
+
+    两个数都要打（XX-047）：`行数` 与**去重后的判据名**。只打 `%d 条` 时，
+    「2 判据 × 2 档 = 4 行」会被读成「4 条判据」，进而被当成「P2b 的分母也是 14」的依据
+    （实际 `TARGET_ROWS_REVIEW = {1440: 9, 1600: 12}`，分母由调用点各自传）。
+
+    返回退出码：非 0 表示这一轮不能当"通过"。
+    """
+    n_inc, ids = len(inc_ids), sorted(set(inc_ids))
+    inc_s = ("%d 行 INCOMPLETE（%s）" % (n_inc, "、".join(ids))) if n_inc else ""
+    v8_s = ""
     if v8_bad:
-        if tf == 0 and v8_missing:
-            print("RESULT INCOMPLETE  —— V8 有 %d 个名单文件本轮没跑；"
-                  "「没比对」不等于「比过了」" % v8_missing)
+        v8_s = "V8 FAIL 集与期望名单不符"
+    elif v8_missing:
+        v8_s = "V8 有 %d 个名单文件本轮没跑（没比对不等于比过了）" % v8_missing
+    facts = [x for x in (inc_s, v8_s) if x]
+
+    if bad_skip:
+        line = "RESULT INCOMPLETE  —— 有判据在没有正当理由的情况下没跑（%s），" \
+               "这不是「产物达标」，是「判据没判」" % "、".join(bad_skip)
+    elif n_inc:
+        # 量具自己不可信（父节点不可见 / 加数口径不一致 / 导航宽越界），或夹具造少。
+        # 落成 PASS 是静默绿，落成 FAIL 是把工具 bug 算到产物头上 —— 只能报 INCOMPLETE 并退非 0。
+        line = "RESULT INCOMPLETE  —— 量具不可信，或夹具造少（INSUFFICIENT_ROWS）；" \
+               "先修这一半，再谈产物达不达标"
+    elif v8_bad or v8_missing:
+        if v8_bad and tf == 0:
+            line = "RESULT INCOMPLETE  —— V8 的 FAIL 集与期望名单不符"
         else:
-            print("RESULT FAIL  —— V8 的 FAIL 集与期望名单不符："
-                  "FAIL 总数只说明「红了几条」，说明不了「红的是不是该红的那几条」")
-        return 1
-    print("RESULT %s" % ("PASS" if tf == 0 else "FAIL"))
-    return 0 if tf == 0 else 1
+            line = "RESULT FAIL  —— V8 的 FAIL 集与期望名单不符：" \
+                   "FAIL 总数只说明「红了几条」，说明不了「红的是不是该红的那几条」"
+    else:
+        print("RESULT %s" % ("PASS" if tf == 0 else "FAIL"))
+        return 0 if tf == 0 else 1
+    # 事实必须落在**同一段**：第一句说明结论，后面的分号说明"还有哪些事没被这条结论覆盖"。
+    print(line + ("；" + "；".join(facts) if facts else ""))
+    if bad_skip:
+        print("  白名单只允许 %s —— 能 SKIP 的只有「这条判据当前不适用」，不是「这条判据我判不了」"
+              % ",".join(SKIP_WHITELIST))
+    if v8_bad:
+        print("  V8 差异见上方「少红 / 多红」两行：那才是「红的是不是该红的那几条」的答案")
+    return 1
 
 
 # ------------------------------------------------------------------ 自证
@@ -3152,6 +3194,12 @@ def selfcheck(chrome, base_file=None):
         else:
             ok_all = False
         total += 1
+        # ---- XX-047：结论段不许早退（INCOMPLETE 压掉 V8 结论的同一次事故）
+        if conclude_check():
+            covered += 1
+        else:
+            ok_all = False
+        total += 1
         print("  自证覆盖=%d/%d" % (covered, total))
         if covered < total or not ok_all:
             print("RESULT INCOMPLETE (selfcheck)：只证明了 %d/%d 条注入，"
@@ -3161,6 +3209,33 @@ def selfcheck(chrome, base_file=None):
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def conclude_check():
+    """XX-047 自证：INCOMPLETE 与 V8 不符**同时**存在时，结论段两句都得在。
+
+    只断言一个关键词等于没证：老的三级早退写法在「只有 INCOMPLETE」时输出里也含
+    `INCOMPLETE`，照样过得去；要证的是 **V8 的比对结论没被 INCOMPLETE 压掉**。
+    另断言两个数：`3 行 INCOMPLETE（P2a、P2b）` —— 行数 3（两档重复计）、判据名去重后 2 个。
+    只打条数的那版，`2 判据 × 2 档 = 4` 会被读成「4 条判据」（幻神就是这么质疑 P2b 分母的）。
+
+    这是**结论段**的自证，所以直接调 `conclude()` 喂构造输入，不跑一遍渲染：
+    要证的是"三条事实会不会互相压掉"，与量具无关；跑渲染只会让这条自证依赖 Chrome 抖动。
+    """
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = conclude(3, ["P2a", "P2a", "P2b"], [], True, 0)
+    out = buf.getvalue().strip()
+    ok = (rc == 1
+          and "RESULT INCOMPLETE" in out
+          and "3 行 INCOMPLETE（P2a、P2b）" in out
+          and "V8 FAIL 集与期望名单不符" in out)
+    print("  %-18s %s ｜ %s" % ("XX-047 结论段", (out.splitlines() or ["（无输出）"])[0][:110],
+                               "OK" if ok else "SELFCHECK-FAIL"))
+    if not ok:
+        print("          ↳ rc=%s ｜ 期望 rc=1 且同段含「3 行 INCOMPLETE（P2a、P2b）」"
+              "与「V8 FAIL 集与期望名单不符」——只含一个说明还在早退" % rc)
+    return ok
 
 
 def nc_shell_check(chrome, tmp):

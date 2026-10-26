@@ -66,7 +66,10 @@ def measure(chrome, page_id):
     # INCOMPLETE 不进 FAIL 集，但也**绝不算红**：反样本上出现 INCOMPLETE 说明量具坏了，
     # 那会让某条本该红的判据悄悄不判 —— 集合相等就变成了一句空话。这里把它当成坏结果抛出来。
     if inc:
-        got["_incomplete"] = {"%d 条 INCOMPLETE" % inc}
+        # inc 是**判据 id 列表**（UI 形状门回传的形态）：既不是绿也不是红，但它让某条该红的
+        # 判据没判。两个数都打 —— 只打条数时「2 判据 × 2 档 = 4 行」会被读成「4 条判据」。
+        got["_incomplete"] = {"%d 行 INCOMPLETE（%s）"
+                              % (len(inc), "、".join(sorted(set(inc))))}
     if bad_skip:
         got["_incomplete"] = got.get("_incomplete", set()) | {
             "无条件 SKIP: " + ",".join(sorted(bad_skip))}

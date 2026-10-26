@@ -188,11 +188,16 @@
   `Layout.props.style.width` 直接落到节点上，而 `R.Layout` **根本不消费 width/style**
   （实测给 Layout 加 `props.style.width=1200`、`props.width=1200`，父节点仍是 1440），
   产物写了宽只会走 `N-b`；换壳只能来自容器代码自己。
+  **`N-b` 现在同样不可达**（本轮实测）：`R.Content` / `R.Layout` 都不消费 `width` / `style` ——
+  给 Content 加 `props.width=1080` 与 `props.style.width="1080px"`，内容宽都还是 1184；
+  `n_b_width_hits()` 只读 JSON，所以它今天是个**定位器**、不是可达分支。规范里 N-b 那行
+  （`1080` → 内容 1032 / 减法 360 / 归因差 152）是**代数读数**，不是实测 —— 能实测的只有
+  N-a（`V01_maxw`：归因差 208）。容器哪天开始消费 `width`，这两条才活。
   **但它不再只是「记账」**：另配手写 HTML 壳样本 `tests/fixtures/fixture-nc-manual-shell.html`
   （**非容器产物**，名字里标出来，`example-*` 的 glob 取不到），内联 `width:1100px` 包住内容区，
   断言**两条式子都要比对**：`归因差 0 ｜ 铺满差 340`。那个 0 才是样本存在的理由 ——
   它证明「归因差覆盖 N-c」是错的（壳一包，减法与真实同时变 0、互相抵消）；只贴「340 红了」等于没证。
-- **自证覆盖 16 → 24 条**（需求单要求「n 含全部新增条目」）：补上此前**从未红过**的三条——
+- **自证覆盖 16 → 24 条**（需求单要求「n 含全部新增条目」；本轮再补 `P2a`/`P2b` 两条 → **26**，见下一条）：补上此前**从未红过**的三条——
   `P7_fixed_off`（`tableLayout:auto` → `FAIL(原因=fixed)`）、`P7_decl_low`（摘两列 width →
   `6/8=75%` → `FAIL(原因=declared)`；**只摘一列是 87.5%，会 PASS**，注入必须打到 80% 门槛以下）、
   `P21_no_exit`（摘 `ellipsis` 并强制换行 → 无出口长文本列被抓）、`P22_exceed`（压到 48px →
@@ -224,6 +229,27 @@
   （诊断信息不随分母缩水）。
   前置红改为 `FAIL(cause=prereq:W-00)` 并在值里带**声明侧**读数
   ——声明值在 JSON 里、与布局无关，这一半永远可判。
+- **`P2a`/`P2b` 的行数前置改成「单轨 + 用 `total` 判造少」（XX-045）**：
+  原先「行数 <20 就 SKIP」，且 SKIP 不带条件 —— 那让 `assets/examples/` 里 6 行的教材永久免检。
+  新规则一条、两种结论，**靠事实分**：
+  ```
+  允许 SKIP   ⟺ 示例行数 < 所需 且（无分页器 或 total < 所需）
+              → P2a SKIP(行数 6 < 14，total 未声明)
+  INCOMPLETE  ⟺ total ≥ 所需 且 示例行数 < 所需
+              → P2a INCOMPLETE(INSUFFICIENT_ROWS) total 1286 ≥ 14，行数 6
+  ```
+  ① 不按「谁给的文件」判（同一份文件换个目录结论就变 = 身份判定）；
+  ② `total` 是 `P13` 已在读的现成字段，正是 `REJECT.md` 那条「少造数据换 SKIP」的正面回答；
+  ③ 教材与产物一视同仁。**`INCOMPLETE(INSUFFICIENT_ROWS)` 是 P 组自己的 TOKEN**，
+  与 V-01 的 `CONTENT_ZERO`/`PARENT_INVISIBLE`/`NAV_OUT_OF_RANGE` 并列但不混用。
+  V13 白名单随之**条件化**：`skip_allowed()` 看 SKIP 值里有没有 `SKIP(行数 N < 所需，…)`，
+  **不只看 id** —— 只按 id 放行等于把「少造几行」变成通行证。
+  实测三条验收：补到 14 行 → `P2a PASS / P2b PASS@1600、FAIL@1440`（不再 SKIP）；
+  去掉分页器 → `SKIP(行数 6 < 14，total 未声明)`；`total:342` → `INCOMPLETE(INSUFFICIENT_ROWS)`；
+  同一份文件放 `/tmp` 再跑结论相同。
+  **顺带暴露一件事（要人定）**：`example-05` 自己写着 `pagination.total = 1286`，却只渲染 6 行，
+  按新规则它是 `INCOMPLETE(造少)` 而不是 SKIP —— 全量模式因此仍是 `RESULT INCOMPLETE`，
+  原因从「白名单外 SKIP」变成「教材自己声明了 1286 条、只造了 6 行」。
 - **`P23` 的三类排除分别计数**（不加总）：
   `被裁 0/10 列@1234；另有 1 列表头 >6 全角字、2 列空表头、0 列无裁切盒，不入分母`。
   三类分别是「表头太长（归 T-03 + `ellipsisTitle`）」/「空表头（`rowSelection`/`radio` 槽位，
@@ -249,6 +275,27 @@
 - **`expected-fails.json` 的 `_meta` 措辞改成「期望、不是现状快照」**：并在
   `measured_with` 里写明「V-01 接入后 CAPA 四组全 PASS、FAIL 集一条未动，**因此本次不重登**
   ——重登只会把同一份期望抄一遍，抄的动作本身就是把「期望」变成「快照」」。
+- **`--selfcheck` 覆盖 24 → 26 条：`P2a`/`P2b` 的第三态各补一条注入**（幻神裁定：断言按 TOKEN 相等）。
+  这两条判据的 SKIP / INCOMPLETE **不进 FAIL 集合**，只比「注入后多了哪几条红」等于什么都没证 ——
+  「少造几行换一个 SKIP」在自证里也会是绿的。所以新增断言形态 `want_rows`：
+  **按 `(状态, 值)` 相等**，值用正则整串锚定（不比中文尾巴，但必须锚住括号里的 TOKEN 与实测数）。
+  - `P2b_rows_skip`：砍到 6 行**并摘掉 `total`** → `P2b SKIP(行数 6 < 9，total 未声明)`；
+  - `P2b_rows_total`：只砍到 6 行、不动 `total`（`example-06` 自己写着 342）→
+    `P2b INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6`。
+  两条成对存在：摘掉 total 那一支才是 `SKIP`，留着 total 才是「造少」——
+  只有一条的话，「SKIP 与 INCOMPLETE 的分界」就只剩文档里那句话。
+- **发布门 9 → 10 项：反样本守卫进闸门（DoD 10）**（team-lead 裁定，发布门口径变更）。
+  CAPA 反样本能到 `PASS=11 FAIL=21` 还发得出去，不是判据没做，是**闸门里没有它** ——
+  与「四处 ERROR 无人实现」同型：规范写了、代码零命中。新增 `check_reject_guard()`：
+  调用 `tests/check_reject.py` 的 `main()`（比对面「集合相等」只写在这一处，不复制），
+  **rc 三义分开**：`0 → PASS`（逐条相等）/ `1 → FAIL`（集合不符、基线没登记）/ `2 → ENV`（Chrome 找不到）。
+  混色的后果与 E-01/E-02/E-03 同型：Chrome 没装会被读成「反样本没问题」，或反过来把真缺陷藏进「环境问题」。
+  detail 必须能自证：`pages=2 逐条相等（15/15 16/16 16/16 12/12）｜页 …`；
+  `rc=0` 但解析不到任何逐档比对行 → **FAIL**（比了 0 条不许算通过）。
+  **编号只追加不插队**：DoD 10 排在 9 之后，1–9 的编号一个字没动 —— `release.md` 与历史交付说明按编号引用。
+  另**不并进 `run.sh`**：`run.sh` 的语义是容器回归（757 基线），退出码三义已定，混进去就分不清了。
+  接线自证（造红）：临时往 `expected-fails.json` 某档塞一个不存在的 id → DoD 10 必须 FAIL、
+  其余项状态不变 → 还原。**只证明新增项是绿的等于没证明**。
 - 第一阶段的 `V-01` 只做式子验证、不做判据（需求单第二阶段）；第二阶段已接入（见上）。
   `cause` 的定位仍在一套算式里，没有另立阈值；`N-c` 不可达的理由见上一条通用纪律。
 

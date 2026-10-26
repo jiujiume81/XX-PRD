@@ -139,8 +139,12 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
           而多留白是合法设计；它想抓的「两档写成常数」已由归因差 @1600 抓住。
           一条只在合法产物上红的判据会逼下一个人去加容差，比恒绿更糟。
        ④ **`cause` 值的通用纪律**：每一条 `cause`，要么有输入能产出它，要么在文档里写明
-          「不可达」及原因。N-a（`max-width`）/N-b（JSON 或 props 里写死宽）/N-d（zoom、scale）
-          都有自证注入；**N-c（外层换壳）在产物空间内不可达** —— 本仓库容器把
+          「不可达」及原因。N-a（`max-width`，自证 `V01_maxw` 实测归因差 208）与 N-d（zoom）有注入；
+          **N-b 目前也不可达**：`R.Content` / `R.Layout` 都不消费 `width`/`style`
+          （实测给 Content 加 `props.width=1080` 与 `props.style.width="1080px"`，内容宽都还是 1184），
+          而 `n_b_width_hits()` 只读 JSON —— 它今天是个定位器，不是可达分支。规范里 N-b 那行
+          （`1080` → 内容 1032 / 减法 360 / 归因差 152）是**代数读数**，不是实测；容器哪天开始消费
+          `width`，这条才活。**N-c（外层换壳）在产物空间内不可达** —— 本仓库容器把
           `Layout.props.style.width` 直接落到节点上（`R.Layout` 根本不消费 width/style，实测加
           `props.width=1200` 父节点仍是 1440），产物写了宽也只会走 N-b；换壳只能来自容器代码
           自己，不是产物能表达的形态。为了不让判据②变成「永远为绿的观察行」，另配一份**手写 HTML
@@ -152,10 +156,14 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
           但它只说得清「有宽度不知去向」，说不清「是被缩放改掉了测量本身」——
           `cause=N-d` 的用处就在这里，不因为它和归因差重叠就删掉。
        ⑥ 自证里有 `V01_zoom`（N-d 独立红）、`V01_maxw`（N-a 盲区）与三条 `INCOMPLETE` 造红；
-          加上 `P7` 两个方向、`P21`、`P22` 各一条，共 23 条注入，另加 N-c 手写壳样本 1 条，
-          自证覆盖 **24 条** —— **「新增判据每一条都要有一条能红的注入」**，P7 是本轮抓 CAPA 的主力，
+          加上 `P7` 两个方向、`P21`、`P22` 各一条，再有 `P2b` 的两条**第三态**注入
+          （`SKIP(… total 未声明)` 与 `INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6`），
+          共 25 条注入，另加 N-c 手写壳样本 1 条，自证覆盖 **26 条** ——
+          **「新增判据每一条都要有一条能红的注入」**，P7 是本轮抓 CAPA 的主力，
           它自己没被证过能红，等于「门能判 ≠ 门会拦」。N-c 那条不进 `INJECTIONS`：它改的是整份 DOM
           而不是 JSON/CSS，塞进「基线产物 + 注入」那套循环里会让 P1–P25 一起把手写壳当产物判。
+          两条 `P2b` 注入用 `want_rows` 断言 **(状态, 值)** 而不是 FAIL 集合：这两条的第三态
+          （SKIP / INCOMPLETE）根本不进 FAIL 集，只比 FAIL 集的话「少造几行换个 SKIP」永远绿。
     q) **`main_table()` 改名 `resolve_list_table()`，与 `is_work_list_page()` 拆开**：
        前者答「哪张表是主表」（任何页都该能答，只用于取原始量），后者答「算不算作业型列表页」
        （形态类判据的适用范围，**定义不变**）。混在一起时只能靠放宽「列表页」定义去迁就
@@ -243,6 +251,22 @@ COL_W_TOL = 2                     # P17：渲染宽与声明宽的容差
 # 现在改成客观守卫：SKIP 只允许「这条判据当前不适用」，**不允许**「这条判据我判不了」——
 # 后者是脚本缺陷，不该由人每次去数。
 SKIP_WHITELIST = ("P8", "P13", "P17")
+
+
+def skip_allowed(row):
+    """V13 的**条件化**白名单：SKIP 只允许「这条判据当前不适用」，分两种形态。
+
+    ① 静态名单（`P8`/`P13`/`P17`）：判据结构上不适用，与数据无关；
+    ② `P2a`/`P2b`：**只当**值里写着 `SKIP(行数 N < 所需…` 时才允许 —— 看的是**值里的条件**，
+       不是名单里有没有这个 id。只按 id 放行等于把「少造几行数据」变成通行证
+       （`REJECT.md` 记过这个作弊面）。
+    不按文件路径判：同一份文件换个目录结论就变，那是**身份判定**，不是事实判定。
+    """
+    if row.get("id") in SKIP_WHITELIST:
+        return True
+    if row.get("id") in ("P2a", "P2b"):
+        return bool(re.match(r"SKIP\(行数 \d+ < \d+，", row.get("value") or ""))
+    return False
 
 # V8（I-07 第二批裁定）：example-05 的期望 FAIL 集，**逐条写死**。
 #
@@ -1484,6 +1508,9 @@ def v01_row(dom, page, vw):
                            fmt(scale.get("v")), note)}
 
     # ---- 主判据：归因差。掉下去的宽度没被真实导航占走 → 红（N-a / N-b 靠这条）
+    # **cause 由「先红的这条式子」决定**：归因差红 → 只可能是 N-a/N-b，不可能是 N-c
+    # （外层换壳时减法与真实同时变 0、互相抵消，归因差是 0）。不写「先认 A 再认 B」的顺序规则，
+    # 那条规则在两条式子同时红时会给出错标签。
     if attrib is not None and attrib > V01_TOL:
         cause, why = "", ""
         if g.get("maxWidthHits"):
@@ -1493,42 +1520,49 @@ def v01_row(dom, page, vw):
             nb = n_b_width_hits(page)
             if nb:
                 cause, why = "N-b", nb[0]
-            elif g.get("fixedWrapHits"):
-                h = g["fixedWrapHits"][0]
-                cause, why = "N-c", "外层 style.width=%spx@%s" % (
-                    h.get("w"), tag_of(h.get("tag"), h.get("cls")))
         lead = ("cause=%s（%s）" % (cause, why)) if cause else \
-               "未定位到 N-a~N-d 的形态（内容区写死了一个非整数的窄值）"
+               "未定位到 N-a/N-b 的形态（内容区写死了一个非整数的窄值）"
+        # `fixedWrapHits` 只作诊断打印，不作 cause 依据（team-lead 裁定）。
+        fx = g.get("fixedWrapHits") or []
+        fxd = ("；外层固定宽候选（只作诊断，不作 cause 依据）：%s"
+               % "、".join("%s %spx" % (tag_of(h.get("tag"), h.get("cls")), h.get("w"))
+                          for h in fx[:3])) if fx else ""
+        both = ""
+        if fill is not None and abs(fill) > V01_TOL:
+            # 两条式子同时红：结论仍取主判据，铺满差并列打出、带它自己的 cause（N-c）。
+            both = "；另：铺满差 %s>%d 同时红（cause=N-c，第二行并列，不改变本行结论）" % (
+                fmt(abs(fill)), V01_TOL)
         return {"id": "V-01", "title": title, "value": val, "threshold": thr,
                 "status": "FAIL",
                 "note": "%s；归因差 %s>%d：减法导航 %s 里只有 %s 真是导航占走的，另 %s 是内容被"
                         "压窄后留下的空档（空档被减法式当成了导航，所以闭合差仍是 0 —— "
-                        "**闭合差 0 不能据此判绿**）；%s"
-                        % (lead, fmt(attrib), V01_TOL, fmt(nav), fmt(sib), fmt(attrib), note)}
+                        "**闭合差 0 不能据此判绿**）%s；%s%s"
+                        % (lead, fmt(attrib), V01_TOL, fmt(nav), fmt(sib), fmt(attrib),
+                           both, note, fxd)}
 
-    # ---- 副判据：父节点铺满。只有父节点被换小/换宽才会红
+    # ---- 判据②：父节点铺满。**先红的那条式子决定 cause** —— 这一条红只说一件事：
+    # 父节点没铺满视口（被换小），也就是 N-c。
+    # `fixedWrapHits` 不作 cause 依据，只作诊断打印：它是「内联 px 宽的祖先」这个启发式，
+    # 拿它认 cause 会在两条式子同时红时给出错标签。
+    # 唯一例外仍保留 N-b：若 JSON 里的宽**正好等于父宽**，那父节点就是被那条声明写窄的，
+    # 归类该是「JSON 里写死宽」而不是「容器套壳」。
     if fill is not None and abs(fill) > V01_TOL:
-        # cause 先认 **N-b**：把宽写进 JSON（`Layout.props.style.width`）时父节点自己就是那个
-        # 变窄的盒子，`fixedWrapHits` 也会命中它 —— 但按裁定这是 N-b（JSON 里写死宽），不是 N-c。
-        # 顺序反了就会把「产物写了宽」误报成「容器套了壳」（N-c 在产物空间内不可达，见 p)④）。
-        cause, why = "", ""
+        cause, why = "N-c", "父节点未铺满视口"
         for nm in n_b_width_hits(page):
             m = re.search(r"=(\d+(?:\.\d+)?)px?$", nm)
             if m and abs(float(m.group(1)) - p_w) <= 1:
                 cause, why = "N-b", nm
                 break
-        if not cause and g.get("fixedWrapHits"):
-            h = g["fixedWrapHits"][0]
-            cause, why = "N-c", "外层 style.width=%spx@%s" % (
-                h.get("w"), tag_of(h.get("tag"), h.get("cls")))
-        lead = ("cause=%s（%s）" % (cause, why)) if cause else \
-               "未定位到外层换壳（N-c 在产物空间内不可达，见 p)④；判据②能红由手写壳样本证明）"
+        fx = g.get("fixedWrapHits") or []
+        fxd = ("；外层固定宽候选（只作诊断，不作 cause 依据）：%s"
+               % "、".join("%s %spx" % (tag_of(h.get("tag"), h.get("cls")), h.get("w"))
+                          for h in fx[:3])) if fx else "；外层无内联 px 宽的祖先（换壳不在 DOM 上）"
         return {"id": "V-01", "title": title, "value": val, "threshold": thr,
                 "status": "FAIL",
-                "note": "%s；父节点铺满失败：父宽%s − border%s = %s，视口%s，差%+d（%s）；%s"
-                        % (lead, fmt(p_w), fmt(b), fmt(p_w - b), fmt(vw_real), fill,
+                "note": "cause=%s（%s）；父节点铺满失败：父宽%s − border%s = %s，视口%s，差%+d（%s）%s；%s"
+                        % (cause, why, fmt(p_w), fmt(b), fmt(p_w - b), fmt(vw_real), fill,
                            "负 = 父节点被换小了，不是内容变窄" if fill < 0 else "正 = 父节点比视口宽",
-                           note)}
+                           fxd, note)}
 
     return {"id": "V-01", "title": title, "value": val, "threshold": thr,
             "status": "PASS", "note": note}
@@ -1587,12 +1621,39 @@ def evaluate(props, dom, page, vw):
 
     # ---- P2a 产品态一屏行数
     prod = dom.get("product") or {}
+
+    def _rows_gate(pid, tn, n, need):
+        """`P2a`/`P2b` 的行数前置：**单轨、按事实分**（team-lead 裁定，XX-045）。
+
+        ```
+        允许 SKIP   ⟺ 示例行数 < 所需 且（无分页器 或 total < 所需）
+        INCOMPLETE  ⟺ total ≥ 所需 且 示例行数 < 所需      →  TOKEN `INSUFFICIENT_ROWS`
+        ```
+        两条都是「事实不够 / 数据够却没造全」，与「文件放在哪个目录」无关 ——
+        按目录判是身份判定，同一份文件换个目录结论就变。
+        `total` 是 `P13` 已经在读的现成字段，不必加新字段；它才是「造少」的证据。
+        值里必须带条件与实测值，**不许出现裸 SKIP**：否则「少造几行换一个 SKIP」又走得通。
+        """
+        total = props.get("total")
+        if total is not None and total >= need:
+            verdict(rows, pid, tn,
+                    "INCOMPLETE(INSUFFICIENT_ROWS) total %s ≥ %d，行数 %d"
+                    % (fmt(total), need, n), "≥%d" % need, "INCOMPLETE",
+                    "数据够却没造全：`total` 声明这页有 %s 条，示例只渲染了 %d 行。"
+                    "这不是「判据不适用」，是夹具造少了 —— 补行后重跑必须能判出 PASS/FAIL。"
+                    % (fmt(total), n))
+        else:
+            why_total = "total 未声明" if total is None else "total %s < %d" % (fmt(total), need)
+            verdict(rows, pid, tn, "SKIP(行数 %d < %d，%s)" % (n, need, why_total),
+                    "≥%d" % need, "SKIP",
+                    "示例数据只有 %d 行（< 所需 %d），且分页字段也说明不了造少 —— 本条不适用，"
+                    "不是达标。" % (n, need))
+
     if prod.get("err") or prod.get("rowCount") is None:
         verdict(rows, "P2a", "产品态一屏整行数", "—", "≥%d" % TARGET_ROWS_PRODUCT,
                 "SKIP", "产品态夹具未建立（%s）" % (prod.get("err") or "无表格"))
-    elif prod.get("rowCount") < 20:
-        verdict(rows, "P2a", "产品态一屏整行数", "夹具 %d 行" % prod["rowCount"],
-                "≥%d" % TARGET_ROWS_PRODUCT, "SKIP", "夹具不足 20 行，行数可被「少造数据」作弊")
+    elif prod.get("rowCount") < TARGET_ROWS_PRODUCT:
+        _rows_gate("P2a", "产品态一屏整行数", prod["rowCount"], TARGET_ROWS_PRODUCT)
     elif (prod.get("contentBoxW") or 0) < 1100:
         # 守卫（REQ-I07-02 ③）：舞台口径错了就不判绿也不判红。
         # 产品态内容宽应 ≈1184（1440 − sider 208 − 0 边距）；小到 1100 以下
@@ -1612,9 +1673,8 @@ def evaluate(props, dom, page, vw):
     target = TARGET_ROWS_REVIEW.get(vw, TARGET_ROWS_REVIEW[1440])
     if not t0:
         verdict(rows, "P2b", "评审态一屏整行数", "—", "≥%d" % target, "SKIP", "页面无表格")
-    elif t0.get("rowCount", 0) < 20:
-        verdict(rows, "P2b", "评审态一屏整行数", "夹具 %d 行" % t0["rowCount"],
-                "≥%d" % target, "SKIP", "夹具不足 20 行")
+    elif t0.get("rowCount", 0) < target:
+        _rows_gate("P2b", "评审态一屏整行数", t0.get("rowCount", 0), target)
     else:
         n = t0.get("visibleRows")
         fr = t0.get("fullRows")
@@ -2379,6 +2439,10 @@ def render_case(name, page, dom_by_vp, rows_by_vp, why="—", cand_ids=None):
     inc = sum(1 for r in all_rows if r["status"] == "INCOMPLETE")
     # 出现过的 SKIP 判据 id（去重）—— 交给 main 做白名单比对（V13）
     skip_ids = sorted(set(r["id"] for r in all_rows if r["status"] == "SKIP"))
+    # 其中**没有正当条件**的那些：V13 只对这批人说「你在没有正当理由的情况下没跑」。
+    # 条件化白名单（P2a/P2b）看的是行里的条件文本，不只看 id —— 见 skip_allowed()。
+    bad_skip = sorted(set(r["id"] for r in all_rows
+                          if r["status"] == "SKIP" and not skip_allowed(r)))
     cand_ids = cand_ids or []
     print("\n" + "=" * 78)
     # 「判了哪页」必须在这一行：同一份产物判不同页会得到不同 FAIL 集（CAPA 实测 19 vs 21），
@@ -2407,14 +2471,14 @@ def render_case(name, page, dom_by_vp, rows_by_vp, why="—", cand_ids=None):
             if r["note"]:
                 print("          ↳ %s" % r["note"])
     print("  PASS=%d FAIL=%d SKIP=%d%s（SKIP 不计为绿；本页单列，不与其它页合并）"
-          % (p, f, s, (" INCOMPLETE=%d（量具不可信，既不是绿也不是红）" % inc) if inc else ""))
+          % (p, f, s, (" INCOMPLETE=%d（量具不可信或夹具造少，既不是绿也不是红）" % inc) if inc else ""))
     # N-e 只在这里打一行诊断：**不判红、不占编号**（理由见 v01_cross 的 docstring）
     diag = v01_cross(rows_by_vp)
     if diag:
         print("  " + diag)
     if skip_ids:
         print("  SKIP 判据 = [%s]" % ",".join(skip_ids))
-    return p, f, s, skip_ids
+    return p, f, s, skip_ids, bad_skip
 
 
 def run_one(chrome, json_path, page_id=None, keep=False, why=None):
@@ -2424,7 +2488,7 @@ def run_one(chrome, json_path, page_id=None, keep=False, why=None):
     if page is None:
         print("\nCASE %s —— SKIP（无列表页候选；判页依据：%s）"
               % (Path(json_path).name, why))
-        return 0, 0, 0, [], set(), 0
+        return 0, 0, 0, [], set(), set(), 0
     tmp = Path(tempfile.mkdtemp(prefix="xx-prd-shape-"))
     html = tmp / "case.html"
     try:
@@ -2482,10 +2546,10 @@ def main_all_pages(chrome, files, keep=False):
               % (Path(f).name, len(cands)))
         got = []
         for page, kind in cands:
-            p, fl, s, sk, _fs, inc = run_one(chrome, f, page.get("id"), keep,
+            p, fl, s, sk, _bad, _fs, inc = run_one(chrome, f, page.get("id"), keep,
                                         why="逐页全判（--all-pages）")
             got.append((page.get("id"), kind, p, fl, s, inc))
-            bad_skip.update(sk)
+            bad_skip.update(_bad)
             any_fail = any_fail or fl > 0 or inc > 0
         print("\n  ---- 分页小计（%s，**不合并**）----" % Path(f).name)
         print("  %-26s %-16s %6s %6s %6s %6s" % ("page", "kind", "PASS", "FAIL", "SKIP", "INC"))
@@ -2494,7 +2558,9 @@ def main_all_pages(chrome, files, keep=False):
 
     print("\n" + "-" * 78)
     print("TOTAL 不合并：上面每个 page 一行就是结论；跨页相加会把 19/21 这类差异抹平")
-    bad = sorted(bad_skip - set(SKIP_WHITELIST))
+    # bad_skip 已经剔除了「有条件豁免」的那些（P8/P13/P17 + 带条件的 P2a/P2b），
+    # 这里再减一次白名单是多余的，且会掩盖 skip_allowed() 的判断 —— 只排序。
+    bad = sorted(bad_skip)
     if bad:
         print("SKIP-OUT-OF-WHITELIST=[%s]  白名单只允许 %s"
               % (",".join(bad), ",".join(SKIP_WHITELIST)))
@@ -2537,10 +2603,11 @@ def main(argv=None):
 
     tp = tf = ts = tinc = 0
     skip_seen = set()
+    bad_seen = set()
     fails_by_file = {}
     for f in files:
         try:
-            p, fl, s, sk, fs, inc = run_one(chrome, f, args.page, args.keep)
+            p, fl, s, sk, bad_one, fs, inc = run_one(chrome, f, args.page, args.keep)
         except EnvError as ex:
             print("\nCASE %s —— ENV: %s" % (Path(f).name, ex))
             return 2
@@ -2549,6 +2616,7 @@ def main(argv=None):
         ts += s
         tinc += inc
         skip_seen.update(sk)
+        bad_seen.update(bad_one)
         fails_by_file[Path(f).name] = fs
 
     print("\n" + "-" * 78)
@@ -2597,7 +2665,7 @@ def main(argv=None):
 
     # V13：白名单外的 SKIP = 判据自己没跑，不是产物不达标。
     # 单独打一行，让人一眼看到「哪几条这次没真正判」。
-    bad_skip = sorted(skip_seen - set(SKIP_WHITELIST))
+    bad_skip = sorted(bad_seen)
     if bad_skip:
         print("SKIP-OUT-OF-WHITELIST=[%s]  白名单只允许 %s"
               % (",".join(bad_skip), ",".join(SKIP_WHITELIST)))
@@ -2607,8 +2675,9 @@ def main(argv=None):
     if tinc:
         # 量具自己不可信（父节点不可见 / 加数口径不一致 / 导航宽越界）→ 既不能判绿也不能判红。
         # 落成 PASS 是静默绿，落成 FAIL 是把工具 bug 算到产物头上 —— 只能报 INCOMPLETE 并退非 0。
-        print("RESULT INCOMPLETE  —— 有 %d 条判据的量具不可信（上方 INC! 行）："
-              "先修量具，再谈产物达不达标" % tinc)
+        print("RESULT INCOMPLETE  —— 有 %d 条判据报 INCOMPLETE（上方 INC! 行）："
+              "量具不可信，或夹具造少（INSUFFICIENT_ROWS）。"
+              "先修这一半，再谈产物达不达标" % tinc)
         return 1
     if v8_bad:
         if tf == 0 and v8_missing:
@@ -2787,6 +2856,22 @@ INJECTIONS = [
      "css_extra": ".ant-table.fixed th:nth-child(3),.ant-table.fixed td:nth-child(3)"
                   "{white-space:normal!important}"},
     # ---- P22(T-03) 行数上限：把一列压到 3 行以上（宽 48 + 允许换行）
+    # ---- P2a/P2b 单轨（XX-045）：两条出口各一条注入。
+    # 这两条判据的**第三态**（SKIP / INCOMPLETE）不进 FAIL 集合 —— 只比 FAIL 集的话，
+    # 「少造几行换一个 SKIP」永远绿，自证等于没做。所以断言按 (状态, 值) 相等，见 want_rows。
+    # 注入手段：把示例数据砍到 6 行（20→6）。只少造数据，不动列宽 ——
+    # 动列宽会连带 P17/P24/P25，那「多翻」就说不清是哪条抓到的。
+    # SKIP 那一支要**摘掉 total**：example-06 自己声明 total=342，只要行数一少
+    # 就已经是「造少」（下面那条），走不到 SKIP。两个分支各造一次，否则
+    # 「SKIP 与 INCOMPLETE 的分界」只剩文档里那句话。
+    {"name": "P2b_rows_skip", "kind": "json", "want_rows": {
+        "P2b": ("SKIP", r"^SKIP\(行数 6 < \d+，total 未声明\)$")},
+     "payload": lambda p: _mutate_table(p, lambda tp: _clear_total(_rows_to(tp, 6)))},
+    # 只砍行数、不动 total：产物自己写着 total=342 却只渲染 6 行 —— 这就是「造少」，
+    # 判据必须报 INCOMPLETE(INSUFFICIENT_ROWS)，而不是拿「行数不够」换个 SKIP 了事。
+    {"name": "P2b_rows_total", "kind": "json", "want_rows": {
+        "P2b": ("INCOMPLETE", r"^INCOMPLETE\(INSUFFICIENT_ROWS\) total 342 ≥ \d+，行数 6$")},
+     "payload": lambda p: _mutate_table(p, lambda tp: _rows_to(tp, 6))},
     {"name": "P22_exceed", "kind": "css", "want": ["P22"], "allow": ["P9", "P2b", "P2a", "P25", "P8", "P17"],
      "allowWhy": "把第 3 列（物资名称）压到 48px 并允许换行 → 长值折成 3 行以上：行高（P9）、一屏行数"
                  "（P2a/P2b）、列宽账本（P17/P25）与表格总宽（P8）都跟着变。这是「行数超限」的必然伴随，"
@@ -2838,6 +2923,30 @@ def _set_pg(tp, ps):
     pg = tp.get("pagination")
     if isinstance(pg, dict):
         pg["pageSize"] = ps
+    return tp
+
+
+def _rows_to(tp, n):
+    """把示例数据砍到 n 行 —— 「造少」的注入手段（P2a/P2b 单轨，XX-045）。
+
+    只砍 `data`，不动 `columns`：动列宽会连带 P17/P24/P25，
+    自证里就分不清「行数判据抓到的」还是「列宽判据抓到的」。
+    """
+    d = tp.get("data")
+    if isinstance(d, list):
+        tp["data"] = d[:n]
+    return tp
+
+
+def _clear_total(tp):
+    """摘掉 `pagination.total` —— 为了走到 `SKIP(… total 未声明)` 那一支。
+
+    这一支不是「更宽松的出口」，是「连证据都没有」：没有 total 就分不清
+    「这页本来只有 6 条」和「造少了」。所以判 SKIP 而不是 PASS —— 见 `_rows_gate`。
+    """
+    pg = tp.get("pagination")
+    if isinstance(pg, dict):
+        pg.pop("total", None)
     return tp
 
 
@@ -2947,19 +3056,21 @@ def selfcheck(chrome, base_file=None):
         for inj in INJECTIONS:
             want = inj.get("want") or []
             want_inc = inj.get("want_inc")
+            want_rows = inj.get("want_rows") or {}
+            targets = want or list(want_rows)
             # 前置①：目标判据在基线里必须绿。不绿不是「跳过」，是自证不成立 ——
             # 计入未覆盖，最终 RESULT 为 INCOMPLETE。
-            missing = [w for w in want if w not in base_pass]
+            missing = [w for w in targets if w not in base_pass]
             if missing:
                 print("  %-18s SKIP（基线 %s 不绿，注入同类缺陷看不出变化；基线现值 %s）"
                       % (inj["name"], missing,
                          ", ".join("%s=%s" % (w, base_val.get(w, "—")) for w in missing)))
                 ok_all = False
                 continue
-            if want:
+            if want or want_rows:
                 print("  %-18s 基线 %s" % (inj["name"],
                                           ", ".join("%s=%s（%s）" % (w, base_val.get(w), "PASS")
-                                                    for w in want)))
+                                                    for w in targets)))
             else:
                 print("  %-18s 基线 V-01=%s（%s）" % (inj["name"], base_val.get("V-01"), "PASS"))
             rows = run(inj)
@@ -2967,6 +3078,34 @@ def selfcheck(chrome, base_file=None):
             now_val = {r["id"]: r["value"] for r in rows}
             flipped = now_fail - base_fail
             allow = set(inj.get("allow") or [])
+            if want_rows:
+                # 断言**按 (状态, 值) 相等**：这两条判据的红是 FAIL，但它的第三态是
+                # SKIP / INCOMPLETE —— 两者都不进 FAIL 集合，只比 FAIL 集等于什么都没证。
+                # 值用正则整串锚定，不比中文尾巴（措辞改了不该算自证失败），
+                # 但**必须**锚住括号里的 TOKEN 与实测数：`SKIP(...)` 与
+                # `INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6` 是两种不同的结论。
+                bad_rows = []
+                for pid, (exp_st, exp_re) in want_rows.items():
+                    r0 = next((x for x in rows if x["id"] == pid), None)
+                    st = (r0 or {}).get("status") or "—"
+                    val = (r0 or {}).get("value") or ""
+                    if not (st == exp_st and re.match(exp_re, val)):
+                        bad_rows.append("%s 实测 %s %s ｜ 期望 %s 匹配 %s"
+                                        % (pid, st, val or "—", exp_st, exp_re))
+                extra = flipped - allow
+                print("  %-18s 实测 %s %s%s"
+                      % ("", ", ".join("%s %s" % (p, now_val.get(p)) for p in want_rows),
+                         "  OK" if not bad_rows and not extra else "  SELFCHECK-FAIL",
+                         ("  多翻：" + str(sorted(extra))) if extra else ""))
+                for b in bad_rows:
+                    print("          ↳ %s" % b)
+                if allow and (flipped & allow):
+                    print("          ↳ 允许的连带 %s：%s" % (sorted(flipped & allow), inj.get("allowWhy", "")))
+                if not bad_rows and not extra:
+                    covered += 1
+                else:
+                    ok_all = False
+                continue
             if want_inc:
                 # INCOMPLETE 不是 FAIL，所以走另一条断言：**按 TOKEN 相等**，不按条数。
                 # 条数相同而集合不同这坑本仓库踩过（CAPA 两页 FAIL 数都是 21，红的却各是各的）。
@@ -3022,12 +3161,17 @@ def selfcheck(chrome, base_file=None):
 
 
 def nc_shell_check(chrome, tmp):
-    """N-c 自证：**两条式子都要比对**，只证「铺满差 340 红了」等于没证。
+    """N-c 自证：**只断言两条式子的数**，不断言 PASS/FAIL（team-lead 裁定）。
 
     样本是 `tests/fixtures/fixture-nc-manual-shell.html`（手写 HTML 壳，内联 `width:1100px`）：
       · 归因差 = |减法 0 − 真实 0| = **0**      ← N-c 抓不到：壳一包，减法与真实同时变 0 互相抵消
       · 铺满差 = |1100 − 0 − 1440| = **340**    ← 只有判据②能红
     那个「0」才是这条样本存在的理由：它证明「归因差覆盖 N-c」是错的。
+
+    **为什么不顺手断言 `FAIL(cause=N-c)`**：这条 fixture 是手写壳、不是产物。它的结论是
+    「判据② 在这里能红」，不是「这份产物不合格」。一旦写成整体断言，以后有人会把它当
+    「N-c 产物的标准形态」照抄 —— 那就把一条为了证明可达性的证据，变成了一个假的范式。
+    状态照打，只作展示。
     """
     fx = Path(__file__).with_name("fixtures") / "fixture-nc-manual-shell.html"
     if not fx.is_file():
@@ -3045,14 +3189,14 @@ def nc_shell_check(chrome, tmp):
     fill = (g.get("parentW") - (g.get("contentBorderW") or 0) - g.get("viewportW")) \
         if g.get("parentW") is not None else None
     row = v01_row(d, {}, 1440)
-    ok = (row["status"] == "FAIL" and "cause=N-c" in (row["note"] or "")
-          and attrib is not None and attrib <= V01_TOL
+    # 断言只有两个数：归因差 ≈0（抓不到）与 |铺满差| ≈340（判据②能红）。
+    ok = (attrib is not None and attrib <= V01_TOL
           and fill is not None and abs(abs(fill) - 340) <= 3)
     print("           归因差%s ｜ 铺满差%s ｜ %s ｜ %s"
           % (fmt(attrib), fmt(abs(fill)) if fill is not None else "—",
              row["status"], "OK" if ok else "SELFCHECK-FAIL"))
-    print("           断言：归因差 ≤%d（0 = 抓不到，这一半必须成立）且 |铺满差| = 340±3 且 cause=N-c"
-          % V01_TOL)
+    print("           断言：归因差 ≤%d（0 = 抓不到，这一半必须成立）且 |铺满差| = 340±3"
+          "（状态 %s 只作展示，不作断言）" % (V01_TOL, row["status"]))
     return ok
 
 

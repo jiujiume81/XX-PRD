@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""DoD 1–9 发布准入检查：一条命令给出逐项名称与结论（XX-016）。
+"""DoD 1–10 发布准入检查：一条命令给出逐项名称与结论（XX-016）。
 
 为什么需要它：
   治理 §8.2 的第 1–9 项原本散在 4 个脚本与若干裸命令里，靠人逐条记得跑。
   分散 + 人工的检查不会被真正执行——E-01/E-02/E-03 三条勘误都证明了这一点。
   这里把它们收敛成一个退出码：非 0 即不许发布。
+
+  第 10 项（反样本守卫）是 I-09 第二阶段追加的，**编号必须排在 9 之后、不许插队**：
+  `release.md` 与历史交付说明都按编号引用，改动既有编号等于让所有历史记录指向错的项。
+  它单独存在的理由与上一条同源——**门一直知道产物不达标、产物照样交付**：
+  CAPA 反样本能到 `FAIL=21` 还发得出去，不是判据没做，是闸门里没有它。
 
 设计原则（对应 I-02 preflight 的结论）：
   - **调用而不是复制**：能与既有脚本复用的一律 import 其函数（check_docs 的 5 个 check_*、
@@ -29,8 +34,8 @@
     RETRIES_MAX=1 python3 scripts/check_release.py     # 透传给 tests/run.sh
 
 退出码:
-    0 = 九项均 PASS 或 SKIP（SKIP 会在 RESULT 行计数）
-    1 = 任一项 FAIL
+    0 = 十项均 PASS 或 SKIP（SKIP 会在 RESULT 行计数）
+    1 = 任一项 FAIL（含 DoD 10 的"反样本红错了地方"——那与产物缺陷同责）
     2 = 环境不可用（找不到 Chrome / python3 / bash，run.sh 被锁，
         或 `.build` 清理被 safe-delete 拦截导致本轮结果不可信）
     3 = 用法错误
@@ -39,6 +44,7 @@ import filecmp
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -348,6 +354,52 @@ def check_syntax(_docs, _ph, _gen):
     return STATUS_PASS, "compileall scripts tests rc=0", []
 
 
+def check_reject_guard(_docs, _ph, _gen):
+    """DoD 10：反样本**仍红在登记过的那几条上**（红错地方与不红同责）。
+
+    为什么这条必须在门里：I-09 的立项根因不是"判据没做"，而是**门一直知道产物不达标、
+    产物照样交付**。CAPA 反样本能到 `PASS=11 FAIL=21` 还发得出去，就是因为它不在 ITEMS 里。
+    规范写了、代码零命中，和"四处 ERROR 无人实现"同型。
+
+    比对面（集合相等）只写在 `tests/check_reject.py` 一处，这里**调用**它的 `main()`，
+    不复制比对逻辑 —— 否则两处口径分叉时，门的绿灯会说谎。
+
+    rc 三义必须分开（接线最容易踩的坑：压成一个布尔）：
+      0 = `RESULT PASS` 逐条相等        → PASS
+      1 = `RESULT FAIL` 集合不符/未登记 → FAIL
+      2 = `EnvError`（Chrome 找不到）   → ENV
+    混色的后果与 E-01/E-02/E-03 同型：「Chrome 没装」会被读成「反样本没问题」，
+    或者反过来把真缺陷藏进"环境问题"。
+
+    detail 不只写 PASS：要能自证比的是哪几页、每档几条
+    （`pages=2 逐条相等（15/15 16/16 16/16 12/12）`）——
+    只打 PASS 的话，"比了 0 条也算 PASS"这种退化看不出来。
+    """
+    import check_reject as rej          # 局部 import：既有九项都是三参签名，不为新增项改调用约定
+    try:
+        rej.S.find_chrome()             # 自己先判环境，别指望子调用替本项认领 ENV
+    except rej.S.EnvError as ex:
+        return STATUS_ENV, "Chrome 不可用：%s" % ex, []
+    rc, out = silence(rej.main, [])
+    pages = [l.split("== page ", 1)[1].strip() for l in out.splitlines() if l.startswith("== page ")]
+    pairs = re.findall(r"^\s+(\d{4}) 期望 (\d+) 条 / 实际 (\d+) 条", out, re.M)
+    counts = " ".join("%s/%s" % (exp, act) for _vw, exp, act in pairs)
+    resline = next((l for l in out.splitlines() if l.startswith("RESULT ")), "")
+    if rc == 0:
+        if not pairs:
+            # rc=0 但一条比对行都没有 —— 「比了 0 条」与「逐条相等」必须不同色。
+            return STATUS_FAIL, "rc=0 但没有可解析的逐档比对行（比了 0 条不算通过）", first_lines(out, 4)
+        return STATUS_PASS, "pages=%d 逐条相等（%s）｜页 %s" % (len(pages), counts, "、".join(pages)), []
+    if rc == 1:
+        bad = [l.strip() for l in out.splitlines()
+               if ("少红" in l or "多红" in l or "不符" in l or "量具不可信" in l
+                   or "没有登记" in l or "找不到反样本" in l or "没有可跑" in l)]
+        nbad = len([l for l in out.splitlines() if "不符" in l])
+        detail = "pages=%d 有 %d 档不符（%s）" % (len(pages), nbad, counts or "无可比档")
+        return STATUS_FAIL, detail, bad[:8] or first_lines(resline, 1)
+    return STATUS_ENV, "check_reject rc=%d：%s" % (rc, resline or "无 RESULT 行"), []
+
+
 # ---------------------------------------------------------------- 骨架
 
 ITEMS = [
@@ -360,6 +412,7 @@ ITEMS = [
     ("安装副本同步", check_install_copy),
     ("无未填写的占位符", check_placeholders),
     ("语法检查通过", check_syntax),
+    ("反样本守卫（红在登记项上）", check_reject_guard),
 ]
 
 
@@ -371,7 +424,7 @@ def main(argv):
         print("未知参数：%s（本脚本只有 --help）" % " ".join(argv))
         return 3
 
-    # 首行：先声明判的是哪棵树，再谈九项结论。脏不脏与判据无关，只影响"这次绿算不算数"。
+    # 首行：先声明判的是哪棵树，再谈逐项结论。脏不脏与判据无关，只影响"这次绿算不算数"。
     tree = tree_state()
     print(tree["line"])
 

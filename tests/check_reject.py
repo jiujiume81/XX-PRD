@@ -56,7 +56,9 @@ def measure(chrome, page_id):
     """跑一页两档，返回 {"1440": set(), "1600": set()}。形态门自己的输出被吞掉，由 --verbose 决定要不要看。"""
     buf = io.StringIO()
     with redirect_stdout(buf):
-        _p, _f, _s, _sk, fails, inc = S.run_one(chrome, str(SAMPLE), page_id)
+        # run_one 现在回 7 项（多一个 "无正当理由的 SKIP" 集合）：
+        # 反样本上它必须为空，否则「某条本该红的判据这次没跑」就混进 FAIL 集了。
+        _p, _f, _s, _sk, bad_skip, fails, inc = S.run_one(chrome, str(SAMPLE), page_id)
     got = {"1440": set(), "1600": set()}
     for item in fails:
         pid, vw = item.rsplit("@", 1)
@@ -65,6 +67,9 @@ def measure(chrome, page_id):
     # 那会让某条本该红的判据悄悄不判 —— 集合相等就变成了一句空话。这里把它当成坏结果抛出来。
     if inc:
         got["_incomplete"] = {"%d 条 INCOMPLETE" % inc}
+    if bad_skip:
+        got["_incomplete"] = got.get("_incomplete", set()) | {
+            "无条件 SKIP: " + ",".join(sorted(bad_skip))}
     return got, buf.getvalue()
 
 

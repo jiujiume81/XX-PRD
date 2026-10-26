@@ -550,6 +550,9 @@ def check_shape_gate(_docs, _ph, _gen):
             titles[mm.group(1)] = mm.group(2).strip()
     if nskip and not skip_ids:
         return STATUS_FAIL, scope + " ｜ SKIP=%d 但打不出是哪一条（读数不支撑结论）" % nskip, first_lines(out, 6)
+    if any(not titles.get(i) for i in skip_ids):
+        # 抽不到标题时宁可判 FAIL，也不要打 `P17「?」`：那是"读数不支撑结论"的最小形态。
+        return STATUS_FAIL, scope + " ｜ SKIP=%s 但抽不到标题（读数不支撑结论）" % skip_ids, first_lines(out, 6)
     skip_s = ("无 SKIP" if not nskip else
               "%s SKIP=%s" % ("唯一" if nskip == 1 else "共",
                               "、".join("%s「%s」" % (i, titles.get(i, "?")) for i in skip_ids)))

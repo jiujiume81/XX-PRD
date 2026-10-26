@@ -189,6 +189,27 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
          空表头（`rowSelection`/`radio` 的槽位）**永远不可能红**，必然为绿的分母比没有分母更危险。
          `P23` 的分母仍是「表头 1~6 全角字」，**与 `P24` 的值可断性是两套口径**（一个量表头标签、
          一个量列值），不许为了「统一」合并 —— 合并只会让其中一条错。
+
+  2026-10-26 I-09 第三阶段（新增 S-01 / S-02a / S-02b，P1–P25 的阈值与 SKIP 白名单一条没动）：
+    s) **S-01 判集合，不判档数**。`12` §S-01 原写「≤3 档 **且** ⊆ {18,14,12}」，而「子集 ⊆ 三元集」
+       已蕴含「档数 ≤3」—— 前半句是**恒真条款**（与 `①+③≡clientWidth`、`Σ(声明×k)≡表宽` 同族）。
+       只数档数会放过 `{11,13,15}`（3 档全错）；只判集合才问得出「是哪些值」。
+       档数、主档占比降为读数打印（占比不适合当判据：连续量、阈值只能拍，且会把单点小档稀释掉）。
+       与 `P19`（档数 ≤3）的关系：**已知重叠，S-01 更强**。example-05 实测 `P19 PASS / S-01 FAIL`
+       —— `{12,13,14}` 是 3 档但含 13。`P19` 本轮不动（P1–P19 冻结），重叠如实登记进自证。
+    t) **S-02a 的行高判据只对「单行行」成立**。`T-02` 允许 `wrap + maxLines:2`，而合规的两行行
+       必然 >34（14×1.57×2+padding≈58）。对全部 `tr` 判 ≤34 会把合规两行判成缺陷 ——
+       CAPA `page-capa-list` 的 `58/68/78` 就是这件事，**`P9` 在它上面是假红**（本轮不动 P9，
+       只把这条事实登记进反样本重登说明）。分母 = 行内文本行盒数 == 1 的数据行；
+       分母 0 → `SKIP(分母 0：无单行数据行…)`，走条件式白名单（值里带条件，不许裸 SKIP）。
+       行盒数**按每个文本节点各自量**：对整格 `selectNodeContents` 取 rects 会把单元格盒子自己
+       也算一个 rect（top 与文字不同），单行格全被读成 2 行 —— 实测 example-06 的 20 行全变「多行」，
+       S-02a 分母直接变 0。
+    u) **S-02b 的「正文」要把控件与标题分出去，且两类各自计数**。控件（`button/.ant-btn`）的
+       `line-height:1` 是控件规范值；标题（h1–h6）的紧行高（1.44）属标题 token。
+       不排除时三份产物会各红 6/4/3 条 —— 全是按钮。比值分母是 **font-size**，不是行盒高。
+       这条目前三份产物**全绿**（正文比只有 1.57），所以它必须配一条能红的注入
+       （正文 `line-height:1` → 读 1.00），否则又是「判据在跑，判的不是它宣称的东西」。
 """
 
 import argparse
@@ -228,6 +249,12 @@ ACCEPT_TOL = 16                   # 口径 a：验收档识别容差
 DECL_RATE_MIN = 0.80              # P7：列宽声明率
 ELLIPSIS_MAX_COLS = 3             # P18：配 ellipsis 的列数上限
 FONT_TIERS_MAX = 3                # P19：字号档数
+# S-01 / S-02（I-09 第三阶段，`references/12` §S-01 / §S-02）。**判集合，不判档数**：
+# 「≤3 档 且 ⊆ {18,14,12}」里的「≤3 档」是恒真条款 —— 子集 ⊆ 三元集已蕴含档数 ≤3。
+# 只数档数会放过 `{11,13,15}`（3 档全错）；只判集合才问得出「是哪些值」。
+S01_SET = (12.0, 14.0, 18.0)
+LINE_RATIO_MIN = 1.40             # S-02② 正文行高比区间（12 §S-02 已写死，不新定）
+LINE_RATIO_MAX = 1.60
 SHORT_FIELD_MAX_UNITS = 6.0       # P20/P23 的分母口径：整格文本 / 表头文本 ≤6 全角字
 CELL_MAX_LINES = 2                # P22：单元格行数上限（T-03，与 T-02 的 maxLines:2 同源）
 PANE_MIN = {1440: 1182, 1600: 1342}   # P15：A 层默认 pane 宽
@@ -274,6 +301,12 @@ def skip_allowed(row):
         return True
     if row.get("id") in ("P2a", "P2b"):
         return bool(re.match(r"SKIP\(行数 \d+ < \d+，", row.get("value") or ""))
+    # ③ `S-02a`/`S-02b`：判据的**分母**可以为 0（没有单行数据行 / 没有正文元素），
+    #    这时「0 条超标」不等于达标 —— 与 P2a 同理，只认值里的条件，不认 id。
+    if row.get("id") == "S-02a":
+        return bool(re.match(r"SKIP\(分母 0：无单行数据行", row.get("value") or ""))
+    if row.get("id") == "S-02b":
+        return bool(re.match(r"SKIP\(分母 0：无正文元素", row.get("value") or ""))
     return False
 
 # V8（I-07 第二批裁定）：example-05 的期望 FAIL 集，**逐条写死**。
@@ -307,6 +340,15 @@ EXPECTED_FAIL = {
         # 列宽未生效时「声明 ≥ needW」不作判决依据，本行记 FAIL 而不是 SKIP
         # （SKIP 会让存量产物在这条上免检，与 P18 同一处理）。
         "P24@1440", "P24@1600",
+        # I-09 第三阶段新增判据（S-01 / S-02a）：这两条红是**新判据抓到的既有缺陷**，
+        # 不是判据变严 —— P1–P25 的阈值与 SKIP 白名单本轮一个字没动，S 组只是把
+        # `references/12` 里一直标「人工」的那两行落成代码。
+        #   S-01：该页字号集合是 {12、13、14}，13 ∉ {18、14、12}。P19 只数档数（3 档 ≤3）照绿 ——
+        #         这就是「档数判据放过 3 档全错」的实例，也是 S-01 必须判集合的理由。
+        #   S-02a：单行行 6 行全部 39 > 34。这批行确实是单行（行盒数 1），所以它红的是行高本身；
+        #         与「合规两行被 ≤34 误判」不是同一件事（后者见 CAPA list 的 P9，本轮不动 P9）。
+        "S-01@1440",  "S-01@1600",
+        "S-02a@1440", "S-02a@1600",
     },
 }
 
@@ -885,6 +927,80 @@ PROBE = r"""
       }
       out.fontTiersSample=sample;
       return sizes;
+    })();
+
+    /* ---- S-02①：数据行的「行内文本行盒数」。
+       T-02 允许 `wrap + maxLines:2`，而**合规的两行行必然 >34**（14×1.57×2+padding≈58）。
+       所以「行高 ≤34」不能对全部 tr 判 —— 那一刀会把合规的两行判成缺陷
+       （CAPA 的 58/68/78 就是这件事，P9 在它上面是假红）。分母只能是**单行行**。
+       行盒数用 Range 的 client rects 数**不同 top**：一个 inline 盒可能被拆成多个 rect
+       （Tag 里的文字、带 padding 的 span），数 rect 个数会把单行读成多行。 */
+    out.rowLines=(function(){
+      var tabs=C.querySelectorAll('.ant-table'), res=[];
+      /* 行盒数只能按**每个文本节点**各自量：对整格 `selectNodeContents` 取 rects，浏览器会把
+         单元格盒子自己也返回一个 rect（与文字行盒的 top 不同），于是每个单行格都读成 2 行
+         —— 实测 example-06 的 20 行全部被读成「多行」，S-02a 分母直接变 0。 */
+      function lines(td){
+        var tops={}, n=0;
+        var tw=document.createTreeWalker(td, NodeFilter.SHOW_TEXT, null), t;
+        while((t=tw.nextNode())){
+          if(!(t.nodeValue||'').trim()) continue;
+          var el=t.parentElement;
+          if(!el || !el.getClientRects().length) continue;
+          var r=document.createRange(); r.selectNodeContents(t);
+          var rs=r.getClientRects();
+          for(var i=0;i<rs.length;i++){
+            if(rs[i].height<=0) continue;
+            var k=Math.round(rs[i].top);
+            if(!tops[k]){ tops[k]=1; n++; }
+          }
+        }
+        return n;
+      }
+      for(var ti=0; ti<tabs.length; ti++){
+        /* 嵌套表跳过：否则外层 querySelectorAll 会把内层行再数一遍 */
+        if(tabs[ti].parentElement && tabs[ti].parentElement.closest('.ant-table')) continue;
+        var trs=tabs[ti].querySelectorAll('tbody tr'), arr=[];
+        for(var j=0;j<trs.length;j++){
+          var tds=trs[j].querySelectorAll('td');
+          if(tds.length<2) continue;                 /* 与 P9 / P2 同口径：<2 格不算数据行 */
+          var mx=0;
+          for(var k2=0;k2<tds.length;k2++){ var l=lines(tds[k2]); if(l>mx) mx=l; }
+          arr.push({table:ti+1, idx:j, h:trs[j].offsetHeight, lines:mx});
+        }
+        res.push({i:ti+1, rows:arr});
+      }
+      return res;
+    })();
+
+    /* ---- S-02②：正文行高比。分母排除两类，**两类各自单独计数、不许悄悄丢**：
+       ① 控件（button / .ant-btn）：`line-height:1` 是控件规范值，不是正文；
+       ② 标题（h1–h6）：紧行高（14px 字 / 18px 标题的 1.44）属于标题 token，不进正文分母。
+       比值分母是 **font-size**，不是行盒高（两句都写在同一行里会读成同一件事）。
+       `line-height:normal` 单独计数，不混进比值。 */
+    out.typeAudit=(function(){
+      var body={}, head={}, ctl={}, normal={body:0,head:0,ctl:0}, cnt={body:0,head:0,ctl:0};
+      var tw=document.createTreeWalker(C, NodeFilter.SHOW_TEXT, null), n;
+      while((n=tw.nextNode())){
+        if(!(n.nodeValue||'').trim()) continue;
+        var p=n.parentElement; if(!p) continue;
+        if(!p.getClientRects().length) continue;
+        var k=null;
+        if(p.closest('button, .ant-btn')) k='ctl';
+        else if(p.closest('h1,h2,h3,h4,h5,h6')) k='head';
+        else if(p.closest('.ant-table')) continue;    /* 「正文」不含表格内文字 */
+        else k='body';
+        var s2=cs(p), fs=parseFloat(s2.fontSize), lh=s2.lineHeight;
+        if(!(fs>0)) continue;
+        cnt[k]++;
+        if(!lh || lh==='normal'){ normal[k]++; continue; }
+        var px=parseFloat(lh);
+        if(!(px>0)){ normal[k]++; continue; }
+        var r=Math.round(px/fs*100)/100;
+        var b=(k==='ctl')?ctl:(k==='head'?head:body);
+        b[r]=(b[r]||0)+1;
+      }
+      return {body:body, head:head, ctl:ctl, normal:normal, counts:cnt};
     })();
 
     /* ---- P11 的另一半：抽屉宽（R10）——**打开再量**，不读声明。
@@ -2081,6 +2197,94 @@ def evaluate(props, dom, page, vw):
                 "≤%d 档" % FONT_TIERS_MAX, "PASS" if ok else "FAIL",
                 "各档来源（前 3 个样本）：%s" % (detail or "—"))
 
+    # ================= I-09 第三阶段：S-01 / S-02（references/12） =================
+    # 与 P19 的关系说清楚：P19 判「档数 ≤3」，S-01 判「集合 ⊆{18,14,12}」。
+    # 后者更强 —— `{12,13,14}` 是 3 档但含 13，P19 绿、S-01 红（example-05 实测）。
+    # 两条都在，是因为 P1–P19 的阈值本轮**一个字不许动**（含 P19），重叠如实登记在自证里。
+
+    # ---- S-01 字号集合（档数、主档占比只作读数，不参与判定）
+    ft = dom.get("fontTiers") or {}
+    S01_sizes = sorted(float(k) for k in ft.keys())
+    S01_total = sum(int(v) for v in ft.values()) or 0
+    if not S01_sizes:
+        verdict(rows, "S-01", "字号集合（⊆{18、14、12}）", "—", "集合 ⊆ {18、14、12}", "SKIP",
+                "量不到文本")
+    else:
+        outside = [s for s in S01_sizes if s not in S01_SET]
+        top_s, top_n = max(ft.items(), key=lambda kv: (int(kv[1]), -float(kv[0])))
+        val = "{%s}（%d 档）｜主档 %s 占 %.1f%%（n=%d）" % (
+            "、".join(("%g" % s) for s in S01_sizes), len(S01_sizes),
+            ("%g" % float(top_s)), (100.0 * int(top_n) / S01_total) if S01_total else 0.0, S01_total)
+        sample = dom.get("fontTiersSample") or {}
+        why = []
+        for s in outside:
+            k = ("%g" % s)
+            srcs = sample.get(k) or sample.get(str(int(s)) if float(s).is_integer() else str(s)) or []
+            why.append("%s ∉ 集合（%s）" % (k, "、".join(srcs) if srcs else "样本缺失"))
+        verdict(rows, "S-01", "字号集合（⊆{18、14、12}）", val, "集合 ⊆ {18、14、12}",
+                "PASS" if not outside else "FAIL",
+                ("越界：%s ｜ " % "；".join(why) if why else "") +
+                "档数与主档占比只作读数：档数相同的 `{11,13,15}` 与 `{12,14,18}` 同色，"
+                "所以判据落在集合上")
+
+    # ---- S-02① 单行数据行的行高（多行行不计入：T-02 允许 wrap，两行必然 >34）
+    S02a_tabs = dom.get("rowLines") or []
+    S02a_rows = [r for t in S02a_tabs for r in (t.get("rows") or [])]
+    S02a_one = [r for r in S02a_rows if (r.get("lines") or 0) == 1]
+    S02a_multi = [r for r in S02a_rows if (r.get("lines") or 0) >= 2]
+    S02a_nolines = [r for r in S02a_rows if (r.get("lines") or 0) == 0]
+    if not S02a_rows:
+        verdict(rows, "S-02a", "单行行行高", "—", "单行行 ≤%d" % ROW_MAX_H, "SKIP", "无表格数据行")
+    elif not S02a_one:
+        verdict(rows, "S-02a", "单行行行高",
+                "SKIP(分母 0：无单行数据行；多行 %d 行不计入，行盒 0 的 %d 行量不到)"
+                % (len(S02a_multi), len(S02a_nolines)),
+                "单行行 ≤%d" % ROW_MAX_H, "SKIP",
+                "「0 条超标」与「没有单行行可判」不是同一件事 —— 分母为 0 时不许判绿")
+    else:
+        bad = [r for r in S02a_one if (r.get("h") or 0) > ROW_MAX_H]
+        mx = max((r.get("h") or 0) for r in S02a_one)
+        verdict(rows, "S-02a", "单行行行高",
+                "超标 %d/%d ｜ 单行最高 %s ｜ 多行 %d 行不计入%s"
+                % (len(bad), len(S02a_one), fmt(mx), len(S02a_multi),
+                   ("（行盒 0 的 %d 行也量不到）" % len(S02a_nolines)) if S02a_nolines else ""),
+                "单行行 ≤%d" % ROW_MAX_H, "PASS" if not bad else "FAIL",
+                ("超标行：%s ｜ " % "、".join("table[%d]>tr[%d] %s" % (r["table"], r["idx"], fmt(r["h"]))
+                                            for r in bad[:6]) if bad else "") +
+                "分母只含**行内文本行盒数 == 1** 的数据行：T-02 允许 wrap+maxLines:2，"
+                "合规两行行必然 >34，对全部 tr 判会把它误判成缺陷")
+
+    # ---- S-02② 正文行高比（分母 font-size；排除控件与标题，两类各自计数）
+    ta = dom.get("typeAudit") or {}
+    S02b_body = ta.get("body") or {}
+    S02b_head = ta.get("head") or {}
+    S02b_ctl = ta.get("ctl") or {}
+    S02b_normal = ta.get("normal") or {}
+    S02b_cnt = ta.get("counts") or {}
+    if not S02b_body:
+        verdict(rows, "S-02b", "正文行高比",
+                "SKIP(分母 0：无正文元素；标题 %d、控件 %d 均不计入，normal %d)"
+                % (int(S02b_cnt.get("head") or 0), int(S02b_cnt.get("ctl") or 0),
+                   int(S02b_normal.get("body") or 0)),
+                "∈[%.2f, %.2f]" % (LINE_RATIO_MIN, LINE_RATIO_MAX), "SKIP",
+                "分母为 0 时「0 个越界」不等于达标")
+    else:
+        def _rng(m):
+            ks = sorted(float(k) for k in m.keys())
+            return "{%s}（n=%d）" % ("、".join("%g" % k for k in ks),
+                                    sum(int(v) for v in m.values()))
+        outside2 = [(float(k), int(v)) for k, v in S02b_body.items()
+                    if not (LINE_RATIO_MIN <= float(k) <= LINE_RATIO_MAX)]
+        verdict(rows, "S-02b", "正文行高比（分母 font-size）",
+                "正文 %s ｜ 标题 %s ｜ 控件 %s ｜ normal %d"
+                % (_rng(S02b_body), _rng(S02b_head), _rng(S02b_ctl),
+                   int(S02b_normal.get("body") or 0)),
+                "∈[%.2f, %.2f]" % (LINE_RATIO_MIN, LINE_RATIO_MAX),
+                "PASS" if not outside2 else "FAIL",
+                ("越界：%s（%d 个）｜ " % ("、".join("%g×%d" % (k, n) for k, n in outside2),
+                                          sum(n for _, n in outside2)) if outside2 else "") +
+                "正文 = 表格外、非控件（`line-height:1` 是控件规范值）、非标题（紧行高属标题 token）")
+
     # ================= I-09 第一阶段新增：T-01~T-04 / W-01 / W-02 =================
     # P 号是运行时行号，注释里的 T-xx / W-xx 是 references/12-visual-standard.md 的条款号。
     # 一条 P 只承载一条条款（P7 例外：它承载 W-00，理由见该条 note）。
@@ -2471,7 +2675,8 @@ def render_case(name, page, dom_by_vp, rows_by_vp, why="—", cand_ids=None):
               "（要逐页判用 --all-pages）"
               % (len(unjudged), ", ".join(unjudged), page.get("id")))
     print("  条数口径：P1–P19 共 20 条（P3 拆 P3a/P3b）；I-09 起新增 P20–P25 承载 "
-          "T-01/T-02/T-03/T-04/W-01/W-02，另有 V-01（三态，产品态闭合）；每视口 %d 行"
+          "T-01/T-02/T-03/T-04/W-01/W-02，第三阶段新增 S-01/S-02a/S-02b 承载 `12` §S-01/§S-02，"
+          "另有 V-01（三态，产品态闭合）；每视口 %d 行"
           % len(next(iter(rows_by_vp.values()), [])))
     for vw, rows in rows_by_vp.items():
         d = dom_by_vp[vw]
@@ -2685,7 +2890,8 @@ def main(argv=None):
     # 单独打一行，让人一眼看到「哪几条这次没真正判」。
     bad_skip = sorted(bad_seen)
     if bad_skip:
-        print("SKIP-OUT-OF-WHITELIST=[%s]  白名单只允许 %s"
+        print("SKIP-OUT-OF-WHITELIST=[%s]  白名单只允许 %s（另：P2a/P2b 与 S-02a/S-02b 走"
+              "「值里带条件」的条件式放行）"
               % (",".join(bad_skip), ",".join(SKIP_WHITELIST)))
     return conclude(tf, inc_ids, bad_skip, v8_bad, v8_missing)
 
@@ -2770,13 +2976,15 @@ INJECTIONS = [
     {"name": "P10_sticky_off", "kind": "css", "want": ["P10"],
      "payload": ".ant-table th{position:static!important}"},
     # ---- js 类（在 measure 前塞元素）
-    {"name": "P1_stat_back", "kind": "js", "want": ["P1"], "allow": ["P16", "P2b", "P19"],
+    {"name": "P1_stat_back", "kind": "js", "want": ["P1"], "allow": ["P16", "P2b", "P19", "S-01"],
      # 允许的连带都是该注入的**真实后果**，不是「P1 与它们在测同一件事」：
      #   P16/P2b —— 统计卡占掉首屏高度，表格下移、分页被挤出屏；
      #   P19     —— 统计卡自带 24px 数值，页内字号从 3 档变 4 档 —— 这正是「列表页不许放
-     #              统计卡」的第二条理由（第一条是抢高度），判据把它一起抓出来是对的。
-     # 若这些连带不出现，反而说明 P2b/P16/P19 没量到真实影响。
-     "allowWhy": "统计卡占首屏高度（P16/P2b），并自带 24px 数值把字号推到 4 档（P19）—— 都是同一注入的真实后果",
+     #              统计卡」的第二条理由（第一条是抢高度），判据把它一起抓出来是对的；
+     #   S-01    —— 同上，24 不在 {18,14,12} 里，集合判据也红。它与 P19 是同一批元素上的
+     #              已知重叠（S-01 判集合、P19 只数档数），不是「P1 与 S-01 在测一件事」。
+     # 若这些连带不出现，反而说明 P2b/P16/P19/S-01 没量到真实影响。
+     "allowWhy": "统计卡占首屏高度（P16/P2b），并自带 24px 数值把字号推到 4 档（P19/S-01）—— 都是同一注入的真实后果",
      "payload": "(function(){var C=document.querySelector('#protoCanvas .ant-content');if(!C)return;"
                 "var e=document.createElement('div');e.className='ant-stat';"
                 "e.innerHTML='<div class=\"s-t\">在检批次</div><div class=\"s-v\">42</div>';"
@@ -2927,6 +3135,31 @@ INJECTIONS = [
                  "不是 P22 与它们在测同一件事",
      "payload": ".ant-table.fixed th:nth-child(3),.ant-table.fixed td:nth-child(3)"
                 "{width:48px!important;white-space:normal!important}"},
+    # ---- I-09 第三阶段新增：S-01 / S-02a / S-02b 各一条能红的注入
+    # 「新增判据每一条都要有一条能红的注入」——S-02b 在三份产物上本来就全绿，
+    # 没有注入的话，「它判了」和「它永远绿」在报告上完全一样。
+    # 选 `.ant-btn` 而不是正文元素：按钮在 S-02b 里已被排除（控件），改它的字号
+    # 不会顺手把 S-02b 也打红，这样「多翻」只剩 P19 —— 而 P19 与 S-01 数字号档位
+    # 是**已知重叠**（S-01 更强：`{12,13,14}` 3 档但含 13，P19 绿、S-01 红）。
+    {"name": "S01_size_19", "kind": "css", "want": ["S-01"], "allow": ["P19", "P12", "P16"],
+     "allowWhy": "按钮字号 14→19：① 去重集合多出 19 → S-01 红；② P19（档数 ≤3）同样红 —— "
+                 "两条量同一批元素，已知重叠，S-01 更强；③ 按钮变宽变高把标题带与筛选区一起顶起来 → "
+                 "P12 的 Δtop、P16 的分页 bottom 跟着变。②③ 都是「字号变大」的真实后果，"
+                 "不是 S-01 与它们在测同一件事",
+     "payload": ".ant-content .ant-btn{font-size:19px!important}"},
+    # 行高 ≥34 的造红：加 padding 让单行行变高，**不改行盒数**（padding 不影响换行）——
+    # 这样分母仍是那 20 行单行行，红的是「单行行超过了 34」本身。
+    # 连带 P9（极差/最高）、P2a/P2b（一屏行数）是行高变大的必然结果。
+    {"name": "S02a_row_high", "kind": "css", "want": ["S-02a"],
+     "allow": ["P9", "P2a", "P2b"],
+     "allowWhy": "td 上下 padding 各加到 14px → 单行行从 34 涨到 50：P9 的最高行高、P2a/P2b 的一屏行数"
+                 "都跟着变，这是「行变高」的必然后果，不是 S-02a 与它们在测同一件事",
+     "payload": ".ant-table td{padding-top:14px!important;padding-bottom:14px!important}"},
+    # 正文行高比 1.57 → 1.00：只动表单标签（span.lb，表格外、非控件、非标题），
+    # 让「正文」这一桶里出现越界值。若不降字号，比值恒为 line-height/font-size 的商，
+    # 读得出来就说明判据量的是这一个商，而不是别的东西。
+    {"name": "S02b_line_height_1", "kind": "css", "want": ["S-02b"],
+     "payload": ".ant-content span.lb{line-height:1!important}"},
 ]
 
 

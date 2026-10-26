@@ -402,13 +402,13 @@
                     {
                       "title": "序号",
                       "dataIndex": "no",
-                      "width": 48,
+                      "width": 54,
                       "align": "left"
                     },
                     {
                       "title": "任务单号",
                       "dataIndex": "taskNo",
-                      "width": 188
+                      "width": 182
                     },
                     {
                       "title": "物资名称",

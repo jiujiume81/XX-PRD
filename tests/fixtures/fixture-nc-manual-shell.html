@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>N-c 手写壳样本（非容器产物）</title>
+<!--
+  **这个文件不是容器产物**，是手写的 HTML 壳，专门用来证明 V-01 的 N-c 能被判出来。
+  名字里的 `fixture-nc-manual-shell` 就是标记：`example-*` 的 glob 取不到它，任何
+  「教材必须绿」的清单也不会把它算进去。
+
+  它要证的是**一对读数**，只证一半等于没证：
+    · 归因差 = |减法导航 − 真实导航| = |0 − 0| = 0   ← N-c 抓不到（减法与真实同时变 0，互相抵消）
+    · 铺满差 = |父.offsetWidth − b − 视口| = |1100 − 0 − 1440| = 340  ← 只有这一条能红
+  所以断言必须同时比对「归因差 0」与「铺满差 340」。只贴「340 红了」证明不了「归因差抓不到它」，
+  而那恰恰是这个样本存在的理由。
+
+  几何：.nc-shell 内联 width:1100（内联宽才会被 fixedWrapHits 看见 → cause=N-c）
+        → .ant-layout.h 撑满 1100 → .ant-content 1052（1100 − 2×24 padding）。
+-->
+<style>
+  html, body { margin: 0; padding: 0; background: #f5f5f5; }
+  #protoCanvas { font: 14px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .ant-layout { display: flex; flex-direction: column; }
+  .ant-layout.h { flex-direction: row; }
+  /* `flex:1` 是产物里 Content 的正常写法：横向 flex 容器里的子项按内容定宽，
+     不写这一条内容就只有 558 宽（那是 flex 的默认行为，不是被测的缺陷）。 */
+  .ant-content { flex: 1 1 auto; min-width: 0; padding: 24px; background: #fff; }
+</style>
+</head>
+<body>
+<div id="protoCanvas">
+  <div class="nc-shell" style="width:1100px">
+    <div class="ant-layout h">
+      <div class="ant-content">
+        <h1>手写壳样本</h1>
+        <p>父节点被换小到 1100：内容宽 1052、导航 0，归因差 0、铺满差 340。</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

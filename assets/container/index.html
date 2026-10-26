@@ -360,6 +360,12 @@ select.sel:hover{border-color:var(--ant-primary)}
 .ant-table.fixed th,.ant-table.fixed td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* 按列开关的省略号：只给会溢出的文本长列（≤3 列），不全局开 */
 .ant-table .cell-ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 按列开启的两行截断（`wrap:true` + `maxLines:2`，视觉标准 T-02 的第二种正当出口）。
+   为什么上限写死 2：`tr ≤34` 的行高预算只够 21×1；一旦允许「靠浏览器默认换行」，
+   行高就从 34 跳到 58（I-09 证据 V3）。`-webkit-line-clamp` 只作用在块级容器上，
+   所以**包一层 span**，不直接作用在 td —— 作用在 td 上会让 fixed 表格的列宽计算跟着变。 */
+.ant-table td.cell-wrap{white-space:normal}
+.ant-table .cell-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal}
 /* 数值列等宽数字：否则「1286」与「986」宽窄不一，右对齐也扫不齐 */
 .ant-table td.num,.ant-stat .s-v{font-variant-numeric:tabular-nums}
 /* 吸附：表头 sticky（separate 布局下用 inset 补 1px 线，不用 border 免得双线），分页贴底 */
@@ -1473,6 +1479,12 @@ function actionDefs(col){
 function cellContent(col,row,nid,ri){
   var v=row[col.dataIndex];
   if(col.type==='index'){ return [txt(String((col.start==null?1:col.start)+ri))]; }
+  /* 两行截断（`wrap:true` / `maxLines:2`）：包一层 span 承载 line-clamp，
+     同时给 title 兜底 —— 截断到 2 行后看不见的后半句必须能悬停读到。
+     `maxLines` 只接受 2（其余值在 R.Table 里已被归一成 2 并 warn）。 */
+  if(col.wrap||col.maxLines){
+    return [h('span','cell-clamp',{text:v==null?'':String(v),title:(v==null?'':String(v))})];
+  }
   if(col.type==='tag'){ return [h('span','ant-tag '+statusColor(v),{text:v==null?'':String(v)})]; }
   if(col.type==='avatar'){ return [h('span','ant-badge-wrap',null,[h('span','ant-avatar sm',{text:String(v||'?').slice(0,1)}),txt(v==null?'':String(v))])]; }
   if(col.type==='action'){
@@ -1641,6 +1653,7 @@ function buildTableFoot(p,ctx){
 function colClass(c){
   var s=[];
   if(c.ellipsis) s.push('cell-ellipsis');
+  if(c.wrap) s.push('cell-wrap');
   if(c.fix==='left') s.push('col-fix-l');
   if(c.fix==='right') s.push('col-fix-r');
   if(c.align==='right'||c.num) s.push('num');
@@ -1662,7 +1675,18 @@ function colWidthStyle(c){
 
 R.Table=function(p,ctx,node){
   var cols=p.columns||[], nid=node&&node.id?node.id:null;
+  /* maxLines 只接受 2。理由：`tr ≤34` 的行高预算只够一行 21；3 行以上会把行高吃到 58，
+     而「允许换行但没上限」会让 T-01（短字段不得折行）退化成「最多三行」。
+     收到别的值**归一成 2 并 warn**，不静默照收 —— 静默照收等于把作者写错的东西
+     渲染成一个看起来正常的页面。 */
+  cols.forEach(function(c){
+    if(c.maxLines!=null && Number(c.maxLines)!==2)
+      warn('列「'+(c.title||c.dataIndex)+'」maxLines 只支持 2（收到 '+c.maxLines+'），已按 2 处理');
+  });
   var sizeCls=(p.size==='xs')?' xs':((p.size==='small')?' sm':'');
+  /* 不兜底（I-09 实测裁定）：「每列都写了 width 就自动 fixed」技术上可行、`run.sh` 757 也不动，
+     但它会**在渲染时把反样本修好** —— CAPA 的 `类型` 从 62 回到 72、短字段折行 33/39 → 0/39、
+     P7 两页由红转绿。反样本必须能复现用户当时看到的失败，所以兜底不做，只让 W-00 照红。 */
   var fixed=!!(p.tableLayout==='fixed'||p.fixed);
   var wrapAttrs=(p.stickyHeader&&p.maxHeight)?{style:'--tw-max:'+p.maxHeight}:null;
   var wrap=h('div','ant-table-wrap'+(p.stickyHeader?' sticky':''),wrapAttrs);

@@ -46,13 +46,17 @@ STATUS_COLORS = {
 #   操作      实测文本  61，原声明  76 → 列内  52 → 裁字
 # 「接受 14px」不是一句同意，它连带这次重排 —— 这行的账必须一起结（§3.1「代价」）。
 #
-# 序号 48 是 P17 的硬下限（每列 ≥48），不是「44 加 4」：44 放不下两位序号 + 左右 padding。
+# 序号 54（原来 48）：48 时 `th` 可用宽 = 48 − 左右 padding 24 = 24，而「序号」两字
+# 在 14px 下自然宽 28 → 表头被裁 4px（I-09 实测，1440 档）。48 只是 P17 的硬下限
+# （每列 ≥48），不等于「表头放得下」。52 时可用宽恰好 28 = 文字宽，零余量，换台机器
+# 换个字体度量就又被裁，所以取 54（余量 2px）。多出来的 6px 从任务单号挪：
+# 它 188 时 needW 161.8，留 26px 余量；182 后仍有 20px，不裁字。
 # 三条不变量（允许 ±2 微调，但必须同时成立）：
 #   ① Σ = 866；② 主键三列（任务单号/批次号/操作）不裁字；③ ellipsis 恰 2 列且都真溢出。
 # 866 档不设固定列（fix）：本来就不横向滚动，sticky 列只会多一层 z-index 噪音。
 COLUMNS = [
-    {"title": "序号", "dataIndex": "no", "width": 48, "align": "left"},
-    {"title": "任务单号", "dataIndex": "taskNo", "width": 188},
+    {"title": "序号", "dataIndex": "no", "width": 54, "align": "left"},
+    {"title": "任务单号", "dataIndex": "taskNo", "width": 182},
     {"title": "物资名称", "dataIndex": "material", "width": 125, "ellipsis": True},
     {"title": "批次号", "dataIndex": "lot", "width": 146},
     {"title": "取样·样品", "dataIndex": "samples", "width": 88, "align": "right"},

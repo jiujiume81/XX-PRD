@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""P1-P19：形态与密度判据（作业型列表页）。规格见 项目治理/迭代/I-07-形态与密度方案.md §6。
+"""P1-P25 + V-01：形态与密度判据（作业型列表页）。
+
+P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；P20–P25（I-09 第一阶段）
+的规格见 `references/12-visual-standard.md` 的 T-01/T-02/T-03/T-04/W-01/W-02，
+`P7` 另承载 `W-00`；`V-01`（内容宽与视口闭合，三态）见同一文件 §1。
 
 为什么要有这把量尺（而不是继续用截图说话）：
   Owner 对列表页的判断是「像不像在用 Excel」「一屏能不能看到更多」——这类话可以被数出来：
@@ -23,13 +27,15 @@
 用法:
     python3 tests/check_ui_shape.py                       # 跑全部示例里含列表页的产物
     python3 tests/check_ui_shape.py FILE.json             # 只跑一个产物
-    python3 tests/check_ui_shape.py FILE.json --page p-x  # 指定页面（默认自动挑第一个列表页）
+    python3 tests/check_ui_shape.py FILE.json --page p-x  # 指定页面（默认见下方 pick_page_ex）
+    python3 tests/check_ui_shape.py FILE.json --all-pages # 逐页全判，**分页单列计数，不合并**
     python3 tests/check_ui_shape.py --selfcheck           # 注入反例，验证判据能红在正确的规则上
     python3 tests/check_ui_shape.py --keep                # 保留临时 HTML
 
 退出码:
-    0 = 无 FAIL、SKIP 全在白名单内、且 V8 的 FAIL 集与期望名单逐条相等
+    0 = 无 FAIL、无 INCOMPLETE、SKIP 全在白名单内、且 V8 的 FAIL 集与期望名单逐条相等
     1 = 有 FAIL，或出现白名单外的 SKIP（后者打 `RESULT INCOMPLETE`，见 V13），
+        或有判据报 INCOMPLETE（量具不可信，见 V-01 的 p) 段），
         或 example-05 的 FAIL 集与 `EXPECTED_FAIL` 不符 / 全量模式下该文件根本没跑（V8）
     2 = 环境问题（找不到 Chrome / 探针没产出 / 页面空集）
 
@@ -66,11 +72,118 @@
     i) **自证基线切到 example-06**（REQ-I07-04）：`--base` 可指定，默认 example-06；
        基线不绿的目标判据计入「未覆盖」，覆盖 <10 时 RESULT 为 INCOMPLETE 并非 0 退出。
        旧版拿 example-05 当基线，10 条注入 6 条 SKIP 却打 RESULT PASS。
+
+  2026-10-26 I-09（CAPA 实测暴露的三处**量具缺陷**，都不是阈值变更）：
+    j) **列宽解析与容器同源**（P7 假 0）。`props_of()` 原来 `float(w)`，`float("52px")`
+       抛 ValueError → 记成「未声明」。真实产物 CAPA 的 11 列写的是 `"52px"` 这种带单位字符串，
+       于是「11/11 全声明」被报成「0/9 = 0%」，连带把「写了列宽但没锁布局」误诊成「没写列宽」。
+       现在按容器 `colWidthStyle()` 的口径解析：纯数字按 px、`Npx` 取 N、`N%` 计入声明率但
+       **不计入 Σ 预算**（百分比与 px 不可加），无法解析的单位单独打印。阈值 80% 与 `fixed` 不动。
+    k) **挑页与量主体表**。旧默认按 `is_work_list_page` 取第一张「Content 直属 Table」的页，
+       于是 CAPA 的 `page-capa-list`（主表包在 `MasterDetail` 里）被跳过，门去判了列表页之外的
+       `page-capa-overdue` —— **同一份产物判哪页决定结论（19 vs 21 条 FAIL），而两页的
+       `PASS` 总数都是 11，巧合把差异盖住了**。现在：默认判 `meta.currentPageId`（容器开页停在
+       的那页）若它是列表页候选；`props_of()` 找不到 Content 直属表时退到 MasterDetail 里的
+       第一张表并**在 note 里写明来源**；候选页清单、以及「还有哪几张没判」打进报告；`--all-pages`
+       逐页单列计数。**判据本身一条没动**（`content_direct_tables()` 仍是 P2/P11/P13 的口径）。
+
+  2026-10-26 I-09 第一阶段（新增判据，P1–P19 的阈值与 SKIP 白名单一条没动）：
+    l) **P7 承载 W-00**：`fixed` 与「每列 width」成对，缺一即 FAIL；值里带红的理由
+       （`原因=declared|fixed|both`）。不拆 P7a/P7b —— 拆开会让「0/8 + fixed」读出半绿。
+    m) **P20–P25** 一条 P 承载一条条款（T-01/T-02/T-03/T-04/W-01/W-02），判据定义与阈值
+       全按 `references/12-visual-standard.md`，本文件只实现，不重新解释。
+    n) **两处口径细节，踩过才知道**（写在这里，免得下一个人重踩）：
+       ① 行数按**行盒 top 去重**数，不数 Range 的 rect 个数 —— `text-overflow:ellipsis` 下
+          被裁的尾巴会被 Chrome 切成第二个 rect，与第一段同一个 top，数 rect 会把「被裁」
+          读成「折行」（example-06 的两列 ellipsis 会读成 19/20、20/20 全折行）。
+       ② needW 按**承载文本的最内层元素自身字号**量（Tag 12px / td 14px）。用单元格字号代算
+          不是精度问题，是可判定性问题：example-06「状态」列按 Tag@12px 得 78（绿，与渲染一致）、
+          按 td@14px 得 84（红），差的 4px 只取决于实现者选了哪个字号。
+    o) **W-03 的顺序落进代码**：`W-00` 不成立时 `P24` 判 FAIL(前置不成立) 而非 SKIP，
+       原始读数照打。SKIP 会让存量产物在这条上免检（与 P18 同一处理）。
+
+  2026-10-26 I-09 第二阶段（V-01 + 解析拆分，P1–P25 的阈值一条没动）：
+    p) **V-01 接入，且是这条脚本里第一个三态判据**（`PASS` / `FAIL` / `INCOMPLETE`）。
+       ① `INCOMPLETE` 只在**量具自己不可信**时出现，原因固定三个 TOKEN：
+          `CONTENT_ZERO`（内容盒不存在/宽为 0）、`PARENT_INVISIBLE`（父盒 clientWidth=0）、
+          `NAV_OUT_OF_RANGE`（导航宽为负）。它既不是绿也不是红 —— 记成 PASS 是静默绿，
+          记成 FAIL 是把量具 bug 算到产物头上。`main()` 里它单独计数并让退出码非 0
+          （`RESULT INCOMPLETE`），不并进 PASS；守卫按 TOKEN 相等断言，不按条数。
+          另有一条**口径自证**：`①+③` 对 `content.offsetWidth` 差 ≤3px，超了打
+          `BORDER_OR_SCROLLBAR`（标签，不是状态）。**不能拿 clientWidth 做这个断言** ——
+          ① 减掉的 padding 正是 ③ 加回来的，`①+③ ≡ clientWidth` 是恒等式、永远为真。
+       ② **只在产品态舞台里量**。评审态画布只有 1122 宽（工具外壳 + PRD 面板），
+          拿它算闭合式等于让产品为一个它控制不了的侧栏买单 —— I-07 已为此付过一次代价。
+          所以 `productStage()` 接受舞台宽：P2a 固定 1440，V-01 用当前视口宽各建一次。
+       ③ **主判据是「归因差」，不是闭合式**。把 `①内容宽 + ②导航宽 + ③padding` 展开即得
+          `①+②+③ ≡ 父.offsetWidth − b`（`b` = content 左右 border）：**只要父节点没换掉，
+          闭合差恒为 0**。它判的从来是「父节点有没有铺满视口」，不是「内容宽有没有适配」。
+          所以 `max-width:1024` 下被压窄留下的空档 416 会被减法式当成导航宽（1440−1024=416），
+          三数之和仍是 1440、闭合差 0 判绿 —— 一条恒等式不能当判据。
+          现行两条式子、结论按第一条：
+            · **归因差**（主判据）`|减法导航 − 真实导航| ≤ 8` —— 丢掉的宽度是不是被导航合法占走；
+            · **父节点铺满**（副判据，原闭合式改名）`|父.offsetWidth − b − 视口| ≤ 8` —— 父节点有没有被换小。
+          减法导航 = `父宽 − content.offsetWidth`；真实导航 = **横着占位、且与内容并排**的同级兄弟
+          宽之和，判据是**纯几何三条**（纵向重叠 / 水平不相交 / `position ∈ static|relative|sticky`），
+          **不看 class** —— class 是约定，自定义元素做导航时白名单会把它算成 0，合格产物被误红。
+          CAPA 的 `div.ant-header`（宽 1440）纵向不重叠，不进真实导航（判重叠前它会把 1440 算进去，
+          一份合格产物被判 FAIL，I-07 已为此付过一次代价）；抽屉是 `absolute`，被第三条排除。
+          减法式与真实导航**不等本身就是红**（归因差），不再打 `MISMATCH` 之类的旁注标签 ——
+          那是恒等式判据留下的补丁，本轮取消。`parentElement` 与 `offsetParent` 不一致只打
+          `PARENT_MISMATCH`（交叉校验，不是判据、不是 INCOMPLETE）。
+          视口口径钉死 `window.innerWidth`（含滚动条），与 `父.offsetWidth` 同口径；用
+          `documentElement.clientWidth` 会在有纵向滚动条时恒差 15px = 静默**红**（比静默绿更难查，
+          所有人都会以为产物真超标）。归因差超 8px **不许加容差**。
+          `N-e`（两档内容宽增量 vs 视口增量）**只作诊断打印**、不判红：唯一能让它单独红的输入是
+          「两档 padding 不同」（`@1440 padding:24` / `@1600 padding:30` → 增量 148≠160），
+          而多留白是合法设计；它想抓的「两档写成常数」已由归因差 @1600 抓住。
+          一条只在合法产物上红的判据会逼下一个人去加容差，比恒绿更糟。
+       ④ **`cause` 值的通用纪律**：每一条 `cause`，要么有输入能产出它，要么在文档里写明
+          「不可达」及原因。N-a（`max-width`）/N-b（JSON 或 props 里写死宽）/N-d（zoom、scale）
+          都有自证注入；**N-c（外层换壳）在产物空间内不可达** —— 本仓库容器把
+          `Layout.props.style.width` 直接落到节点上（`R.Layout` 根本不消费 width/style，实测加
+          `props.width=1200` 父节点仍是 1440），产物写了宽也只会走 N-b；换壳只能来自容器代码
+          自己，不是产物能表达的形态。为了不让判据②变成「永远为绿的观察行」，另配一份**手写 HTML
+          壳样本** `tests/fixtures/fixture-nc-manual-shell.html`（非容器产物，名字里标出来）：
+          它同时打两个数 —— **归因差 0**（减法与真实同时变 0、互相抵消，证明 N-c 归因差抓不到）
+          与**铺满差 340**（只有判据②能红）。只证「340 红了」等于没证。
+       ⑤ N-d（zoom / transform:scale）**独立判红**：缩放把布局宽与 `clientWidth` 解耦，
+          闭合差恰被磨平（zoom .9 时仍报 0）。归因差这一档**也能**红（缩放把 48px 记成没人占），
+          但它只说得清「有宽度不知去向」，说不清「是被缩放改掉了测量本身」——
+          `cause=N-d` 的用处就在这里，不因为它和归因差重叠就删掉。
+       ⑥ 自证里有 `V01_zoom`（N-d 独立红）、`V01_maxw`（N-a 盲区）与三条 `INCOMPLETE` 造红；
+          加上 `P7` 两个方向、`P21`、`P22` 各一条，共 23 条注入，另加 N-c 手写壳样本 1 条，
+          自证覆盖 **24 条** —— **「新增判据每一条都要有一条能红的注入」**，P7 是本轮抓 CAPA 的主力，
+          它自己没被证过能红，等于「门能判 ≠ 门会拦」。N-c 那条不进 `INJECTIONS`：它改的是整份 DOM
+          而不是 JSON/CSS，塞进「基线产物 + 注入」那套循环里会让 P1–P25 一起把手写壳当产物判。
+    q) **`main_table()` 改名 `resolve_list_table()`，与 `is_work_list_page()` 拆开**：
+       前者答「哪张表是主表」（任何页都该能答，只用于取原始量），后者答「算不算作业型列表页」
+       （形态类判据的适用范围，**定义不变**）。混在一起时只能靠放宽「列表页」定义去迁就
+       CAPA 的 `page-capa-list`，那会连带改掉 P2/P11/P13 的适用范围。
+       验收：CAPA list 11 列 / overdue 9 列；example-06 外包一层 `MasterDetail` 后仍取到 8 列主表
+       （source 从 content-direct 变 master-detail，`is_work_list_page` 仍按原定义返回 False）。
+    r) **两处分母的「排除数」必须打出来**（team-lead 裁定，本轮读数会变）：
+       · `P24` 分母 = **未声明出口、且这列的值不可断**（token：单号/日期/序号/状态/Tag 文本）；
+         声明了 `ellipsis` / `wrap+maxLines` 的列与值可断的长文本列**出分母**（归 T-02/T-03）——
+         `needW` 的语义是「放得下一整条不可断的内容」，对配了省略号的列不成立（CAPA 的
+         `事实陈述` needW=532 > 整表 866，**不可满足**，那是「该走 T-02」的信号而不是加宽指令）。
+         可断性只两条判据：空格分词 ≥3、连续 CJK >6；**判值文本，不判渲染行数** ——
+         行数由被修的列宽决定，列越窄越折 → 越像长文本 → 越会被排除，那是「越坏越免检」的循环定义。
+         `example-06` 因此从 `0/8` 变 `0/6`。三数（needW/声明/渲染）**仍对全列照打**。
+         前置红改 `FAIL(cause=prereq:W-00)`，并把**声明侧**读数打进值里 ——
+         声明值在 JSON 里、与布局无关，这一半永远可判，不该被 W-00 一起抹掉。
+       · `P23` 分母排除**三类**（表头 >6 全角字 / 空表头 / 无裁切盒），**三个数分别计数、不加总**，
+         落在同一行里：`被裁 0/10 列@1234；另有 1 列表头 >6 全角字、2 列空表头、0 列无裁切盒，不入分母`。
+         合成一个「另有 N 列」时，看报告的人分不清「判据放过了它」还是「它根本不适用」；
+         空表头（`rowSelection`/`radio` 的槽位）**永远不可能红**，必然为绿的分母比没有分母更危险。
+         `P23` 的分母仍是「表头 1~6 全角字」，**与 `P24` 的值可断性是两套口径**（一个量表头标签、
+         一个量列值），不许为了「统一」合并 —— 合并只会让其中一条错。
 """
 
 import argparse
 import html as htmlmod
 import json
+import math
 import os
 import re
 import shutil
@@ -99,6 +212,8 @@ ACCEPT_TOL = 16                   # 口径 a：验收档识别容差
 DECL_RATE_MIN = 0.80              # P7：列宽声明率
 ELLIPSIS_MAX_COLS = 3             # P18：配 ellipsis 的列数上限
 FONT_TIERS_MAX = 3                # P19：字号档数
+SHORT_FIELD_MAX_UNITS = 6.0       # P20/P23 的分母口径：整格文本 / 表头文本 ≤6 全角字
+CELL_MAX_LINES = 2                # P22：单元格行数上限（T-03，与 T-02 的 maxLines:2 同源）
 PANE_MIN = {1440: 1182, 1600: 1342}   # P15：A 层默认 pane 宽
 
 # P4 的预算常数：**从盒模型推出来的，不是拍的数**（I-07 §3.4）。
@@ -151,6 +266,11 @@ EXPECTED_FAIL = {
         "P12@1440", "P12@1600",
         "P13@1440", "P13@1600",
         "P18@1440", "P18@1600",
+        # I-09 第一阶段新增：P24 承载 W-01（列宽下限）。它在 example-05 上红是**前置红**，
+        # 不是「列宽算错了」—— 该页 P7 本就红（2/7 声明率 + auto），按 W-03 的顺序，
+        # 列宽未生效时「声明 ≥ needW」不作判决依据，本行记 FAIL 而不是 SKIP
+        # （SKIP 会让存量产物在这条上免检，与 P18 同一处理）。
+        "P24@1440", "P24@1600",
     },
 }
 
@@ -190,6 +310,203 @@ PROBE = r"""
     }
     return out;
   }
+  /* 文本行数：按**行盒 top 去重**计数，不数 rect 的个数。
+     为什么不能用 rect 个数：`text-overflow:ellipsis` 的单元格里，被裁掉的尾巴在 Chrome 里
+     会被切成第二个 text rect，但它与第一段**同一个 top** —— 数 rect 会把「被裁」读成「折行」
+     （example-06 两列 ellipsis 会读出 19/20、20/20「全折行」，而屏幕上是一行文字加省略号）。 */
+  function lineCount(el){
+    var tops={}, cnt=0, tw=document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), n;
+    while((n=tw.nextNode())){
+      if(!(n.nodeValue||'').trim()) continue;
+      var r=document.createRange(); r.selectNodeContents(n);
+      var rs=r.getClientRects();
+      for(var i=0;i<rs.length;i++){
+        if(rs[i].height<=0.5) continue;
+        var k=Math.round(rs[i].top);
+        if(!(k in tops)){ tops[k]=1; cnt++; }
+      }
+    }
+    return cnt;
+  }
+  /* T-04 的锚点：**自己发生裁切的盒子**，不是「承载表头文本的最内层元素」。
+     为什么不能量最内层：`overflow:hidden` 只拦它自己那一层；内层元素的宽度由内容决定时
+     它**永远不会超出自己**，超出的是父盒。更糟的是文本包一层 <span> 时 span 是 inline，
+     它的 clientWidth / scrollWidth **恒为 0/0**，`0 > 0+1` 恒假 —— 判据恒绿，
+     而真发生裁切的那个 th 一次都没被看。「用对了 API、选错了对象」比写错公式更难发现。
+     判定链：从目标往上找第一个 computed overflow-x ∈ {hidden, clip} 的盒子；
+     找不到返回 null（= 这一列没有裁切盒，本条不适用，**不是绿也不是红**，不进分母）。
+     与 T-01 的区别要记牢：T-01 判**折行**用 Range.getClientRects()（对 inline 有效，
+     一行一个 rect）；T-04 判**裁切**用 scrollWidth/clientWidth（对 inline 恒 0/0）。
+     两种判据的锚点类型不同，不能互换。 */
+  function clippingBox(el){
+    var cur=el;
+    while(cur && cur!==document.documentElement){
+      var ox=cs(cur).overflowX;
+      if(ox==='hidden'||ox==='clip') return cur;
+      cur=cur.parentElement;
+    }
+    return null;
+  }
+  /* V-01 的全部几何量（**产品态**里量：评审外壳的 canvas 只有 1122 宽，进去就没有闭合可言）。
+     ①②③ 的口径是刻意的「一个不含 padding、一个含 padding」，见下方注释；四段输出都要打。 */
+  function v01Geo(C){
+    var s=cs(C), out={};
+    /* ① 内容宽 = content-box（clientWidth − padding）。**不是 clientWidth**：
+       clientWidth 已经含 padding，① 若直接取它，③ 再加一遍就把 padding 算两次
+       （教材 1232+208+48 = 1488，@1440 差 48 → 判据把合格产物误红）。
+       ② 导航宽 = 父宽 − content.offsetWidth（减法式，含 padding）—— 两条口径不同是刻意的，
+       谁想「把两条统一成一个口径」，统一的结果只会是其中一条错。 */
+    var padL=parseFloat(s.paddingLeft||0), padR=parseFloat(s.paddingRight||0);
+    out.contentBoxW = num(C.clientWidth - padL - padR);
+    out.contentClientW = num(C.clientWidth);
+    out.contentOffsetW = num(C.offsetWidth);
+    out.contentPadW = num(padL + padR);
+    /* b = content 的左右 border。`①+③ = 父宽 − b` 推出来的那个 b 必须单独量：
+       `父.offsetWidth` 含 border，`clientWidth` 不含，拿掉它「父节点铺满」才对得上视口。 */
+    out.contentBorderW = num(parseFloat(s.borderLeftWidth||0) + parseFloat(s.borderRightWidth||0));
+    /* 视口口径**钉死为 window.innerWidth**（含滚动条），与 `父.offsetWidth` 同口径。
+       用 documentElement.clientWidth 会在有纵向滚动条时恒差 15px —— 那是静默**红**，
+       比静默绿更难查，因为所有人会以为产物真超标。 */
+    out.viewportW = num(window.innerWidth);
+    /* 口径自证：① + ③ 必须 == content.clientWidth。padding 被算两次时一眼露馅。 */
+    out.identity = num(out.contentBoxW + out.contentPadW);
+    var PB = C.parentElement;
+    var pbox = PB || document.documentElement;
+    /* 父节点 = **直接父盒**。主口径不用 offsetParent：它的定义是「最近的**已定位**祖先」，
+       静态父盒会被跳过（position:fixed 浮层包裹时跳得更远），而「被谁横向占走了」问的是直接父盒。 */
+    out.parentIsDoc = !PB;
+    out.parentTag = (pbox.tagName || "").toLowerCase();
+    out.parentClass = (typeof pbox.className === "string" ? pbox.className : "").trim()
+                      .split(/\s+/).filter(Boolean).slice(0, 2).join(".");
+    out.parentClientW = num(pbox.clientWidth);   // 0 = display:none / 未挂载 / 被折叠
+    /* 文档元素用 clientWidth：documentElement.offsetWidth 含滚动条，会引入 15px 级误差。 */
+    out.parentW = PB ? num(pbox.offsetWidth) : num(pbox.clientWidth);
+    /* 交叉校验（**不是判据、也不是 INCOMPLETE**）：`parentElement` 与 `offsetParent` 不一致时
+       打 `PARENT_MISMATCH`。主口径仍是 parentElement —— offsetParent 是「最近的**已定位**祖先」，
+       静态父盒会被跳过（position:fixed 浮层包裹时跳得更远），不能当主口径。 */
+    var op = C.offsetParent;
+    out.offsetParentTag = op ? (op.tagName || "").toLowerCase() : "none";
+    out.offsetParentClass = (op && typeof op.className === "string")
+        ? op.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".") : "";
+    /* 量具舞台自己就是 position:fixed，它必然是内容的定位包含块 —— 那是**夹具**造成的，
+       不是产物的定位祖先。不排除它，每份产物都会带一条常数噪音（读的人会学会无视它）。 */
+    out.offsetParentIsStage = !!(op && op.id === "__prodStage");
+    out.parentMismatch = !!op && op !== PB && !out.offsetParentIsStage;
+    /* 真实导航 = **横着占位、且与内容并排**的同级兄弟宽之和。**纯几何，不看 class** ——
+       class 是约定：某产物用自定义元素做导航时，class 白名单会把它算成 0，
+       于是「减法导航 208 − 真实 0 = 归因差 208」，合格产物被误红。三条同时成立才算：
+         ① 纵向重叠（`r.top < c.bottom && r.bottom > c.top`）—— 上面一整行的页头不是横向占位；
+         ② 水平不相交（`r.right <= c.left + 1 || r.left >= c.right - 1`）—— 必须并排，不能叠着；
+         ③ `position ∈ {static, relative, sticky}` —— absolute/fixed 是浮层，打开着的抽屉不算。
+       代入：example-06 的 `div.ant-sider`（208，左、并排、static）✓；
+       CAPA 的 `div.ant-header` 纵向不重叠 ✗（不判重叠就会把 1440 全算进导航 → 误红）；
+       抽屉 `absolute` 被 ③ 排除，不虚增。 */
+    var sib=0, cr=C.getBoundingClientRect();
+    if(PB){ for(var ci=0; ci<PB.children.length; ci++){
+      var ch=PB.children[ci];
+      if(ch===C) continue;
+      var rr=ch.getBoundingClientRect();
+      if(!(rr.top < cr.bottom && rr.bottom > cr.top)) continue;
+      if(!(rr.right <= cr.left + 1 || rr.left >= cr.right - 1)) continue;
+      var cpos=cs(ch).position;
+      if(!(cpos==='static'||cpos==='relative'||cpos==='sticky')) continue;
+      sib += ch.offsetWidth||0;
+    } }
+    out.sibNavW = num(sib);
+    /* N-a：content 及其祖先上写死的 max-width（px）。只定位不单独判红。 */
+    var mw=[];
+    for(var a1=C; a1 && a1!==document.documentElement; a1=a1.parentElement){
+      var mv=cs(a1).maxWidth || "none";
+      if(/^\d+(\.\d+)?px$/.test(mv) && parseFloat(mv)>0) mw.push({
+        tag:(a1.tagName||"").toLowerCase(),
+        cls:(typeof a1.className==="string"?a1.className:"").trim().split(/\s+/).filter(Boolean)[0]||"",
+        w:num(parseFloat(mv))});
+    }
+    out.maxWidthHits=mw;
+    /* N-c：内容外层套了**显式 px 宽**的容器。只看 inline style ——
+       computed width 对一切块级元素都是 px，分不出「写死」与「撑满」。 */
+    var fx=[];
+    for(var a2=C.parentElement; a2 && a2!==document.documentElement && a2.id!=='__prodStage'; a2=a2.parentElement){
+      var iw=(a2.style && a2.style.width) ? String(a2.style.width) : "";
+      if(/^\d+(\.\d+)?px$/.test(iw)) fx.push({tag:(a2.tagName||"").toLowerCase(),
+        cls:(typeof a2.className==="string"?a2.className:"").trim().split(/\s+/).filter(Boolean)[0]||"",
+        w:num(parseFloat(iw))});
+    }
+    out.fixedWrapHits=fx;
+    /* N-d：zoom / transform:scale。**这条必须能独立判红**：zoom .9 下内容盒实际布局宽 1316 而
+       clientWidth 报 1184，闭合差被磨平成 0 —— 一条闭合式挡不住「改测量本身」的输入。 */
+    var zh=null;
+    for(var a3=C; a3 && a3!==document.documentElement; a3=a3.parentElement){
+      var st=cs(a3), zz=parseFloat(st.zoom);
+      if(!isNaN(zz) && Math.abs(zz-1)>0.001){
+        zh={tag:(a3.tagName||"").toLowerCase(),
+          cls:(typeof a3.className==="string"?a3.className:"").trim().split(/\s+/).filter(Boolean)[0]||"",
+          kind:"zoom", v:num(zz)}; break;
+      }
+      var tf=st.transform || "none";
+      if(tf && tf!=="none"){
+        var mm=tf.match(/^matrix\(([-\d.]+),\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+),/);
+        if(mm){
+          var sx=parseFloat(mm[1]), sy=parseFloat(mm[4]);
+          if(Math.abs(sx-1)>0.001 || Math.abs(sy-1)>0.001){
+            zh={tag:(a3.tagName||"").toLowerCase(),
+              cls:(typeof a3.className==="string"?a3.className:"").trim().split(/\s+/).filter(Boolean)[0]||"",
+              kind:"scale", v:num(sx)}; break;
+          }
+        }
+      }
+    }
+    out.scaleHit=zh;
+    return out;
+  }
+  /* ---- I-09：W-01 needW / T-01 短字段分母 需要的三个量 ---- */
+  /* 全角字宽（1 = 一个全角字）。半角按 0.557 计 —— 与视觉标准 §W-01 的估算算式同一系数
+     （14px 下 7.8px ≈ 0.557em）。用它划「≤6 全角字」的分母边界，不用字符数：
+     中英混排的「待检验 12」按字符数是 7，按字宽只有 5.3。 */
+  function textUnits(s){
+    var u=0;
+    for(var i=0;i<(s||'').length;i++){
+      var c=s.charCodeAt(i);
+      u += (c>=0x2E80) ? 1 : ((c===0x20) ? 0.28 : 0.557);
+    }
+    return Math.round(u*100)/100;
+  }
+  /* 承载文本的最内层元素：自身有**直接非空文本节点**的元素。排除 root 自身 ——
+     纯文本单元格的 root 就是 td，把 td 当「最内层」会量到整格宽而不是文字宽。 */
+  function leafEls(root){
+    var out=[], all=root.querySelectorAll('*');
+    for(var i=0;i<all.length;i++){
+      var e=all[i];
+      for(var j=e.childNodes.length-1;j>=0;j--){
+        var nd=e.childNodes[j];
+        if(nd.nodeType===3 && (nd.nodeValue||'').trim()){ out.push(e); break; }
+      }
+    }
+    return out;
+  }
+  /* 元素自然外宽：同字体、nowrap 的隐藏副本。用副本而不是 scrollWidth ——
+     nowrap 元素被裁时 scrollWidth 是「溢出内容宽」，与「本来要占多宽」不是同一个数。 */
+  function naturalW(el){
+    var st=cs(el);
+    var p=document.createElement('span');
+    p.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;';
+    p.style.fontFamily=st.fontFamily; p.style.fontSize=st.fontSize; p.style.fontWeight=st.fontWeight;
+    p.style.fontStyle=st.fontStyle; p.style.letterSpacing=st.letterSpacing;
+    p.textContent=(el.textContent||'').replace(/\s+/g,' ').trim();
+    document.body.appendChild(p);
+    var w=p.getBoundingClientRect().width;
+    document.body.removeChild(p);
+    return num(w);
+  }
+  function outerW(el){
+    var c=el.cloneNode(true);
+    c.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden;'+
+                    'white-space:nowrap;display:inline-block';
+    document.body.appendChild(c);
+    var w=c.getBoundingClientRect().width;
+    document.body.removeChild(c);
+    return num(w);
+  }
   function isGray(bg){
     var m=/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(bg||'');
     if(!m) return true;
@@ -215,6 +532,11 @@ PROBE = r"""
     out.paneDefaultW = pane ? num(pane.clientWidth) : null;
     out.prdCollapsedAtStart = !!(document.querySelector('#panePrd') &&
         document.querySelector('#panePrd').classList.contains('collapsed'));
+
+    // ---- 评审态内容宽（折叠前量一次，只记录、不判）：PRD 面板是**工具外壳成本**，
+    // 把它算进闭合式等于让产品为一个它控制不了的侧栏买单（I-07 已付过一次代价）。
+    var s0=cs(C);
+    out.reviewContentBoxW = num(C.clientWidth - parseFloat(s0.paddingLeft||0) - parseFloat(s0.paddingRight||0));
 
     // ---- 折叠 PRD，进入验收态。只切一次：已经折叠就不再点（F6 之后默认就是折叠的）
     var prd=document.querySelector('#panePrd');
@@ -355,6 +677,103 @@ PROBE = r"""
           cellSWcCW: (cell&&cell.scrollWidth>cell.clientWidth+1)
         });
       }
+      /* ---- I-09 新判据（T-01/T-02/T-03/T-04 + W-01/W-02）的原始量 ----
+         全部**按列聚合**再交给 Python 判：一个 20 行 × 12 列的表逐格回传会让
+         `#__shapeout` 的 data-json 膨胀十倍，而判据只关心「这一列的极值 / 计数」。 */
+      var audit=(function(){
+        var outCols=[];
+        for(var ai=0; ai<ths.length; ai++){
+          var ath=ths[ai], sth=cs(ath);
+          /* 量**文字宽**（W-01 的 needHdr、T-04 的分母）用最内层元素：那是字体度量，
+             与上面的**裁切锚点**是两件事，不要混成一个。 */
+          var hLeaf=leafEls(ath), hEl=hLeaf.length?hLeaf[0]:ath;
+          var hW=naturalW(hEl)||0;
+          var hPad=parseFloat(sth.paddingLeft||0)+parseFloat(sth.paddingRight||0);
+          outCols.push({
+            i:ai, title:txt(ath).slice(0,24),
+            hdrUnits: textUnits(txt(ath)),
+            hdrTextW: num(hW), hdrPadW: num(hPad),
+            /* T-04：被裁 = **裁切盒**的 scrollWidth > clientWidth + 1（锚点见 clippingBox()）。
+               三个读数都打出来 —— 只打布尔值，被裁 4px 和 被裁 400px 长得一样。
+               hdrClip 为 null = 这一列没有裁切盒（本条不适用），它与 false 必须分开：
+               false 是「量过了、没裁」，null 是「没有可量的盒子」。 */
+            hdrClip: (function(){ var b=clippingBox(ath);
+                      return b ? (b.scrollWidth > b.clientWidth + 1) : null; })(),
+            hdrAnchor: (function(){ var b=clippingBox(ath);
+                        return b ? (b===ath?'th':b.tagName.toLowerCase()) : 'none'; })(),
+            hdrScrollW: (function(){ var b=clippingBox(ath); return b?num(b.scrollWidth):null; })(),
+            hdrClientW: (function(){ var b=clippingBox(ath); return b?num(b.clientWidth):null; })(),
+            thW: num(ath.offsetWidth),
+            sortable: !!ath.querySelector('.ant-table-column-sorter'),
+            chip:false, btn:false,
+            needVal:0, needHdr: num(hW+hPad),
+            maxLines:0, maxTdH:0, lineH:null, padY:null,
+            cells:0, shortCells:0, shortWrapped:0, multiCells:0, multiLong:0, overCells:0,
+            /* W-01 的分母按**可断性**判，判的是「这列的值是不是一个不可断的 token」——
+               所以要把最长那条值原文带回 Python。它是**值文本**，与列宽、渲染行数无关
+               （拿渲染行数当依据就是循环定义：列越窄越折行，越会被判成长文本而逃出分母）。 */
+            longest:'',
+            samples:[]
+          });
+        }
+        for(var ri2=0; ri2<rows.length; ri2++){
+          var tds=rows[ri2].querySelectorAll('td');
+          if(tds.length<2) continue;
+          for(var k2=0;k2<tds.length;k2++){
+            var td2=tds[k2], col=outCols[k2];
+            if(!col) continue;
+            var s2=cs(td2);
+            var padX=parseFloat(s2.paddingLeft||0)+parseFloat(s2.paddingRight||0);
+            if(col.lineH==null){
+              col.lineH=num(parseFloat(s2.lineHeight)||(parseFloat(s2.fontSize)||14)*1.5);
+              col.padY=num(parseFloat(s2.paddingTop||0)+parseFloat(s2.paddingBottom||0));
+            }
+            var hasTag=!!td2.querySelector('.ant-tag'), hasBtn=!!td2.querySelector('.ant-btn,button');
+            if(hasTag) col.chip=true;
+            if(hasBtn) col.btn=true;
+            var t2=txt(td2);
+            if(!t2) continue;
+            if(t2.length > (col.longest||'').length) col.longest = t2.slice(0, 120);
+            var leaves=leafEls(td2), ln=0;
+            if(leaves.length){ for(var q2=0;q2<leaves.length;q2++) ln=Math.max(ln,lineCount(leaves[q2])); }
+            else ln=lineCount(td2);
+            /* W-01 的分母：这一列的值本来需要多宽。多叶（一行多个按钮）取**和 + 间隙**，
+               不取 max —— 「详情 开始」并排占的是两段宽的和，取 max 会低估（52 vs 80）。 */
+            var valNeed=0;
+            if(leaves.length){
+              var sum2=0, mx2=0;
+              for(var q3=0;q3<leaves.length;q3++){ var ow2=outerW(leaves[q3])||0; sum2+=ow2; if(ow2>mx2) mx2=ow2; }
+              var gap2=parseFloat(s2.columnGap||0); if(!isFinite(gap2)) gap2=0;
+              valNeed=(leaves.length>1)?(sum2+gap2*(leaves.length-1)):mx2;
+            } else {
+              valNeed=naturalW(td2)||0;
+            }
+            valNeed+=padX;
+            if(valNeed>col.needVal) col.needVal=num(valNeed);
+            col.cells++;
+            if(ln>col.maxLines) col.maxLines=ln;
+            var th2=td2.getBoundingClientRect().height;
+            if(th2>col.maxTdH) col.maxTdH=num(th2);
+            if(ln>1){
+              col.multiCells++;
+              /* 「长文本」多行格：短字段折行是 T-01 的事，别让它同时算进 T-02 的
+                 「长文本没出口」—— 否则给 Tag 列加个 max-width，两条判据一起红，
+                 数不清是「短字段折了」还是「长文本没出口」。 */
+              if(textUnits(t2)>6 && !hasTag && !hasBtn) col.multiLong++;
+              if(col.samples.length<3) col.samples.push({r:ri2,text:t2.slice(0,14),lines:ln,h:num(th2)});
+            }
+            /* T-03：超限 = 行数 >2，或格高 > 2 行 + 上下 padding + 1px 边框 */
+            var lim=(col.lineH||21)*2+(col.padY||0)*2+1;
+            if(ln>2 || th2>lim+0.5) col.overCells++;
+            /* T-01 的分母：含 Tag/Button 的格，或整格文本 ≤6 全角字 */
+            if(hasTag||hasBtn||textUnits(t2)<=6){
+              col.shortCells++;
+              if(ln>1) col.shortWrapped++;
+            }
+          }
+        }
+        return outCols;
+      })();
       /* P10：sticky 表头。先看声明，再看真滚 200px 后首个 th 是否还在 wrap 顶部 */
       var th0=t.querySelector('thead th');
       var st=th0?cs(th0):null;
@@ -384,6 +803,7 @@ PROBE = r"""
         visibleRows: (firstRowH&&firstRowH>0)?Math.floor(visH/firstRowH):0,
         fullRows: fullRows,
         cols:colsInfo,
+        audit:audit,
         stickyPos:stickyPos, stickyTop:stickyTop, stickyScrollOK:scrollTest,
         canScroll: wrap.scrollHeight>wrap.clientHeight+4,
         footBottom: foot?num(foot.getBoundingClientRect().bottom):null
@@ -529,11 +949,15 @@ PROBE = r"""
         —— 产品态没有那条评审工具栏。所以产品态只钳到舞台高：表格最多占满 900，
         超出部分由舞台裁掉。P2a 量的本来就是「舞台里能露出几条完整行」，
         不是「表格自己声明了多高」。 */
-  function productStage(){
+  function productStage(stageW){
+    var W = stageW || 1440;
     var canvas=document.querySelector('#protoCanvas');
     if(!canvas) return {err:'NO_CANVAS'};
+    /* 上一次调用留下的舞台要先拆：V-01 会按 1440/1600 各建一次，留着会叠两层 fixed 浮层
+       （第二层盖住第一层，rect 全是相对各自舞台算的 —— 读数看不出问题、人会以为只有一层）。 */
+    var prev=document.getElementById('__prodStage'); if(prev) prev.remove();
     var ov=document.createElement('div'); ov.id='__prodStage';
-    ov.style.cssText='position:fixed;left:0;top:0;width:1440px;height:900px;z-index:99999;'+
+    ov.style.cssText='position:fixed;left:0;top:0;width:'+W+'px;height:900px;z-index:99999;'+
                      'background:#f5f5f5;display:flex;overflow:hidden';
     var body=document.createElement('div');
     body.style.cssText='flex:1 1 auto;min-width:0;overflow:auto;background:#f5f5f5';
@@ -549,14 +973,17 @@ PROBE = r"""
     });
     body.appendChild(clone);
 
-    var out={w:1440,h:900};
+    var out={w:W,h:900};
     var C=clone.querySelector('.ant-content');
     var s=C?getComputedStyle(C):null;
     out.contentBoxW = C&&s? num(C.clientWidth - parseFloat(s.paddingLeft||0) - parseFloat(s.paddingRight||0)) : null;
     out.contentClientW = C? num(C.clientWidth) : null;
+    /* V-01 只在**产品态**量：评审外壳的 canvas 只有 1122 宽，进去永远闭合不了 —— 那不是产物的问题。
+       舞台宽 = 视口宽（1440/1600 各建一次），这样「两档视口」与「产品页本身的宽」是同一个数。 */
+    out.v01 = C ? v01Geo(C) : null;
     var t=clone.querySelector('.ant-table');
     var wrap=t? (t.closest('.ant-table-wrap')||t.parentElement) : null;
-    if(!wrap){ out.err='NO_TABLE'; out.stage=ov; return out; }
+    if(!wrap){ out.err='NO_TABLE'; out.v01 = C ? v01Geo(C) : null; return out; }
     var wr=wrap.getBoundingClientRect(), or_=ov.getBoundingClientRect();
     var visH=Math.max(0, Math.min(wr.bottom, or_.bottom) - Math.max(wr.top, or_.top));
     var rows=t.querySelectorAll('tbody tr');
@@ -571,6 +998,8 @@ PROBE = r"""
     out.wrapBottom=num(wr.bottom);
     out.footBottom=foot?num(foot.getBoundingClientRect().bottom):null;
     out.err=null;
+    /* 舞台**留在 DOM 里**：measure_reject.py 的 rejectExtras() 要复用同一个舞台改宽量两档
+       （它按 id 取）。下一次 productStage() 调用会先拆掉旧的（见函数开头）。 */
     return out;
   }
 
@@ -613,7 +1042,11 @@ PROBE = r"""
     try{ d=measure(); }catch(ex){ e='MEASURE:'+ex.message; }
     if(d){ d.tries=tries; d.settled=true; }
     else { d={settled:false, tries:tries, err:e}; }
-    try{ d.product=productStage(); }catch(ex2){ d.product={err:'PRODUCT:'+ex2.message}; }
+    /* P2a 的产品态夹具固定 1440×900（判据就是「1440 无外壳」，换成别的宽等于改判据）。
+       V-01 另建一次 = 当前视口宽：闭合式要问的正是「页面是否撑满这一档视口」，
+       拿 1440 的舞台去回答 1600 的问题，差 160 会被当成产物缺陷。 */
+    try{ d.product=productStage(1440); }catch(ex2){ d.product={err:'PRODUCT:'+ex2.message}; }
+    try{ d.v01prod=productStage(window.innerWidth); }catch(ex3){ d.v01prod={err:'V01:'+ex3.message}; }
     emit(d);
   });
 })();
@@ -695,17 +1128,86 @@ def is_work_list_page(page):
     return False
 
 
-def pick_page(data, want=None):
+def md_tables(page):
+    """MasterDetail 节点下挂的 Table（主子表式列表页的主表 / 子表），按树序。
+
+    只给「挑页」与「量主表」用，**不参与任何判据**：`content_direct_tables()` 仍是
+    P2/P11/P13 的「列表页」定义（改动它等于改口径，要单独裁定）。
+    """
+    out = []
+    for n in iter_nodes(page.get("componentTree") or {}):
+        if n.get("type") != "MasterDetail":
+            continue
+        out.extend(c for c in (n.get("children") or []) if c.get("type") == "Table")
+    return out
+
+
+def is_list_page(page):
+    """**挑页**用的列表页口径 = 原 `is_work_list_page` ∪「主子表式列表页」。
+
+    为什么加后者：CAPA 的 `page-capa-list`（用户实际看的那页）主表就在 `MasterDetail` 里，
+    旧口径把它整个排除，门只好去判别的页 —— 判哪页决定结论，而 PASS 总数可能碰巧相同。
+    门槛（分页 或 ≥5 行）沿用 `is_work_list_page`，避免把 2–3 行明细的详情页也算进来。
+    """
+    if is_work_list_page(page):
+        return True
+    for t in md_tables(page):
+        p = t.get("props") or {}
+        if p.get("pagination") or len(p.get("data") or []) >= 5:
+            return True
+    return False
+
+
+def page_candidates(data):
+    """所有列表页候选，按 `pages[]` 顺序：[(page, kind)]，kind ∈ content-table / master-detail。"""
+    out = []
+    for p in (data.get("pages") or []):
+        if is_work_list_page(p):
+            out.append((p, "content-table"))
+        elif is_list_page(p):
+            out.append((p, "master-detail"))
+    return out
+
+
+def pick_page_ex(data, want=None):
+    """挑要判的页，并把「为什么是这页」一起返回：(page, reason, 候选 id 列表)。
+
+    规则（新的在前，逐条都有理由）：
+      ① `--page` 显式指定 —— 人点了名就判点名的那页，找不到直接报错不兜底；
+      ② `meta.currentPageId`，**当且仅当**它是列表页候选。这是容器开页停的地方 =
+         用户打开产物第一眼看到的那页；CAPA 的差一页就是这么来的；
+      ③ 首个「Content 直属 Table」的作业型列表页（旧行为，example-05/06 走的还是这条）；
+      ④ 首个「主子表式列表页」（③ 为空时才用）。
+    返回 reason 是为了把它打进报告主行：**「判了哪页」必须是结论的一部分**，
+    不能只在某条判据的 note 里出现。
+    """
     pages = data.get("pages") or []
+    cands = page_candidates(data)
+    cand_ids = [p.get("id") for p, _ in cands]
+
     if want:
         for p in pages:
             if p.get("id") == want:
-                return p
-        raise EnvError("找不到页面 %s（有：%s）" % (want, ", ".join(p.get("id", "") for p in pages)))
-    for p in pages:
-        if is_work_list_page(p):
-            return p
-    return None
+                return p, "显式 --page", cand_ids
+        raise EnvError("找不到页面 %s（有：%s）"
+                       % (want, ", ".join(p.get("id", "") for p in pages)))
+
+    cur = (data.get("meta") or {}).get("currentPageId")
+    if cur and cur in cand_ids:
+        for p in cands:
+            if p[0].get("id") == cur:
+                return p[0], "meta.currentPageId（容器开页停在这页）", cand_ids
+
+    for p, kind in cands:
+        if kind == "content-table":
+            return p, "首个作业型列表页（Content 直属 Table）", cand_ids
+    if cands:
+        return cands[0][0], "首个主子表式列表页（MasterDetail 内挂 Table）", cand_ids
+    return None, "无列表页候选", cand_ids
+
+
+def pick_page(data, want=None):
+    return pick_page_ex(data, want)[0]
 
 
 def build_case(container, data, page_id, out_html):
@@ -785,6 +1287,287 @@ def accept_tier(content_w):
     return None
 
 
+def align_audit(cols, au):
+    """把 JSON 的列与 DOM 量到的列对齐，返回 [(col, audit), …]。
+
+    容器在有 `rowSelection` / `radio` 时会在表头和数据行**最前面各插一列**，
+    此时 DOM 列数比 JSON 多。直接 zip 会让整张表错位一列 —— 每一列都拿前一列的读数判，
+    而且读数看起来完全正常（数字都在合理范围里）。所以按差值整体右移，不做逐列猜。
+    """
+    if not au or not cols:
+        return []
+    lead = max(0, len(au) - len(cols))
+    return [(cols[i], au[i + lead]) for i in range(min(len(cols), len(au) - lead))]
+
+
+def w01_need(col, a):
+    """W-01 的 needW：`ceil(实测文本宽) + 24 + (Tag 16) + (可排序 20)`，再守 ≥48。
+
+    量文本宽用的是**承载文本的最内层元素自身字号** + 自身 padding（见探针 `outerW()`）：
+    Tag 列是 12px、正文是 14px。这条不是精度问题，是**可判定性**问题 ——
+    `example-06` 的「状态」列按 Tag@12px 得 78（渲染 80，绿），按 td@14px 得 84（红），
+    差的 4px 完全来自「实现者选了哪个字号」。不写死这条，同一份产物会随机红绿。
+    """
+    if col.get("ellipsis"):
+        # ellipsis 列**只**量表头：值可以截断，表头不行。
+        # 这里不能写成 max(值, 表头) —— 那等于要求「截断列也必须放得下完整值」，
+        # 把「配了 ellipsis」这件事本身判红（example-06 的物资名称 125 < 值宽 192）。
+        need = a.get("needHdr") or 0
+    else:
+        need = max(a.get("needVal") or 0, a.get("needHdr") or 0)
+    if a.get("sortable"):
+        need += 20
+    return int(max(48, math.ceil(need - 1e-6)))
+
+
+def needw_digest(pairs, n=6):
+    return "，".join("%s 声明 %s / needW %s"
+                     % (c.get("title"), fmt(c.get("declW")), fmt(w01_need(c, a)))
+                     for c, a in pairs[:n]) or "—"
+
+
+# ------------------------------------------------------------------ V-01
+V01_TOL = 8          # 两次 clientWidth 取整 + 边框 + 亚像素累计；不是调出来的容差（§V-01）
+V01_DELTA = 160      # 1600 − 1440，两档视口差本身，N-e 用它，不是魔数
+
+
+def n_b_width_hits(page):
+    """N-b 的定位量：Content/Layout 等布局节点的 props/style 里写死的 px 宽。
+
+    这条藏在 JSON 里，DOM 上只能看到一个「刚好 1080 的盒子」—— 所以必须回到 JSON 找。
+    只定位不单独判红：红的结论由 V-01 闭合式给，N-b 只是 cause 标签（另立判据会把同一个数算两次）。
+    """
+    hits = []
+    for n in iter_nodes(page.get("componentTree") or {}):
+        # **只认 Content / Layout**：Sider 的 `style.width=208` 是加数②（页内导航），
+        # 把它算成「写死的容器」会让每一份有导航的产物都挂 cause=N-b。
+        if n.get("type") not in ("Content", "Layout"):
+            continue
+        p = n.get("props") or {}
+        for holder in (p.get("style") or {}, p):
+            w = holder.get("width")
+            if isinstance(w, (int, float)):
+                hits.append("%s.%s=%s" % (n.get("type"), "style.width", w))
+            elif isinstance(w, str) and re.match(r"^\d+(\.\d+)?px$", w.strip()):
+                hits.append("%s.style.width=%s" % (n.get("type"), w.strip()))
+            if hits:
+                break
+    return hits
+
+
+def v01_row(dom, page, vw):
+    """V-01：**归因差为主判据**，父节点铺满为副判据，两档各判。
+
+    `|减法导航 − 真实导航| ≤ 8`            ← 主判据（`attrib`），结论按这条
+    `|父.offsetWidth − b − 视口| ≤ 8`     ← 副判据「父节点铺满」（原闭合式改名）
+
+    **为什么主判据不是闭合式**：`①+②+③` 展开就是 `父.offsetWidth − b`（`b`=content 左右 border），
+    父节点没被换掉时**闭合差恒为 0** —— 它是恒等式，判的是「父节点铺满没铺满」，不是
+    「内容宽适配没适配」。归因差判的才是后者：掉下去的宽度**是不是被导航合法占走了**，
+    没占走的那部分就是缺陷（N-a / N-b 全靠这条红）。两条式子都打，结论只看归因差。
+
+    **三态，不是两态**：`INCOMPLETE` 只在「量具自己不可信」时出现，原因**固定三个 TOKEN**
+    （守卫按 TOKEN 相等断言，不按条数 —— 「条数相同、集合不同」这坑本仓库踩过）：
+      · `CONTENT_ZERO`      —— 内容盒不存在 / 宽为 0（`.ant-content` 被移除或未渲染）；
+      · `PARENT_INVISIBLE`  —— 父盒 `clientWidth=0`（display:none / 未挂载 / 被折叠）；
+      · `NAV_OUT_OF_RANGE`  —— 导航宽为负（内容比父盒还宽 = 父节点选错或取错元素）。
+    它既不是绿也不是红 —— 记成 PASS 是静默绿，记成 FAIL 是把量具 bug 算到产物头上。
+    `MISMATCH` 标签本轮**取消**：归因差不成立本身就是红，不需要再挂一个「两数不一致但结论照旧」
+    的旁注（那是恒等式判据留下的补丁）。
+    N-a~N-e 是**定位标签**，红由本条给（`FAIL(cause=N-d)` 之类），不另立判据。
+    **`cause` 纪律**：每个值要么有输入能产出它，要么写明「不可达」及原因。N-c（外层换壳）
+    在产物空间内不可达，判据②仍能红 —— 由 `tests/fixtures/fixture-nc-manual-shell.html`
+    那份手写壳证明（归因差 0 / 铺满差 340），见上方模块头 p)④。
+
+    输出必须带父节点身份：只打一个导航宽时，「父节点选对」与「选错」在文本上分不出来，
+    而人看到 INCOMPLETE 通常当成工具坏了，不会想到是量错了 —— 这件事只能靠这行字解决。
+    """
+    title = "内容宽与视口闭合（产品态）"
+    thr = "归因差|减法−真实|≤%d；父节点铺满|父宽−b−视口|≤%d" % (V01_TOL, V01_TOL)
+
+    def tag_of(t, c):
+        return ("%s.%s" % (t, c)) if c else (t or "—")
+
+    def inc(token, why, note=""):
+        # 三态里的第三种：量具不可信。原因用固定 TOKEN，守卫可以按集合比。
+        return {"id": "V-01", "title": title, "value": "—", "threshold": thr,
+                "status": "INCOMPLETE",
+                "note": "INCOMPLETE(口径错) 原因=%s —— %s%s"
+                        % (token, why, ("；" + note) if note else "")}
+
+    # **只在产品态舞台里量**：评审态画布只有 1122 宽（外壳 panner + PRD 面板），
+    # 拿它算闭合式等于要求产品为一个它控制不了的侧栏买单 —— 那是评审工具的成本，不是产物缺陷。
+    stage = dom.get("v01prod") or {}
+    g = stage.get("v01") or {}
+    # **`stage.err == 'NO_TABLE'` 不算量具故障**：V-01 要的四个量（内容盒 / 父盒 / 真实导航 /
+    # 视口）与有没有表格无关。以前这里把 NO_TABLE 也拦下并记成 `CONTENT_ZERO` —— 那个 TOKEN
+    # 说的是「内容盒不存在」，而实际是「没有表」，报错文案与原因对不上，守卫按 TOKEN 比就会误判。
+    if not g or g.get("err"):
+        return inc("CONTENT_ZERO", "产品态夹具里没有可量的内容盒（%s）"
+                                   % (g.get("err") or "无 v01 读数"))
+
+    cw, cli, off = g.get("contentBoxW"), g.get("contentClientW"), g.get("contentOffsetW")
+    if cw is None or off in (None, 0) or abs(cw) < 1:
+        # 内容和父盒同时「量不到」时要分清是哪一种：父盒也 0 → 父盒不可见（PARENT_INVISIBLE），
+        # 只有内容是 0 → 内容盒不存在（CONTENT_ZERO）。两个 TOKEN 混成一个，守卫就没法按集合比。
+        if (g.get("parentClientW") or 0) == 0:
+            return inc("PARENT_INVISIBLE", "内容与父盒的 clientWidth 都为 0（%s）"
+                       % tag_of("html" if g.get("parentIsDoc") else g.get("parentTag"),
+                                "" if g.get("parentIsDoc") else g.get("parentClass")))
+        return inc("CONTENT_ZERO", "内容盒宽为 0（clientWidth=%s / offsetWidth=%s）"
+                                   % (fmt(cli), fmt(off)))
+    pad = g.get("contentPadW")                      # ③ 内容左右 padding
+    ident = g.get("identity")                       # ① + ③
+    vw = stage.get("w") or vw                       # 闭合式里的「视口宽」= 舞台宽（就是建舞台时的视口宽）
+    p_tag = "html" if g.get("parentIsDoc") else g.get("parentTag")
+    p_cls = "" if g.get("parentIsDoc") else (g.get("parentClass") or "")
+    p_name = tag_of(p_tag, p_cls) + ("(文档元素)" if g.get("parentIsDoc") else "")
+    p_w = g.get("parentW")
+    p_cli = g.get("parentClientW")
+    nav = (p_w - off) if (p_w is not None) else None    # 减法导航（含 padding 口径）
+    sib = g.get("sibNavW")                              # 真实导航（纵向重叠的同级 Sider/Menu）
+    b = g.get("contentBorderW") or 0                    # content 左右 border
+    vw_real = g.get("viewportW") or stage.get("w") or vw  # 视口 = window.innerWidth（含滚动条）
+    # 主判据：减法算出的「导航宽」里，有多少没被真实导航占走。
+    attrib = abs(nav - sib) if (nav is not None and sib is not None) else None
+    # 副判据：父盒（去掉 content 的 border）是不是等于视口。负 = 父节点被换小了。
+    # 父节点是文档元素时不判：`parentW` 取的是 clientWidth（不含滚动条），与 innerWidth 口径不同，
+    # 差 15px 会变成静默红 —— 宁可这条不判，也不许改视口口径去迁就它。
+    fill = None if g.get("parentIsDoc") else (
+        (p_w - b - vw_real) if p_w is not None else None)
+    scale = g.get("scaleHit")
+    review = dom.get("reviewContentBoxW")
+
+    # 三数和只作**展示**：它 ≡ 父宽 − b，与视口的关系就是「铺满差取负」，同一个数不判两次。
+    tri = (cw + nav + pad) if (nav is not None and cw is not None and pad is not None) else None
+    head = ("V-01 %s 父节点=%s 宽%s 内容%s 导航%s[减法 %s−%s / 真实 %s 归因差 %s] "
+            "padding%s 归因差%s 铺满差%s ｜ 三数和%s(恒等，只作展示)")
+    val = head % (fmt(vw_real), p_name, fmt(p_w), fmt(cw), fmt(nav),
+                  fmt(p_w), fmt(cli), fmt(sib), fmt(attrib), fmt(pad),
+                  fmt(attrib), fmt(abs(fill)) if fill is not None else "不判", fmt(tri))
+
+    # ---- 口径自证：① + ③ 对 **content.offsetWidth**，差 ≤3px。
+    # **不能拿 clientWidth 做这个断言**：① 减掉的 padding 正是 ③ 加回来的，
+    # `①+③ ≡ clientWidth` 是定义恒等式、永远为真 —— 那是一条恒绿判据（本轮已撤掉）。
+    # offsetWidth 含 border、clientWidth 不含 border 也不含滚动条，±3 是这几项差异的上界；
+    # 超了打 `BORDER_OR_SCROLLBAR`（标签，不是新状态），**不许把式子改成
+    # `offsetWidth + border + scrollbar` 去凑读数** —— 那是改判据迁就读数。
+    idn = "口径自证 内容%s+padding%s=%s vs offsetWidth%s 差%s" % (
+        fmt(cw), fmt(pad), fmt(ident), fmt(off),
+        ("%+d" % (ident - off)) if (ident is not None and off is not None) else "—")
+    if ident is None or off is None or abs(ident - off) > 3:
+        idn += " ← BORDER_OR_SCROLLBAR（±3 超出：content 有 border/滚动条，或加数①口径不对）"
+    note = idn
+    if g.get("parentMismatch"):
+        # 交叉校验标签：**不是判据、也不是 INCOMPLETE**。父节点主口径是 parentElement，
+        # offsetParent 只是旁证（静态父盒会被它跳过），两者不一致时提示一句，不影响结论。
+        note += "；PARENT_MISMATCH(父节点=%s / offsetParent=%s)" % (
+            p_name, tag_of(g.get("offsetParentTag"), g.get("offsetParentClass")))
+    if review is not None:
+        note += "；评审态内容宽 %s（不代入本条）" % fmt(review)
+
+    # ---- 量具不可信 → INCOMPLETE（原因固定 TOKEN），不许落 PASS/FAIL
+    if p_cli in (None, 0) or p_w in (None, 0):
+        return inc("PARENT_INVISIBLE", "%s.clientWidth=%s —— 父盒不可见（display:none / 未挂载 / 被折叠）"
+                   % (p_name, fmt(p_cli)), note)
+    # 越界只剩「负」这一侧可判：上界 `父宽 − content.offsetWidth` **就是 nav 本身**（恒等），
+    # 写 `nav > (p_w - off)` 是一句恒假的断言。负 = 内容比父盒还宽 = 父节点选错或取错元素。
+    if nav is None or nav < -0.5:
+        return inc("NAV_OUT_OF_RANGE", "导航宽 %s < 0 —— 内容比父盒还宽" % fmt(nav), note)
+    # ---- N-d 独立判红：zoom/scale 改的是**测量本身**，闭合式看不见它
+    if scale:
+        return {"id": "V-01", "title": title, "value": val, "threshold": thr,
+                "status": "FAIL",
+                "note": "cause=N-d 内容区被缩放：%s 的 %s=%s —— 闭合差被磨平，归因差只能说出"
+                        "「有宽度不知去向」，说不出「测量被改掉了」，所以本条要自己红；%s"
+                        % (tag_of(scale.get("tag"), scale.get("cls")), scale.get("kind"),
+                           fmt(scale.get("v")), note)}
+
+    # ---- 主判据：归因差。掉下去的宽度没被真实导航占走 → 红（N-a / N-b 靠这条）
+    if attrib is not None and attrib > V01_TOL:
+        cause, why = "", ""
+        if g.get("maxWidthHits"):
+            h = g["maxWidthHits"][0]
+            cause, why = "N-a", "max-width=%spx@%s" % (h.get("w"), tag_of(h.get("tag"), h.get("cls")))
+        else:
+            nb = n_b_width_hits(page)
+            if nb:
+                cause, why = "N-b", nb[0]
+            elif g.get("fixedWrapHits"):
+                h = g["fixedWrapHits"][0]
+                cause, why = "N-c", "外层 style.width=%spx@%s" % (
+                    h.get("w"), tag_of(h.get("tag"), h.get("cls")))
+        lead = ("cause=%s（%s）" % (cause, why)) if cause else \
+               "未定位到 N-a~N-d 的形态（内容区写死了一个非整数的窄值）"
+        return {"id": "V-01", "title": title, "value": val, "threshold": thr,
+                "status": "FAIL",
+                "note": "%s；归因差 %s>%d：减法导航 %s 里只有 %s 真是导航占走的，另 %s 是内容被"
+                        "压窄后留下的空档（空档被减法式当成了导航，所以闭合差仍是 0 —— "
+                        "**闭合差 0 不能据此判绿**）；%s"
+                        % (lead, fmt(attrib), V01_TOL, fmt(nav), fmt(sib), fmt(attrib), note)}
+
+    # ---- 副判据：父节点铺满。只有父节点被换小/换宽才会红
+    if fill is not None and abs(fill) > V01_TOL:
+        # cause 先认 **N-b**：把宽写进 JSON（`Layout.props.style.width`）时父节点自己就是那个
+        # 变窄的盒子，`fixedWrapHits` 也会命中它 —— 但按裁定这是 N-b（JSON 里写死宽），不是 N-c。
+        # 顺序反了就会把「产物写了宽」误报成「容器套了壳」（N-c 在产物空间内不可达，见 p)④）。
+        cause, why = "", ""
+        for nm in n_b_width_hits(page):
+            m = re.search(r"=(\d+(?:\.\d+)?)px?$", nm)
+            if m and abs(float(m.group(1)) - p_w) <= 1:
+                cause, why = "N-b", nm
+                break
+        if not cause and g.get("fixedWrapHits"):
+            h = g["fixedWrapHits"][0]
+            cause, why = "N-c", "外层 style.width=%spx@%s" % (
+                h.get("w"), tag_of(h.get("tag"), h.get("cls")))
+        lead = ("cause=%s（%s）" % (cause, why)) if cause else \
+               "未定位到外层换壳（N-c 在产物空间内不可达，见 p)④；判据②能红由手写壳样本证明）"
+        return {"id": "V-01", "title": title, "value": val, "threshold": thr,
+                "status": "FAIL",
+                "note": "%s；父节点铺满失败：父宽%s − border%s = %s，视口%s，差%+d（%s）；%s"
+                        % (lead, fmt(p_w), fmt(b), fmt(p_w - b), fmt(vw_real), fill,
+                           "负 = 父节点被换小了，不是内容变窄" if fill < 0 else "正 = 父节点比视口宽",
+                           note)}
+
+    return {"id": "V-01", "title": title, "value": val, "threshold": thr,
+            "status": "PASS", "note": note}
+
+
+def v01_cross(rows_by_vp):
+    """N-e **只作诊断打印**：不参与 PASS/FAIL、不占编号、缺陷计数 0。
+
+    两档的内容宽增量与视口增量并排打出来，是唯一一眼能看出「内容没跟着视口长」的读数。
+    但它**不能当判据**：唯一能让它单独红的输入是「两档 padding 不同」
+    （@1440 `padding:24`、@1600 `padding:30` → 内容增量 148 ≠ 160），
+    而归因差 0、铺满差 0 —— 屏幕变宽多留白是**正当设计**，不是缺陷。
+    一条只在合法产物上红的判据会逼下一个人去加容差，那比恒绿更糟。
+    它想抓的「两档都写成常数」已经由**归因差 @1600** 抓住
+    （内容锁 1184 → 减法导航 416 / 真实 208 → 归因差 208），不需要第二条。
+    """
+    ws = sorted(rows_by_vp)
+    if len(ws) < 2:
+        return ""
+    w0, w1 = ws[0], ws[-1]
+    r0 = next((r for r in rows_by_vp[w0] if r["id"] == "V-01"), None)
+    r1 = next((r for r in rows_by_vp[w1] if r["id"] == "V-01"), None)
+    if not r0 or not r1:
+        return ""
+    c0 = _v01_value_num(r0, "内容")
+    c1 = _v01_value_num(r1, "内容")
+    if c0 is None or c1 is None:
+        return ""
+    d, gap = c1 - c0, (w1 - w0)
+    tail = "" if abs(d - gap) <= V01_TOL else "（差 %+d，只作诊断）" % (d - gap)
+    return ("N-e 诊断: 内容宽 %d→%d 增量%+d / 视口增量%d%s（不判红）"
+            % (c0, c1, d, gap, tail))
+
+
+def _v01_value_num(row, key):
+    m = re.search(key + r"(\d+(?:\.\d+)?)", row.get("value") or "")
+    return float(m.group(1)) if m else None
+
+
 def evaluate(props, dom, page, vw):
     """返回 rows。props=Python 侧从 JSON 读到的（列宽/pagination/Drawer），dom=几何。"""
     rows = []
@@ -793,6 +1576,9 @@ def evaluate(props, dom, page, vw):
     cw = dom.get("contentBoxW")
     tier = accept_tier(cw)
     is_accept = tier is not None
+
+    # ---- V-01 内容宽与视口闭合（产品态，三态：PASS / FAIL / INCOMPLETE）
+    rows.append(v01_row(dom, page, vw))
 
     # ---- P1 统计卡
     verdict(rows, "P1", "列表页统计卡数", fmt(dom.get("statCount")), "0",
@@ -940,16 +1726,39 @@ def evaluate(props, dom, page, vw):
                              for k, v in sorted((dom.get("textEdges") or {}).items())
                              if v is not None))
 
-    # ---- P7 列宽声明率 + table-layout
+    # ---- P7 列宽声明率 + table-layout（**运行时载体 = W-00**）
+    #
+    # W-00 是「fixed 与每列 width 成对，缺一即 FAIL」。**不拆成 P7a/P7b**：
+    # 拆开之后 `0/8 + fixed` 会读出「P7b 绿」的半绿，而「只 fixed 不写 width」不是解法
+    # （8 列各 108px、长列被裁）。所以一条判据、一个结论、把红的理由带上（declared / fixed / both）。
+    # 「声明」= width 非空且能解成数值（`52` / `"52px"` 等价，见 parse_col_width）；
+    # 百分比列也计入声明率，但**不进 Σ 预算**（P17）。阈值 80% 与 fixed 要求未改（team-lead 裁定）。
     cols = props["cols"]
-    decl = [c for c in cols if c.get("declW")]
+    decl = [c for c in cols if c.get("declW") is not None or c.get("declPct") is not None]
+    pct = props.get("declaredPct") or []
+    bad_w = props.get("unparsableW") or []
     rate = (len(decl) / len(cols)) if cols else 0
     layout = (t0 or {}).get("tableLayout")
-    ok7 = cols and rate >= DECL_RATE_MIN and layout == "fixed"
-    verdict(rows, "P7", "列宽声明率 / 布局",
-            "%d/%d=%.0f%% / %s" % (len(decl), len(cols), rate * 100, layout or "—"),
-            "≥80% 且 fixed", "PASS" if ok7 else "FAIL",
-            "声明率按 columns 的 width 非空计，不按渲染后列宽")
+    decl_ok = bool(cols) and rate >= DECL_RATE_MIN
+    fixed_ok = layout == "fixed"
+    ok7 = decl_ok and fixed_ok
+    why7 = "" if ok7 else ("both" if (not decl_ok and not fixed_ok)
+                           else ("declared" if not decl_ok else "fixed"))
+    note7 = "声明率按 columns 的 width 非空计，不按渲染后列宽；`52`/`\"52px\"` 视作同一声明"
+    if not ok7:
+        note7 += "；红的原因 = %s（declared=声明率不足 / fixed=布局未锁 / both=两者都缺）" % why7
+    if pct:
+        note7 += "；其中 %d 列为百分比宽（计入声明率，不计入 Σ 预算）" % len(pct)
+    if bad_w:
+        note7 += "；%d 列宽度无法解析（%s），按未声明计" % (
+            len(bad_w), ", ".join("%s=%s" % (c.get("title"), c.get("declRaw")) for c in bad_w[:3]))
+    if props.get("tableSource") not in (None, "content-direct"):
+        note7 += "；主表取自 %s（Content 直属无 Table）" % props.get("tableSource")
+    verdict(rows, "P7", "列宽声明率 / 布局（W-00）",
+            "declared=%d/%d (%.0f%%) fixed=%s%s"
+            % (len(decl), len(cols), rate * 100, str(fixed_ok).lower(),
+               ("" if ok7 else " → FAIL(原因=%s)" % why7)),
+            "≥80% 且 fixed", "PASS" if ok7 else "FAIL", note7)
 
     # ---- P8 横向溢出（验收态）
     if not t0:
@@ -1197,28 +2006,336 @@ def evaluate(props, dom, page, vw):
                 "≤%d 档" % FONT_TIERS_MAX, "PASS" if ok else "FAIL",
                 "各档来源（前 3 个样本）：%s" % (detail or "—"))
 
+    # ================= I-09 第一阶段新增：T-01~T-04 / W-01 / W-02 =================
+    # P 号是运行时行号，注释里的 T-xx / W-xx 是 references/12-visual-standard.md 的条款号。
+    # 一条 P 只承载一条条款（P7 例外：它承载 W-00，理由见该条 note）。
+    au = (t0 or {}).get("audit") or []
+    pairs = align_audit(cols, au)
+    w00_ok = bool(cols) and rate >= DECL_RATE_MIN and layout == "fixed"
+
+    # ---- P20 T-01 短字段折行（阈值 0，必须带分母）
+    if not t0 or not au:
+        verdict(rows, "P20", "T-01 短字段折行", "—", "折行 0 处", "SKIP", "无表格")
+    else:
+        short_n = sum((a.get("shortCells") or 0) for _, a in pairs)
+        wrap_n = sum((a.get("shortWrapped") or 0) for _, a in pairs)
+        bad20 = ["%s %d/%d" % (a.get("title"), a["shortWrapped"], a["shortCells"])
+                 for _, a in pairs if (a.get("shortWrapped") or 0) > 0]
+        if short_n == 0:
+            verdict(rows, "P20", "T-01 短字段折行", "分母 0（无短字段格）", "折行 0 处", "SKIP",
+                    "短字段格 0 个：分母为 0 时「0 处折行」不等于达标")
+        else:
+            verdict(rows, "P20", "T-01 短字段折行", "折行 %d/%d" % (wrap_n, short_n), "折行 0 处",
+                    "PASS" if wrap_n == 0 else "FAIL",
+                    "分母 = 含 Tag/Button 的格 ∪ 整格文本 ≤6 全角字的格；量承载文本的最内层元素"
+                    "（Tag/Button/文本节点）的 Range 行盒数，>1 即折行"
+                    + ("；折行列：" + "，".join(bad20) if bad20 else ""))
+
+    # ---- P21 T-02 长文本必须三选一（ellipsis / wrap+maxLines:2 / 移出表格）
+    if not t0 or not au:
+        verdict(rows, "P21", "T-02 长文本出口", "—", "未声明出口列 0", "SKIP", "无表格")
+    else:
+        naked = [(c, a) for c, a in pairs
+                 if not c.get("ellipsis") and not c.get("wrap") and not c.get("maxLines")
+                 and (a.get("multiLong") or 0) > 0]
+        vals = "，".join("%s %d 格" % (a.get("title"), a["multiLong"]) for _, a in naked)
+        verdict(rows, "P21", "T-02 长文本出口", "未声明出口且 ≥2 行：%d 列" % len(naked),
+                "0 列", "PASS" if not naked else "FAIL",
+                "三选一 = ellipsis / wrap:true+maxLines:2 / 移出表格；"
+                "「靠浏览器默认换行」是本文件唯一明确禁止的排版方式"
+                + ("；命中：" + vals if vals else ""))
+
+    # ---- P22 T-03 行数上限（≤2 行，且格高不超过 2 行）
+    if not t0 or not au:
+        verdict(rows, "P22", "T-03 行数上限", "—", "≤2 行", "SKIP", "无表格")
+    else:
+        over_cols = [(c, a) for c, a in pairs if (a.get("overCells") or 0) > 0]
+        over_n = sum((a.get("overCells") or 0) for _, a in over_cols)
+        worst = max([(a.get("maxLines") or 0) for _, a in pairs] or [0])
+        det = "，".join("%s 最长 %d 行 / 格高 %s" % (a.get("title"), a.get("maxLines") or 0,
+                                                   fmt(a.get("maxTdH")))
+                       for _, a in over_cols[:4])
+        verdict(rows, "P22", "T-03 行数上限", "超限 %d 格 / %d 列（最长 %d 行）"
+                % (over_n, len(over_cols), worst), "≤2 行", "PASS" if over_n == 0 else "FAIL",
+                "行盒数 >2，或格高 > 行高×2 + 上下 padding + 1；本页最长 %d 行" % worst
+                + ("；超限列：" + det if det else ""))
+
+    # ---- P23 T-04 表头不得被裁（0 容忍，分母 = 表头 ≤6 全角字的列，按档位分列打印）
+    #
+    # **锚点 = 裁切盒**（computed overflow-x ∈ {hidden, clip}），不是「承载文本的最内层元素」。
+    # 后者会恒绿：文本包一层 <span> 时 span 是 inline，clientWidth/scrollWidth 恒 0/0，
+    # `0 > 0+1` 恒假，真被裁的 th 一次都没被看。见探针 clippingBox() 的注释。
+    if not t0 or not au:
+        verdict(rows, "P23", "T-04 表头被裁", "—", "被裁 0 列", "SKIP", "无表格")
+    else:
+        anchors = {}
+        for _, a in pairs:
+            anchors[a.get("hdrAnchor") or "none"] = anchors.get(a.get("hdrAnchor") or "none", 0) + 1
+        anchor_txt = "锚点=clippingBox（%s）" % "，".join(
+            "%s %d 列" % (k, v) for k, v in sorted(anchors.items()))
+        # 分母排除两类：① 空表头（rowSelection / radio 插进来的槽位列，本来就没有字）；
+        # ② 没有裁切盒的列（hdrClip is None）—— 那是「本条不适用」，不是「量过了没裁」。
+        den = [(c, a) for c, a in pairs
+               if 0 < (a.get("hdrUnits") or 0) <= SHORT_FIELD_MAX_UNITS
+               and a.get("hdrClip") is not None]
+        clip = [(c, a) for c, a in den if a.get("hdrClip")]
+        # 三类排除**分别计数、不加总**（team-lead 裁定）：合成一个「另有 N 列」时，看报告的人
+        # 分不清「判据放过了它」还是「它根本不适用」。三类各自说出原因：
+        #   ① 表头 >6 全角字 —— 那类列的长表头归 T-03 + ellipsisTitle，不是 T-04 的活；
+        #   ② 空表头（rowSelection / radio 插进来的槽位）—— 永远不可能红，必然为绿的分母没有意义；
+        #   ③ 无裁切盒（没有 overflow-x:hidden/clip）—— 「量过了没裁」与「没有可量的盒子」必须分开。
+        # 三个数都必须出现在分母行里：「0/9」与「0/10」的差别没人看得见，下次改成 0/10 也没人发现。
+        no_hdr = sum(1 for _, a in pairs if not (a.get("hdrUnits") or 0) > 0)
+        long_hdr = sum(1 for _, a in pairs if (a.get("hdrUnits") or 0) > SHORT_FIELD_MAX_UNITS)
+        no_box = sum(1 for _, a in pairs
+                     if (a.get("hdrUnits") or 0) > 0 and a.get("hdrClip") is None)
+        excl = ("；另有 %d 列表头 >%g 全角字、%d 列空表头、%d 列无裁切盒，不入分母"
+                % (long_hdr, SHORT_FIELD_MAX_UNITS, no_hdr, no_box))
+        det = "，".join("%s 可用 %s / 滚动 %s / 文字 %s"
+                       % (a.get("title"), fmt(a.get("hdrClientW")), fmt(a.get("hdrScrollW")),
+                          fmt(a.get("hdrTextW")))
+                       for _, a in clip)
+        if not den:
+            verdict(rows, "P23", "T-04 表头被裁", "分母 0（无可量的裁切盒）@%s" % fmt(cw),
+                    "被裁 0 列", "SKIP",
+                    anchor_txt + "；没有 overflow:hidden/clip 的表头盒 —— 那一档根本不会「裁切」"
+                    "（文字会溢出可见），本条不适用，不是达标" + excl)
+        else:
+            verdict(rows, "P23", "T-04 表头被裁",
+                    "被裁 %d/%d 列@%s%s" % (len(clip), len(den), fmt(cw), excl),
+                    "被裁 0 列", "PASS" if not clip else "FAIL",
+                    anchor_txt + "；分母 = 表头文字 1~%g 全角字且**有裁切盒**的列；"
+                    "被裁 = 裁切盒 scrollWidth > clientWidth + 1（nowrap 只保证不折行，不保证放得下）"
+                    % SHORT_FIELD_MAX_UNITS + ("；被裁列：" + det if det else ""))
+
+    # ---- P24 W-01 列宽下限（声明宽 ≥ needW，量实测不量字数）
+    #
+    # **分母 = 短列**（整格 ≤6 全角字的格，含 Tag/Button 格）。声明了出口的长文本列
+    # （`ellipsis` / `wrap+maxLines`）**出分母** —— needW 的语义是「放得下一整条不可断的内容」，
+    # 一旦声明了省略号，语义就变成「能放多少放多少，剩下的悬停看」，拿它要求该列显示全文
+    # 等于和 T-02 互相取消。CAPA 的 `事实陈述` 就是这条：needW=532 > 整表 866，**不可满足**，
+    # 那不是「该加宽 202px」的指令，是「该列该走 T-02 三选一」的信号。
+    # 未声明出口的长文本列同样出分母：那是 T-02 的活（`未声明出口且 ≥2 行` 已经在抓）。
+    # 出分母的列**仍照打 needW/声明/渲染**（诊断不缩水），只是不计入分母。
+    def _exit_kind(c):
+        if c.get("ellipsis"):
+            return "ellipsis"
+        if c.get("wrap") and c.get("maxLines"):
+            return "wrap+maxLines"
+        return None
+
+    def _breakable(t):
+        """这列的值有没有**可断点**（有 = 宽度需求由内容决定，归 T-02/T-03）。
+
+        只有两条，别做 NLP：① 空格分隔的词 ≥3 个（`GB/T 2828.1 一般检验水平 II`）；
+        ② 连续 CJK > 6 字（`高精度贴片电阻`、`不合格（潜在）事实陈述`）。
+        其余一律当 **token**（`IQC-20261018-0342`、日期、序号、状态、Tag 文本）——
+        token 断了就是错的，「整条必须放得下」这句话才对它们成立，那正是 needW 的定义域。
+
+        **判的是值文本本身，不是渲染行数**。拿行数当分母依据是循环定义：行数由**被修的列宽**
+        决定 —— 列越窄越折行，越会被判成长文本列而**出分母**，于是「越坏的列越免检」。
+        这与 `Σ col.offsetWidth ≡ 表宽` 是同一族毛病：拿结果当判据的输入。
+        """
+        if not t:
+            return False
+        if len([w for w in re.split(r"\s+", t.strip()) if w]) >= 3:
+            return True
+        run = best = 0
+        for ch in t:
+            if "\u4e00" <= ch <= "\u9fff":
+                run += 1
+                if run > best:
+                    best = run
+            else:
+                run = 0
+        return best > 6
+
+    p24_den, p24_out_decl, p24_out_broken = [], [], []
+    for c, a in pairs:
+        if c.get("declW") is None:
+            continue
+        ek = _exit_kind(c)
+        if ek:
+            p24_out_decl.append((str(c.get("title")), ek))
+        elif _breakable(a.get("longest")):
+            p24_out_broken.append(str(c.get("title")))
+        else:
+            p24_den.append((c, a))
+    p24_excl = ""
+    if p24_out_decl or p24_out_broken:
+        parts = []
+        if p24_out_decl:
+            parts.append("另有 %d 列声明了出口（%s），不入分母" % (
+                len(p24_out_decl),
+                "、".join("%s %s" % (t, k) for t, k in p24_out_decl[:4])))
+        if p24_out_broken:
+            parts.append("另有 %d 列值可断（长文本，归 T-02/T-03：%s），不入分母" % (
+                len(p24_out_broken), "、".join(p24_out_broken[:4])))
+        p24_excl = "；".join(parts)
+
+    if not t0 or not au:
+        verdict(rows, "P24", "W-01 列宽下限", "—", "声明 ≥ needW", "SKIP", "无表格")
+    elif not w00_ok:
+        # W-03：四条不变量有顺序。1/2 不成立时（fixed 或声明率），3/4 的读数不作判决依据。
+        # 判 FAIL 而不是 SKIP —— 与 P18 同一处理：SKIP 会让存量产物在这条上免检。
+        # 但**声明侧读数必须照打**：声明值在 JSON 里，与布局无关，这一半永远可判。
+        # cause 写明是哪一条前置（只写 prereq 等于没写原因）。
+        low_d, pass_d = [], 0
+        for c, a in p24_den:
+            need = w01_need(c, a)
+            if c["declW"] + 1e-6 < need:
+                low_d.append((str(c.get("title")), c["declW"], need))
+            else:
+                pass_d += 1
+        tight_d = min(p24_den, key=lambda p: ((p[0].get("declW") or 1e9) - w01_need(p[0], p[1])),
+                      default=None)
+        side = "声明侧 %d/%d 列达标" % (pass_d, len(p24_den))
+        if tight_d:
+            side += "（余量最小 %s %s/%s）" % (
+                tight_d[0].get("title"), fmt(tight_d[0].get("declW")),
+                fmt(w01_need(tight_d[0], tight_d[1])))
+        if low_d:
+            side += "，未达标：" + "，".join("%s %s<%s" % t for t in low_d[:4])
+        verdict(rows, "P24", "W-01 列宽下限",
+                "前置不成立 %s（%s）" % (side, "cause=prereq:W-00"), "声明 ≥ needW", "FAIL",
+                "cause=prereq:W-00：W-03 顺序要求先 W-00（fixed + 每列 width）再谈列宽够不够 —— "
+                "fixed 缺失时渲染 ≠ 声明，把差归因成「列宽不足」是错误归因；但让它闭嘴就是免检。"
+                "声明值在 JSON 里、与布局无关，所以这一半照判照打。" + p24_excl
+                + "；三数（needW/声明/渲染）全列诊断：" + needw_digest(pairs, n=len(pairs)))
+    elif not p24_den:
+        verdict(rows, "P24", "W-01 列宽下限", "分母 0（无可比的短列）", "声明 ≥ needW", "SKIP",
+                "所有列都声明了出口或是长文本列 —— 本条的语义（放得下一整条不可断的内容）"
+                "对它们不成立，归 T-02/T-03" + ("；" + p24_excl if p24_excl else "")
+                + "；三数全列诊断：" + needw_digest(pairs, n=len(pairs)))
+    else:
+        low, pct_cols = [], []
+        for c, a in p24_den:
+            need = w01_need(c, a)
+            if c["declW"] + 1e-6 < need:
+                low.append((str(c.get("title")), c["declW"], need))
+        pct_cols = [str(c.get("title")) for c, _ in pairs if c.get("declPct") is not None]
+        tight = min(p24_den, key=lambda p: ((p[0].get("declW") or 1e9) - w01_need(p[0], p[1])))
+        verdict(rows, "P24", "W-01 列宽下限",
+                "低于下限 %d/%d 列%s" % (len(low), len(p24_den),
+                                        ("；" + p24_excl) if p24_excl else ""),
+                "声明 ≥ needW", "PASS" if not low else "FAIL",
+                "needW = ceil(实测文本宽) + 24 + (Tag 16) + (可排序 20)，量的是**最内层元素自身字号**"
+                "（Tag 12px / td 14px）—— 用单元格字号代算会让同一条判据随机红绿；"
+                "分母 = 未声明出口且**值不可断**的列（token：单号/日期/序号/状态/Tag 文本），"
+                "值可断的长文本列与声明了出口的列归 T-02/T-03；每列另守 ≥48。"
+                "余量最小：%s 声明 %s / needW %s"
+                % (tight[0].get("title"), fmt(tight[0].get("declW")),
+                   fmt(w01_need(tight[0], tight[1])))
+                + ("；低于下限：" + "，".join("%s 声明 %s < needW %s" % t for t in low[:5])
+                   if low else "")
+                + ("；百分比宽（与 px 不可加）：" + "、".join(pct_cols[:6]) if pct_cols else "")
+                + "；三数全列诊断：" + needw_digest(pairs, n=len(pairs)))
+
+    # ---- P25 W-02 声明必须等于渲染（逐列 ±2；主判据，不是 Σ）
+    if not t0 or not au:
+        verdict(rows, "P25", "W-02 声明=渲染", "—", "逐列 |差| ≤2", "SKIP", "无表格")
+    else:
+        k = 1.0
+        all_px = bool(cols) and all(c.get("declW") is not None for c in cols)
+        if (all_px and layout == "fixed" and (props.get("sumW") or 0) > 0
+                and (t0.get("wrapClientW") or 0) > 0):
+            k = float(t0["wrapClientW"]) / float(props["sumW"])
+        # 有列没声明宽（或混了百分比宽）时不做比例换算：那时表宽要在「无宽列」与
+        # 「有宽列」之间分配，k = 表宽/Σ声明 不再是那个比例，换算出来的偏差是假的。
+        bad25, cmp25 = [], 0
+        for c, a in pairs:
+            if c.get("declW") is None or a.get("thW") is None:
+                continue
+            cmp25 += 1
+            dev = abs(a["thW"] - c["declW"] * k)
+            if dev > COL_W_TOL:
+                bad25.append((str(c.get("title")), c["declW"], a["thW"], dev))
+        no_decl = [str(c.get("title")) for c, _ in pairs if c.get("declW") is None]
+        verdict(rows, "P25", "W-02 声明=渲染",
+                "可比 %d 列，超差 %d 列（k=%s）" % (cmp25, len(bad25), "%.3f" % k),
+                "逐列 |差| ≤%d" % COL_W_TOL, "PASS" if (cmp25 and not bad25) else "FAIL",
+                "**语义是「每列是否按同一个比例缩放」，不是「允许偏差 ≤2」**。"
+                "k = 表宽 / Σ声明：fixed 且 Σ < 表宽时浏览器把差值按比例摊给各列（1026 档 k=1.185）。"
+                "@866 档 Σ=表宽 → k=1.000，逐列比较与原式**逐字节等价**（这是「没有放宽」的唯一证据）。"
+                "k 的合法性（Σ 本身是否合理）**不归本条**，归 Σ 判据 —— 8 列全声明 100、Σ=800 时"
+                "本条也应当 PASS。Σ 只作诊断，不作 PASS 依据 —— fixed 下 Σ渲染 ≡ 表宽 恒成立，"
+                "**比 Σ 等于自证；同理也不能顺手判 abs(Σ声明×k − 表宽)**（k 由它推出，恒真）"
+                + ("；无声明宽（未参与比较）：" + "、".join(no_decl[:6]) if no_decl else "")
+                + ("；超差列：" + "，".join("%s 声明 %s 渲染 %s（差 %s）"
+                                         % (t_, fmt(d), fmt(r), fmt(round(dev, 1)))
+                                         for t_, d, r, dev in bad25[:5]) if bad25 else ""))
+
     return rows
 
 
 # ------------------------------------------------------------------ props 侧
+def parse_col_width(raw):
+    """把 `columns[].width` 解成一个可判的数——与容器 `colWidthStyle()` 同一套口径。
+
+    容器那边（`assets/container/index.html` 的 `colWidthStyle`）：纯数字串补 `px`，
+    已带单位（`150px` / `20%`）原样写进 style。**所以 `"52px"` 和 `52` 在渲染上等价**，
+    判据读 JSON 时也必须等价，否则「写没写」这件事会取决于写法而不是内容。
+
+    旧实现 `float(w)` 对 `"52px"` 抛 ValueError → 记成「未声明」：CAPA 的 11/11 全声明
+    被报成 `0/9 = 0%`，并且把病因从「没锁 table-layout」误诊成「没写列宽」。这是**量具 bug**，
+    不是口径变更 —— 阈值（80% 与 fixed）一个字没动。
+
+    返回 (px 值 or None, 百分数 or None, 原始单位串)。百分比单独返回而不并进 px：
+    `20%` 与 `150px` 不能相加，Σ 预算（P17）只认 px 列，声明率两列都算「声明了」。
+    """
+    if raw is None:
+        return None, None, None
+    s = str(raw).strip()
+    if not s:
+        return None, None, None
+    m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*(px|%)?", s, re.I)
+    if not m:
+        return None, None, s            # 认不出的单位（em/vw/calc…）：既不算 px 也不算 %
+    v = float(m.group(1))
+    unit = (m.group(2) or "px").lower()
+    if unit == "%":
+        return None, v, "%"
+    return v, None, "px"
+
+
+def resolve_list_table(page):
+    """解析「这一页的主表」：Content 直属优先，找不到再退到 MasterDetail 里的第一张。
+
+    **与 `is_work_list_page()` 拆开的理由（幻神 v3 裁定）**：两者回答的是两个问题。
+    - 本函数 = 「哪张表是主表」——**任何页**都该能答（详情页也有主表），只用于取列宽/分页等原始量；
+    - `is_work_list_page()` = 「这算不算作业型列表页」——**形态类判据的适用范围**，定义不变。
+
+    混在一起的时候，为了让 CAPA 的 `page-capa-list`（主表在 `MasterDetail` 里）能判，
+    只能去放宽「列表页」的定义，那会连带改掉 P2/P11/P13 的适用范围 —— 改判据去迁就一张样本。
+    拆开后：门槛/口径一个字不动，只是「量哪张表」多了一个入口。
+
+    返回 (node, source)，source ∈ content-direct / master-detail / none。source 会打进
+    P7 的 note —— 量的不是 Content 直属表时必须写明，否则「量到了」和「量的是哪张」脱钩。
+    """
+    ts = content_direct_tables(page)
+    if ts:
+        return ts[0], "content-direct"
+    mds = md_tables(page)
+    if mds:
+        return mds[0], "master-detail"
+    return None, "none"
+
+
 def props_of(page, dom):
     """从 JSON 读那些「DOM 量不到 / 量了会被自证」的东西。"""
-    C = content_of(page)
-    tables = content_direct_tables(page)
-    t = tables[0] if tables else None
+    t, tsrc = resolve_list_table(page)
     tp = (t or {}).get("props") or {}
 
     # 列宽：读声明值。渲染后的 offsetWidth 之和恒等于表宽（fixed 布局按比例缩放），
     # 用它验预算等于让判据自证——必须读 JSON 里写的 width。
     cols = []
     for c in (tp.get("columns") or []):
-        w = c.get("width")
-        try:
-            w = float(w) if w is not None and str(w).strip() != "" else None
-        except (TypeError, ValueError):
-            w = None
-        cols.append({"title": c.get("title"), "declW": w,
-                     "ellipsis": bool(c.get("ellipsis") or c.get("ellipsisCol"))})
+        px, pct, raw = parse_col_width(c.get("width"))
+        cols.append({"title": c.get("title"), "declW": px, "declPct": pct,
+                     "declRaw": raw if (px is None and pct is None) else None,
+                     "ellipsis": bool(c.get("ellipsis") or c.get("ellipsisCol")),
+                     "wrap": bool(c.get("wrap")), "maxLines": c.get("maxLines"),
+                     "type": c.get("type"), "align": c.get("align")})
     pg = tp.get("pagination") if isinstance(tp.get("pagination"), dict) else {}
     total = (pg or {}).get("total")
     page_size = (pg or {}).get("pageSize")
@@ -1239,7 +2356,11 @@ def props_of(page, dom):
 
     return {
         "cols": cols, "colCount": len(cols),
+        # Σ 预算只加 px 列：`20%` 与 `150px` 不可加（见 parse_col_width）
         "sumW": sum(c["declW"] for c in cols if c["declW"]) if cols else None,
+        "declaredPct": [c for c in cols if c["declPct"] is not None],
+        "unparsableW": [c for c in cols if c.get("declRaw")],
+        "tableSource": tsrc,
         "ellipsisCols": [c for c in cols if c["ellipsis"]],
         "total": total, "pageSize": page_size,
         "drawerCount": len(drawers), "drawerW": dr_w, "mdCount": len(md),
@@ -1248,43 +2369,62 @@ def props_of(page, dom):
 
 
 # ------------------------------------------------------------------ 报告
-def render_case(name, page, dom_by_vp, rows_by_vp):
+def render_case(name, page, dom_by_vp, rows_by_vp, why="—", cand_ids=None):
     all_rows = []
     for vw, rows in rows_by_vp.items():
         all_rows.extend(rows)
     p = sum(1 for r in all_rows if r["status"] == "PASS")
     f = sum(1 for r in all_rows if r["status"] == "FAIL")
     s = sum(1 for r in all_rows if r["status"] == "SKIP")
+    inc = sum(1 for r in all_rows if r["status"] == "INCOMPLETE")
     # 出现过的 SKIP 判据 id（去重）—— 交给 main 做白名单比对（V13）
     skip_ids = sorted(set(r["id"] for r in all_rows if r["status"] == "SKIP"))
+    cand_ids = cand_ids or []
     print("\n" + "=" * 78)
-    print("CASE %s | page %s (%s) | 两档视口 | retries=%d"
-          % (name, page.get("id"), page.get("name"),
+    # 「判了哪页」必须在这一行：同一份产物判不同页会得到不同 FAIL 集（CAPA 实测 19 vs 21），
+    # 把页 id 藏进某条判据的 note 里，读者会以为两次跑的是同一件事。
+    print("CASE %s | page %s (%s) | 判页依据：%s | 两档视口 | retries=%d"
+          % (name, page.get("id"), page.get("name"), why,
              sum(d.get("_retry", 0) for d in dom_by_vp.values())))
-    print("  条数口径：P1–P19 共 20 条；P3 按 §6.2 注拆为 P3a（栅格）/ P3b（总高），故每视口 21 行")
+    unjudged = [x for x in cand_ids if x != page.get("id")]
+    if unjudged:
+        print("  另有 %d 张列表页候选**本轮未判**：%s —— 单页模式下结论只对 %s 成立"
+              "（要逐页判用 --all-pages）"
+              % (len(unjudged), ", ".join(unjudged), page.get("id")))
+    print("  条数口径：P1–P19 共 20 条（P3 拆 P3a/P3b）；I-09 起新增 P20–P25 承载 "
+          "T-01/T-02/T-03/T-04/W-01/W-02，另有 V-01（三态，产品态闭合）；每视口 %d 行"
+          % len(next(iter(rows_by_vp.values()), [])))
     for vw, rows in rows_by_vp.items():
         d = dom_by_vp[vw]
         print("  -- %dx%d  内容宽 %s  pane %s（默认 %s）  列 %s"
               % (vw, d.get("vh"), fmt(d.get("contentBoxW")), fmt(d.get("paneW")),
                  fmt(d.get("paneDefaultW")), d.get("tableCount")))
         for r in rows:
-            mark = {"PASS": "PASS", "FAIL": "FAIL", "SKIP": "SKIP"}[r["status"]]
+            mark = {"PASS": "PASS", "FAIL": "FAIL", "SKIP": "SKIP",
+                    "INCOMPLETE": "INC!"}.get(r["status"], r["status"])
             print("     %-4s %-28s 现值 %-30s 阈值 %-22s %s"
                   % (r["id"], r["title"], r["value"], r["threshold"], mark))
             if r["note"]:
                 print("          ↳ %s" % r["note"])
-    print("  PASS=%d FAIL=%d SKIP=%d（SKIP 不计为绿）" % (p, f, s))
+    print("  PASS=%d FAIL=%d SKIP=%d%s（SKIP 不计为绿；本页单列，不与其它页合并）"
+          % (p, f, s, (" INCOMPLETE=%d（量具不可信，既不是绿也不是红）" % inc) if inc else ""))
+    # N-e 只在这里打一行诊断：**不判红、不占编号**（理由见 v01_cross 的 docstring）
+    diag = v01_cross(rows_by_vp)
+    if diag:
+        print("  " + diag)
     if skip_ids:
         print("  SKIP 判据 = [%s]" % ",".join(skip_ids))
     return p, f, s, skip_ids
 
 
-def run_one(chrome, json_path, page_id=None, keep=False):
+def run_one(chrome, json_path, page_id=None, keep=False, why=None):
     data = json.loads(Path(json_path).read_text(encoding="utf-8"))
-    page = pick_page(data, page_id)
+    page, picked_why, cand_ids = pick_page_ex(data, page_id)
+    why = why or picked_why
     if page is None:
-        print("\nCASE %s —— SKIP（无作业型列表页）" % Path(json_path).name)
-        return 0, 0, 0, [], set()
+        print("\nCASE %s —— SKIP（无列表页候选；判页依据：%s）"
+              % (Path(json_path).name, why))
+        return 0, 0, 0, [], set(), 0
     tmp = Path(tempfile.mkdtemp(prefix="xx-prd-shape-"))
     html = tmp / "case.html"
     try:
@@ -1295,10 +2435,14 @@ def run_one(chrome, json_path, page_id=None, keep=False):
             dom_by_vp[w] = d
             props = props_of(page, d)
             rows_by_vp[w] = evaluate(props, d, page, w)
+        # N-e 已降为诊断（在 render_case 里打），这里不再有两档判定
         # V8 的比对单位是「判据@视口」：同一判据只在一档红、另一档绿，本身就是要看的信号。
         fails = set("%s@%d" % (r["id"], w)
                     for w, rs in rows_by_vp.items() for r in rs if r["status"] == "FAIL")
-        return render_case(Path(json_path).name, page, dom_by_vp, rows_by_vp) + (fails,)
+        # INCOMPLETE 必须单独回传：它既不是绿也不是红，合并进 PASS 就是静默绿
+        inc = sum(1 for rs in rows_by_vp.values() for r in rs if r["status"] == "INCOMPLETE")
+        return render_case(Path(json_path).name, page, dom_by_vp, rows_by_vp,
+                           why, cand_ids) + (fails, inc)
     finally:
         if keep:
             print("CASE_HTML=%s" % html)
@@ -1318,10 +2462,57 @@ def default_targets():
     return out
 
 
+def main_all_pages(chrome, files, keep=False):
+    """逐页全判（`--all-pages`）：**每页单列 PASS/FAIL/SKIP，绝不合并成一个总数**。
+
+    为什么必须有这个模式：同一份产物判不同页会得到不同 FAIL 集（CAPA 实测 19 vs 21），
+    而两页的 PASS 总数**碰巧都是 11** —— 合成一个 TOTAL 时这个差异会消失。
+    「合并后看着一样」正是上一轮骗过人的地方，所以这里连一行跨页合计都不给。
+    """
+    any_fail = False
+    bad_skip = set()
+    for f in files:
+        data = json.loads(Path(f).read_text(encoding="utf-8"))
+        cands = page_candidates(data)
+        if not cands:
+            print("\nCASE %s —— SKIP（无列表页候选）" % Path(f).name)
+            continue
+        print("\n" + "#" * 78)
+        print("# FILE %s —— 列表页候选 %d 张：逐页判，计数分行不合并"
+              % (Path(f).name, len(cands)))
+        got = []
+        for page, kind in cands:
+            p, fl, s, sk, _fs, inc = run_one(chrome, f, page.get("id"), keep,
+                                        why="逐页全判（--all-pages）")
+            got.append((page.get("id"), kind, p, fl, s, inc))
+            bad_skip.update(sk)
+            any_fail = any_fail or fl > 0 or inc > 0
+        print("\n  ---- 分页小计（%s，**不合并**）----" % Path(f).name)
+        print("  %-26s %-16s %6s %6s %6s %6s" % ("page", "kind", "PASS", "FAIL", "SKIP", "INC"))
+        for pid, kind, p, fl, s, inc in got:
+            print("  %-26s %-16s %6d %6d %6d %6d" % (pid, kind, p, fl, s, inc))
+
+    print("\n" + "-" * 78)
+    print("TOTAL 不合并：上面每个 page 一行就是结论；跨页相加会把 19/21 这类差异抹平")
+    bad = sorted(bad_skip - set(SKIP_WHITELIST))
+    if bad:
+        print("SKIP-OUT-OF-WHITELIST=[%s]  白名单只允许 %s"
+              % (",".join(bad), ",".join(SKIP_WHITELIST)))
+        print("RESULT INCOMPLETE  —— 有判据在没有正当理由的情况下没跑")
+        return 1
+    if any_fail:
+        print("RESULT FAIL  —— 至少一页有 FAIL（逐页看上面）")
+        return 1
+    print("RESULT PASS")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="P1-P19 形态与密度判据")
     ap.add_argument("files", nargs="*", help="产物 JSON（默认：assets/examples 里含列表页的示例）")
     ap.add_argument("--page", help="指定 pageId")
+    ap.add_argument("--all-pages", action="store_true",
+                    help="逐页判所有列表页候选；**分页单列计数，不合并**")
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--selfcheck", action="store_true", help="注入反例，验证判据能红")
     ap.add_argument("--base", help="--selfcheck 的基线产物（默认 example-06-dense-list.json）")
@@ -1341,23 +2532,28 @@ def main(argv=None):
         print("没有可跑的产物：assets/examples 里一个作业型列表页都没有")
         return 2
 
-    tp = tf = ts = 0
+    if args.all_pages:
+        return main_all_pages(chrome, files, args.keep)
+
+    tp = tf = ts = tinc = 0
     skip_seen = set()
     fails_by_file = {}
     for f in files:
         try:
-            p, fl, s, sk, fs = run_one(chrome, f, args.page, args.keep)
+            p, fl, s, sk, fs, inc = run_one(chrome, f, args.page, args.keep)
         except EnvError as ex:
             print("\nCASE %s —— ENV: %s" % (Path(f).name, ex))
             return 2
         tp += p
         tf += fl
         ts += s
+        tinc += inc
         skip_seen.update(sk)
         fails_by_file[Path(f).name] = fs
 
     print("\n" + "-" * 78)
-    print("TOTAL PASS=%d FAIL=%d SKIP=%d" % (tp, tf, ts))
+    print("TOTAL PASS=%d FAIL=%d SKIP=%d%s"
+          % (tp, tf, ts, (" INCOMPLETE=%d" % tinc) if tinc else ""))
 
     # V8：不是「FAIL 数够不够」，是「红的是不是原来那几条」。
     # 少一条 = 判据被放宽或失效；多一条 = 新缺陷或判据变严。两种都要人说清楚。
@@ -1408,6 +2604,12 @@ def main(argv=None):
         print("RESULT INCOMPLETE  —— 有判据在没有正当理由的情况下没跑，"
               "这不是「产物达标」，是「判据没判」")
         return 1
+    if tinc:
+        # 量具自己不可信（父节点不可见 / 加数口径不一致 / 导航宽越界）→ 既不能判绿也不能判红。
+        # 落成 PASS 是静默绿，落成 FAIL 是把工具 bug 算到产物头上 —— 只能报 INCOMPLETE 并退非 0。
+        print("RESULT INCOMPLETE  —— 有 %d 条判据的量具不可信（上方 INC! 行）："
+              "先修量具，再谈产物达不达标" % tinc)
+        return 1
     if v8_bad:
         if tf == 0 and v8_missing:
             print("RESULT INCOMPLETE  —— V8 有 %d 个名单文件本轮没跑；"
@@ -1441,10 +2643,11 @@ INJECTIONS = [
     # transform 不影响布局，只移动盒子 —— P6 量的正是盒子左边界。
     {"name": "P6_filter_shift", "kind": "css", "want": ["P6"],
      "payload": ".ant-content .ant-filter-bar{transform:translateX(-12px)}"},
-    {"name": "P9_row_high", "kind": "css", "want": ["P9"], "allow": ["P2a", "P2b", "P18"],
-     "allowWhy": "行高变大 → 一屏行数必然减少（P2a/P2b）；同时 white-space:normal 让文本改折行、"
-                 "不再横向溢出 → 配了 ellipsis 的两列变成「装饰」，P18 的集合相等必然不成立。"
-                 "两者都是这个注入的真实后果，不是判据重叠",
+    {"name": "P9_row_high", "kind": "css", "want": ["P9"],
+     "allow": ["P2a", "P2b", "P18", "P20", "P21", "P22"],
+     "allowWhy": "行高变大 → 一屏行数必然减少（P2a/P2b）；white-space:normal 让短字段折行（P20）、"
+                 "长文本折成 3 行（P21/P22），且不再横向溢出 → 配了 ellipsis 的两列变成「装饰」，"
+                 "P18 的集合相等必然不成立。全部是这个注入的真实后果，不是判据重叠",
      "payload": ".ant-table td{white-space:normal!important;padding-top:16px!important;padding-bottom:16px!important}"},
     {"name": "P10_sticky_off", "kind": "css", "want": ["P10"],
      "payload": ".ant-table th{position:static!important}"},
@@ -1466,9 +2669,10 @@ INJECTIONS = [
                 "e.style.cssText='border:1px solid #d9d9d9;background:#fff;"
                 "box-shadow:0 1px 2px rgba(0,0,0,.06);height:40px';"
                 "C.appendChild(e);})();"},
-    {"name": "P14_tag_2color", "kind": "js", "want": ["P14"], "allow": ["P18"],
-     "allowWhy": "往首个单元格里塞两个标签会把它撑溢出（序号列只有 48），于是「真溢出列集合」"
-                 "多了一列没配 ellipsis 的 —— P18 的集合相等条件必然不成立，是该注入的真实后果",
+    {"name": "P14_tag_2color", "kind": "js", "want": ["P14"], "allow": ["P18", "P20", "P24"],
+     "allowWhy": "往首个单元格里塞两个标签：① 把它撑溢出 →「真溢出列集合」多一列没配 ellipsis 的"
+                 "（P18 集合相等不成立）；② 序号列的 needW 从 41 涨到 2 个 Tag 的宽度 → 54 不再够（P24）；"
+                 "③ 两个 Tag 在 54 宽的列里换行（P20）。三条都是这个注入的真实后果",
      "payload": "(function(){var tr=document.querySelector('#protoCanvas .ant-table tbody tr');if(!tr)return;"
                 "var td=tr.querySelector('td');if(!td)return;"
                 "for(var i=0;i<2;i++){var t=document.createElement('span');"
@@ -1476,11 +2680,146 @@ INJECTIONS = [
     # ---- json 类（改 props 再渲染）
     {"name": "P13_page_size_10", "kind": "json", "want": ["P13"],
      "payload": lambda p: _mutate_table(p, lambda tp: _set_pg(tp, 10))},
-    {"name": "P17_drop_one_width", "kind": "json", "want": ["P17"],
+    {"name": "P17_drop_one_width", "kind": "json", "want": ["P17"], "allow": ["P25"],
+     "allowWhy": "摘掉一列 width 后，fixed 会把表宽在没有声明宽的列与有声明宽的列之间重分配，"
+                 "「声明=渲染」对剩下的列必然不成立（P25 逐列脱钩）—— 这是同一个改动的另一面",
      "payload": lambda p: _mutate_table(p, lambda tp: _drop_width(tp))},
     {"name": "P18_ellipsis_all", "kind": "json", "want": ["P18"],
      "payload": lambda p: _mutate_table(p, lambda tp: _ellipsis_all(tp))},
+    # ---- I-09 第一阶段新增：T-01 / T-04 / W-01 / W-02
+    # T-01：把 Tag 的可用内宽压到 28px → 「不合格」三个字必折成两行。
+    # 用 CSS 而不是改列宽：改列宽会连带 Σ（P17 红）、W-01（声明 < needW）、W-02（渲染≠声明），
+    # 那样「多翻」来自注入手段而不是判据重叠，自证就说不清是哪条抓到的。
+    # 注意不能只写 max-width：容器的 `.ant-tag` 是 `display:inline-flex;height:22px;line-height:1`，
+    # 压窄了它只会**裁掉**文字、不会换行（折行要有可换的行盒）。要先把行盒打开。
+    {"name": "T01_tag_wrap", "kind": "css", "want": ["P20"],
+     "allow": ["P9", "P22", "P2a", "P2b"],
+     "allowWhy": "Tag 折成两行 → 该列行高从 34 涨到 46（P9 极差、P22 格高），"
+                 "一屏可见行数随之减少（P2a/P2b）。行高与一屏行数是折行的**必然**后果，"
+                 "不是「T-01 与它们在测同一件事」",
+     "payload": ".ant-table td .ant-tag{display:inline-block!important;height:auto!important;"
+                "white-space:normal!important;line-height:18px!important;max-width:26px!important}"},
+    # T-04：教材的「序号」在 866 档是 54（改前 48 被裁 4px）。改回 48 就必红 ——
+    # 这是这条判据**现成的负例**，不需要另造产物。
+    # 连带 P17（Σ 866→860）与 P24（48 < needW 52）是改列宽的真实后果：
+    # 列宽动了，预算闭合与下限当然跟着动，那不是判据重叠。
+    {"name": "T04_hdr_clip", "kind": "json", "want": ["P23"],
+     "allow": ["P17", "P24"],
+     "allowWhy": "序号 54→48 让 Σ 从 866 掉到 860（P17 预算闭合）且 48 < needW 52（P24）—— "
+                 "改列宽必然连带动预算与下限，二者不是与 T-04 在测同一件事",
+     "payload": lambda p: _mutate_table(p, lambda tp: _set_col_width(tp, "序号", 48))},
+    # W-01：「状态」列声明 80、Tag 实际需要 78。压到 76 就低于下限（不折行，只差 2px）——
+    # 用它证明这条判据量的是「声明 vs needW」，不是「屏幕上看不看得出折行」。
+    {"name": "W01_below_need", "kind": "json", "want": ["P24"], "allow": ["P17", "P18"],
+     "allowWhy": "80→76 让 Σ 从 866 掉到 862（P17 预算闭合红）；列窄到 76 后 Tag 撑出单元格，"
+                 "「真溢出列集合」多一列没配 ellipsis 的（P18 集合相等红）—— 都是改宽的直接后果",
+     "payload": lambda p: _mutate_table(p, lambda tp: _set_col_width(tp, "状态", 76))},
+    # W-02：只改 DOM 上的列宽（不动 JSON 声明）→ 声明与渲染脱钩。
+    # 这正是「声明 48 / 渲染 108」那类缺陷的形态，且只有逐列比较能抓到。
+    {"name": "W02_render_drift", "kind": "css", "want": ["P25"], "allow": ["P17", "P8"],
+     "allowWhy": "把首列渲染成 80px：Σ渲染 与 Σ声明 脱开（P17），且总宽超出内容宽 → 出现横向溢出（P8）。"
+                 "P17 只判 866 档的预算闭合，P25 判任意档位的逐列脱钩，两者重叠但不等价",
+     "payload": ".ant-table.fixed th:nth-child(1),.ant-table.fixed td:nth-child(1){width:80px!important}"},
+    # ---- V-01：闭合式 + N-d 独立判红
+    # N-d 是**唯一**能用来说明「为什么不能只留一条闭合式」的注入：zoom .9 下内容盒实际布局宽
+    # 1316 而 clientWidth 报 1184，闭合差仍是 0 —— 闭合式看不见它，只能靠缩放检测独立判红。
+    # 允许的连带都是缩放的**真实后果**：所有以内容宽为分母的判据（预算闭合、一屏行数、
+    # 列宽下限/声明=渲染）都会跟着变，因为布局真的被缩了。
+    {"name": "V01_zoom", "kind": "css", "want": ["V-01"],
+     "allow": ["P11", "P2b", "P4", "P6", "P17", "P20", "P21", "P22", "P23", "P24", "P25", "P8"],
+     "allowWhy": "zoom 把整个内容区的布局宽缩到 1/0.9：一屏行数（P2a/P2b）、栅格控件宽（P4）、"
+                 "列宽预算（P17）、逐列声明=渲染（P25）、表头/短字段/长文本的行盒（P20–P23）、"
+                 "左边界（P6）、溢出（P8）全部按新布局重算；Drawer 声明 560 渲染 504（P11）也是"
+                 "同一个缩放的后果 —— 这些都不是「V-01 与它们在测同一件事」，"
+                 "**关键是：这些红里没有一条叫得响「内容区被缩放了」**，所以 N-d 必须自己判红",
+     "payload": ".ant-content{zoom:.9}"},
+    # N-a：内容区写死上限 1024 → 1024+208+48 = 1280，@1440 差 160。闭合式抓它，N-a 只是 cause 标签。
+    {"name": "V01_maxw", "kind": "css", "want": ["V-01"],
+     "allow": ["P2b", "P4", "P17", "P20", "P21", "P22", "P23", "P24", "P25", "P8"],
+     "allowWhy": "内容宽从 1184 掉到 1024 → 所有以内容宽为分母的判据按新宽重算（同 N-d 的连带清单）；"
+                 "这些红说的是「窄了」，没有一条能说出「上限被写死」，这正是 cause=N-a 存在的理由",
+     "payload": ".ant-content{max-width:1024px}"},
+    # ---- 三条 INCOMPLETE 的造红（三态里的第三态：**量具不可信**，不是产物红）
+    # 守卫按 TOKEN 相等断言，不按条数 —— 「条数相同、集合不同」这坑本仓库踩过（CAPA 两页 FAIL 数都是 21）。
+    {"name": "V01_content_zero", "kind": "css", "want_inc": "CONTENT_ZERO",
+     "allow": ["P1", "P2a", "P2b", "P3a", "P3b", "P4", "P5", "P6", "P7", "P8", "P9", "P10",
+               "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19",
+               "P20", "P21", "P22", "P23", "P24", "P25"],
+     "allowWhy": "把 .ant-content 隐藏后页面上什么都不剩，其余判据只能 SKIP 或红 —— 但这条注入要证的"
+                 "只有一件事：V-01 报的是 INCOMPLETE(原因=CONTENT_ZERO) 而不是 PASS 或 FAIL",
+     "payload": ".ant-content{display:none!important}"},
+    {"name": "V01_parent_hidden", "kind": "css", "want_inc": "PARENT_INVISIBLE",
+     "allow": ["P1", "P2a", "P2b", "P3a", "P3b", "P4", "P5", "P6", "P7", "P8", "P9", "P10",
+               "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19",
+               "P20", "P21", "P22", "P23", "P24", "P25"],
+     "allowWhy": "父盒 display:none 后内容盒也跟着不可见；要证的是「父节点不可见 → PARENT_INVISIBLE」"
+                 "而不是被误报成 CONTENT_ZERO（两个 TOKEN 混成一个，守卫就没法按集合比）",
+     "payload": ".ant-layout.h{display:none!important}"},
+    {"name": "V01_nav_negative", "kind": "css", "want_inc": "NAV_OUT_OF_RANGE",
+     "allow": ["P2b", "P4", "P17", "P24", "P25", "P8"],
+     "allowWhy": "内容 min-width 900 塞进 600 的父盒 → 导航宽 = 600−900 = −300。"
+                 "「内容比父盒还宽」说明父节点选错或取错元素，那是量具问题（INCOMPLETE），"
+                 "不是产物缺陷（FAIL）—— 其余判据按新宽度重算是这个注入的真实后果",
+     "payload": ".ant-layout.h{width:600px!important}.ant-content{min-width:900px!important}"},
+    # ---- P7(W-00) 两个方向各一次：只证一个方向时，「原因=both」就分不出是哪个分支在起作用
+    {"name": "P7_fixed_off", "kind": "json", "want": ["P7"],
+     "allow": ["P17", "P18", "P20", "P21", "P22", "P24", "P25", "P2b", "P9"],
+     "allowWhy": "只把 tableLayout 从 fixed 改成 auto（width 全保留）：列宽改由内容决定 → 配了 ellipsis 的列"
+                 "不再真溢出（P18）、每列按内容定宽后长短列重排（P17/P25 的账本对不上）、长文本开始换行"
+                 "（P20/P21/P22）、行高变化挤掉一屏行数（P9/P2b）、声明宽与实际宽脱钩后下限也换了参照（P24）。"
+                 "**这组连带本身说明了 W-00 为什么是前置**：布局没锁时下游七八条判据的读数全部失去意义 —— "
+                 "不是它们在测同一件事，而是它们量的是同一张已经变形的表",
+     "payload": lambda p: _mutate_table(p, lambda tp: tp.update({"tableLayout": "auto", "fixed": False}))},
+    {"name": "P7_decl_low", "kind": "json", "want": ["P7"],
+     "allow": ["P17", "P24", "P2b", "P9"],
+     "allowWhy": "摘掉两列的 width：声明率 8/8→6/8=75%（<80%，这才是 declared 那一半能红的条件 —— "
+                 "只摘一列是 87.5%，会 PASS，注入就白做了）。Σ 掉 168（P17）；这两列在 fixed 下被按比例"
+                 "重分配 → 列宽与行高变化（P9/P2b），声明侧下限的参照也变了（P24）—— 都是改列宽声明的直接后果",
+     "payload": lambda p: _mutate_table(p, lambda tp: _drop_widths(tp, 2))},
+    # ---- P21(T-02) 长文本没有出口：摘掉 ellipsis 并让这一列真的换行（nowrap 下摘了也不会多行）
+    {"name": "P21_no_exit", "kind": "json", "want": ["P21"],
+     "allow": ["P18", "P22", "P25", "P9", "P2b", "P24"],
+     "allowWhy": "把「物资名称」的 ellipsis 摘掉并强制换行：① 有出口列集合少一个、真溢出集合不变（P18）；"
+                 "② 该列折成多行 → 行高与行数（P9/P22/P2b）；③ 声明了出口的列少一个 → 分母变化（P24）；"
+                 "④ 格内换行后单元格宽仍按 colgroup（P25 可能抖一列）。要证的只有一件事："
+                 "「无出口的长文本列」能被 P21 抓到",
+     "payload": lambda p: _mutate_table(p, lambda tp: _clear_ellipsis(tp, "物资名称")),
+     "css_extra": ".ant-table.fixed th:nth-child(3),.ant-table.fixed td:nth-child(3)"
+                  "{white-space:normal!important}"},
+    # ---- P22(T-03) 行数上限：把一列压到 3 行以上（宽 48 + 允许换行）
+    {"name": "P22_exceed", "kind": "css", "want": ["P22"], "allow": ["P9", "P2b", "P2a", "P25", "P8", "P17"],
+     "allowWhy": "把第 3 列（物资名称）压到 48px 并允许换行 → 长值折成 3 行以上：行高（P9）、一屏行数"
+                 "（P2a/P2b）、列宽账本（P17/P25）与表格总宽（P8）都跟着变。这是「行数超限」的必然伴随，"
+                 "不是 P22 与它们在测同一件事",
+     "payload": ".ant-table.fixed th:nth-child(3),.ant-table.fixed td:nth-child(3)"
+                "{width:48px!important;white-space:normal!important}"},
 ]
+
+
+def _drop_widths(tp, n=2):
+    """摘掉 n 列的 width（默认 2）。为什么是 2 不是 1：声明率阈值是 80%，
+    8 列摘 1 列 = 87.5% 仍然 PASS —— 注入会「没红」，看上去像判据失效，其实是没打到门槛。
+    从尾部摘（操作/状态），这两列不是 ellipsis 列，摘宽不会连带 P18。"""
+    cols = tp.get("columns") or []
+    for c in reversed(cols):
+        if n <= 0:
+            break
+        if "width" in c:
+            c.pop("width", None)
+            n -= 1
+    return tp
+
+
+def _clear_ellipsis(tp, title):
+    """只摘掉某一列的 ellipsis 声明，**不补 wrap/maxLines** —— 补了就等于给了新出口，
+    P21 会认为「有出口」而不红（出口 = ellipsis / wrap+maxLines / 移出表格，任何一个成立都算）。
+    摘掉之后该列默认是 nowrap（不会折行），所以必须配一条 CSS 强制它换行（见 P21_no_exit 的 css_extra）。"""
+    for c in (tp.get("columns") or []):
+        if c.get("title") == title:
+            c.pop("ellipsis", None)
+            c.pop("ellipsisCol", None)
+            break
+    return tp
 
 
 def _first_table_node(page):
@@ -1523,6 +2862,17 @@ def _drop_width(tp):
 def _ellipsis_all(tp):
     for c in (tp.get("columns") or []):
         c["ellipsis"] = True
+    return tp
+
+
+def _set_col_width(tp, title, w):
+    """按标题改一列的声明宽（自证用）。按**标题**不按下标：下标会被插列改掉。"""
+    hit = 0
+    for c in (tp.get("columns") or []):
+        if c.get("title") == title:
+            c["width"] = w
+            hit += 1
+    assert hit == 1, "自证注入找不到唯一的列「%s」（命中 %d 次）" % (title, hit)
     return tp
 
 
@@ -1569,6 +2919,9 @@ def selfcheck(chrome, base_file=None):
                     js = inj["payload"]
                 elif inj["kind"] == "json":
                     inj["payload"](page)
+                # 一条注入偶尔要同时改 JSON 与 CSS（比如「摘掉 ellipsis」+「强制换行」）：
+                # 只有 JSON 侧摘声明时该列仍 nowrap、根本不折行，P21 数的是多行格，注入会不红。
+                css = css + "\n" + (inj.get("css_extra") or "")
             src = Path(CONTAINER).read_text(encoding="utf-8")
             if css:
                 src = src.replace("</style>", "\n/* inject: %s */\n%s\n</style>" % (inj["name"], css), 1)
@@ -1592,7 +2945,8 @@ def selfcheck(chrome, base_file=None):
             return 1
 
         for inj in INJECTIONS:
-            want = inj["want"]
+            want = inj.get("want") or []
+            want_inc = inj.get("want_inc")
             # 前置①：目标判据在基线里必须绿。不绿不是「跳过」，是自证不成立 ——
             # 计入未覆盖，最终 RESULT 为 INCOMPLETE。
             missing = [w for w in want if w not in base_pass]
@@ -1602,14 +2956,37 @@ def selfcheck(chrome, base_file=None):
                          ", ".join("%s=%s" % (w, base_val.get(w, "—")) for w in missing)))
                 ok_all = False
                 continue
-            print("  %-18s 基线 %s" % (inj["name"],
-                                      ", ".join("%s=%s（%s）" % (w, base_val.get(w), "PASS") for w in want)))
+            if want:
+                print("  %-18s 基线 %s" % (inj["name"],
+                                          ", ".join("%s=%s（%s）" % (w, base_val.get(w), "PASS")
+                                                    for w in want)))
+            else:
+                print("  %-18s 基线 V-01=%s（%s）" % (inj["name"], base_val.get("V-01"), "PASS"))
             rows = run(inj)
             now_fail = {r["id"] for r in rows if r["status"] == "FAIL"}
             now_val = {r["id"]: r["value"] for r in rows}
             flipped = now_fail - base_fail
-            ok = set(want).issubset(flipped)
             allow = set(inj.get("allow") or [])
+            if want_inc:
+                # INCOMPLETE 不是 FAIL，所以走另一条断言：**按 TOKEN 相等**，不按条数。
+                # 条数相同而集合不同这坑本仓库踩过（CAPA 两页 FAIL 数都是 21，红的却各是各的）。
+                r01 = next((r for r in rows if r["id"] == "V-01"), None)
+                m = re.search(r"原因=([A-Z_]+)", (r01 or {}).get("note") or "")
+                got_tok = m.group(1) if m else "—"
+                extra = flipped - allow
+                ok = bool(r01) and r01["status"] == "INCOMPLETE" and got_tok == want_inc and not extra
+                print("  %-18s V-01=%s 原因=%s 期望=%s %s%s"
+                      % ("", (r01 or {}).get("status", "—"), got_tok, want_inc,
+                         "OK" if ok else "SELFCHECK-FAIL",
+                         ("  多翻：" + str(sorted(extra))) if extra else ""))
+                if allow and (flipped & allow):
+                    print("          ↳ 允许的连带 %s：%s" % (sorted(flipped & allow), inj.get("allowWhy", "")))
+                if ok:
+                    covered += 1
+                else:
+                    ok_all = False
+                continue
+            ok = set(want).issubset(flipped)
             extra = flipped - set(want) - allow
             print("  %-18s 翻红=%-20s 期望=%-8s %s%s"
                   % ("", sorted(flipped) or "[]", sorted(want),
@@ -1623,6 +3000,16 @@ def selfcheck(chrome, base_file=None):
             else:
                 ok_all = False
         total = len(INJECTIONS)
+        # ---- N-c：手写壳样本（**不是容器产物**）。它不进 INJECTIONS，因为它改的不是 JSON/CSS，
+        # 而是整份 DOM —— 塞进上面那套「基线产物 + 注入」的循环里，等于让 P1–P25 一起把手写壳
+        # 当产物判，翻红清单会全是噪音，真正要证的那对数会被淹掉。
+        print("  N-c 手写壳样本（fixture-nc-manual-shell.html，非容器产物）")
+        nc_ok = nc_shell_check(chrome, tmp)
+        if nc_ok:
+            covered += 1
+        else:
+            ok_all = False
+        total += 1
         print("  自证覆盖=%d/%d" % (covered, total))
         if covered < total or not ok_all:
             print("RESULT INCOMPLETE (selfcheck)：只证明了 %d/%d 条注入，"
@@ -1632,6 +3019,41 @@ def selfcheck(chrome, base_file=None):
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def nc_shell_check(chrome, tmp):
+    """N-c 自证：**两条式子都要比对**，只证「铺满差 340 红了」等于没证。
+
+    样本是 `tests/fixtures/fixture-nc-manual-shell.html`（手写 HTML 壳，内联 `width:1100px`）：
+      · 归因差 = |减法 0 − 真实 0| = **0**      ← N-c 抓不到：壳一包，减法与真实同时变 0 互相抵消
+      · 铺满差 = |1100 − 0 − 1440| = **340**    ← 只有判据②能红
+    那个「0」才是这条样本存在的理由：它证明「归因差覆盖 N-c」是错的。
+    """
+    fx = Path(__file__).with_name("fixtures") / "fixture-nc-manual-shell.html"
+    if not fx.is_file():
+        print("           SELFCHECK-FAIL  样本缺失：%s" % fx)
+        return False
+    src = fx.read_text(encoding="utf-8")
+    hp = Path(tmp) / "n-c.html"
+    hp.write_text(src.replace("</body>", PROBE.replace("/*__INJECT__*/", "") + "</body>", 1),
+                  encoding="utf-8")
+    d = run_viewport(chrome, hp, 1440, 900)
+    g = (d.get("v01prod") or {}).get("v01") or {}
+    nav = (g.get("parentW") - g.get("contentOffsetW")) if g.get("parentW") is not None else None
+    sib = g.get("sibNavW")
+    attrib = abs(nav - sib) if (nav is not None and sib is not None) else None
+    fill = (g.get("parentW") - (g.get("contentBorderW") or 0) - g.get("viewportW")) \
+        if g.get("parentW") is not None else None
+    row = v01_row(d, {}, 1440)
+    ok = (row["status"] == "FAIL" and "cause=N-c" in (row["note"] or "")
+          and attrib is not None and attrib <= V01_TOL
+          and fill is not None and abs(abs(fill) - 340) <= 3)
+    print("           归因差%s ｜ 铺满差%s ｜ %s ｜ %s"
+          % (fmt(attrib), fmt(abs(fill)) if fill is not None else "—",
+             row["status"], "OK" if ok else "SELFCHECK-FAIL"))
+    print("           断言：归因差 ≤%d（0 = 抓不到，这一半必须成立）且 |铺满差| = 340±3 且 cause=N-c"
+          % V01_TOL)
+    return ok
 
 
 def build_case_src(src, data, page_id, out_html, inject_js=""):

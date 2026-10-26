@@ -250,6 +250,7 @@
   **顺带暴露一件事（要人定）**：`example-05` 自己写着 `pagination.total = 1286`，却只渲染 6 行，
   按新规则它是 `INCOMPLETE(造少)` 而不是 SKIP —— 全量模式因此仍是 `RESULT INCOMPLETE`，
   原因从「白名单外 SKIP」变成「教材自己声明了 1286 条、只造了 6 行」。
+  **（已定，见本段 `XX-046`：`total → 6`，2026-10-26；此处保留的是当时的现场描述，不要当待议项读。）**
 - **`P23` 的三类排除分别计数**（不加总）：
   `被裁 0/10 列@1234；另有 1 列表头 >6 全角字、2 列空表头、0 列无裁切盒，不入分母`。
   三类分别是「表头太长（归 T-03 + `ellipsisTitle`）」/「空表头（`rowSelection`/`radio` 槽位，
@@ -357,6 +358,17 @@
   「4 条判据」，幻神就是这样误判「P2b 的分母也是 14」（实际 `TARGET_ROWS_REVIEW = {1440: 9, 1600: 12}`，
   `_rows_gate` 由调用点各自传 need）。自证 26 → **27** 条：构造**同时**有 INCOMPLETE 与 V8 不符的输入，
   断言结论段**两个关键词都在**（只断言一个，早退回来照样过）。
+- **`P2a/P2b` 条件式 SKIP 的常驻自证（27 → 28）**：样本 `tests/fixtures/fixture-p2-rows-skip.json`
+  （6 行、`pagination` 里**只有 `pageSize`、没有 `total` 键**），每次 `--selfcheck` 都重跑，断言三行
+  `(状态, 值)` 精确对 —— `P2a@1440 SKIP(行数 6 < 14，total 未声明)`、
+  `P2b@1440 SKIP(行数 6 < 9，…)`、`P2b@1600 SKIP(行数 6 < 12，…)` —— 外加**该行不在 `bad_skip` 里**。
+  少后半句就是同义反复：证明「它会 SKIP」不等于证明「这个 SKIP 有正当条件」，而 V13 的理由是后者。
+  样本放 `tests/fixtures/` 不放 `assets/examples/`：后者每多一份要同步 `check_docs.EXPECTED_EXAMPLES`、
+  `README` 引用、`check_generators` 的 `gen_exampleNN.py` 三处；`default_targets()` 只 glob
+  `example-*.json`，放 `fixtures/` 也不会被全量模式收进去。
+  四种 `pagination` 写法里只有两种同时满足「有分页脚」与「total 未声明」：`{"pageSize": 6}` 或 `true`；
+  `{"total": 6, …}` 挂正则（值变 `total 6 < 14`），不写 `pagination` 挂 P16（裸 `SKIP(无分页脚)`，不在白名单）。
+  **不靠整轮 `RESULT PASS` 收货**：`default_targets()` 里有 example-05 的登记红，全量模式结构上不可能 PASS。
 - 第一阶段的 `V-01` 只做式子验证、不做判据（需求单第二阶段）；第二阶段已接入（见上）。
   `cause` 的定位仍在一套算式里，没有另立阈值；`N-c` 不可达的理由见上一条通用纪律。
 

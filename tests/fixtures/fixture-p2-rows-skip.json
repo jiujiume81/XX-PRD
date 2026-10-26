@@ -1,0 +1,1682 @@
+{
+  "meta": {
+    "schemaVersion": "1.1",
+    "product": "来料检验管理系统",
+    "version": "0.1.0",
+    "createdAt": "2026-10-22T11:00:00+08:00",
+    "updatedAt": "2026-10-22T11:00:00+08:00",
+    "reviewMode": false,
+    "currentPageId": "page-iqc-list",
+    "defaultPanel": "both"
+  },
+  "product": {
+    "name": "来料检验管理系统",
+    "oneLiner": "把「这批料能不能用」变成一条可追溯的检验记录。",
+    "positioning": "面向锂电材料厂的质检中后台，解决「待检任务在哪、标准是什么、判定归谁」三个问题。",
+    "nonGoals": [
+      "不做供应商绩效评分",
+      "不做实验室仪器排程",
+      "不做 SPC 过程控制图"
+    ],
+    "metrics": [
+      {
+        "name": "来料检验及时率",
+        "type": "ratio",
+        "target": "≥ 95%"
+      },
+      {
+        "name": "单任务平均处理时长",
+        "type": "duration",
+        "target": "中位数 ≤ 6 小时"
+      }
+    ]
+  },
+  "users": [
+    {
+      "id": "u-inspector",
+      "name": "检验员",
+      "description": "负责取样、送检、录入检验结果",
+      "goals": [
+        "一眼看到今天还有多少待检",
+        "打开任务就知道该按哪个标准做"
+      ]
+    },
+    {
+      "id": "u-engineer",
+      "name": "质量工程师",
+      "description": "负责判定、复检与不合格品处置",
+      "goals": [
+        "看到超期与不合格的分布",
+        "判定时能追溯历史批次"
+      ]
+    },
+    {
+      "id": "u-warehouse",
+      "name": "仓库管理员",
+      "description": "负责请验与待检区隔离",
+      "goals": [
+        "知道哪些批次已放行"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-iqc-track",
+      "name": "跟踪来料检验任务",
+      "actor": "u-inspector",
+      "goal": "找到目标批次并推进到检验中",
+      "inputs": [
+        "任务单号 / 批次号 / 物资名称"
+      ],
+      "doneWhen": "任务已开始检验",
+      "pages": [
+        "page-iqc-list"
+      ]
+    },
+    {
+      "id": "task-iqc-create",
+      "name": "新建检验任务",
+      "actor": "u-inspector",
+      "goal": "把请验单转成可执行的检验任务",
+      "inputs": [
+        "物资",
+        "批次号",
+        "请验数量"
+      ],
+      "doneWhen": "任务已保存为待检验",
+      "pages": [
+        "page-iqc-new"
+      ]
+    },
+    {
+      "id": "task-iqc-stats",
+      "name": "查看检验趋势",
+      "actor": "u-engineer",
+      "goal": "判断这个月质量在变好还是变坏",
+      "inputs": [
+        "时间范围"
+      ],
+      "doneWhen": "已看清趋势",
+      "pages": [
+        "page-iqc-stats"
+      ]
+    }
+  ],
+  "userFlows": [
+    {
+      "id": "flow-iqc",
+      "name": "来料检验主流程",
+      "role": "u-inspector",
+      "goal": "从请验到放行",
+      "steps": [
+        {
+          "id": "fs-1",
+          "name": "新建检验任务",
+          "pageId": "page-iqc-new",
+          "note": "保存为待检验"
+        },
+        {
+          "id": "fs-2",
+          "name": "找到并开始检验",
+          "pageId": "page-iqc-list",
+          "note": "待检验 → 检验中"
+        },
+        {
+          "id": "fs-3",
+          "name": "录入结果并判定",
+          "pageId": "page-iqc-list",
+          "note": "检验中 → 待判定 → 已关闭"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "m-iqc",
+      "name": "来料检验",
+      "priority": "P0",
+      "goal": "覆盖请验、检验、判定与放行的闭环",
+      "pageIds": [
+        "page-iqc-list",
+        "page-iqc-new",
+        "page-iqc-stats"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "page-iqc-list",
+      "moduleId": "m-iqc",
+      "name": "来料检验任务",
+      "route": "/iqc/tasks",
+      "goal": "让检验员按批次与状态找到待检任务，就地打开详情并开始检验",
+      "contract": {
+        "task": "task-iqc-track",
+        "actor": [
+          "u-inspector"
+        ],
+        "entity": "InspectionTask",
+        "owns": [
+          "cap-iqc-start",
+          "cap-iqc-export",
+          "cap-iqc-submit",
+          "cap-iqc-approve",
+          "cap-iqc-recheck"
+        ],
+        "submitBoundary": "none",
+        "doneWhen": "目标任务已打开详情或已开始检验"
+      },
+      "layout": "header-sider-content",
+      "componentTree": {
+        "id": "n-iqc-root",
+        "type": "Layout",
+        "props": {
+          "layout": "header-sider-content"
+        },
+        "children": [
+          {
+            "id": "n-iqc-sider",
+            "type": "Sider",
+            "props": {
+              "width": 208,
+              "title": "质量中心"
+            },
+            "children": [
+              {
+                "id": "n-iqc-menu",
+                "type": "Menu",
+                "props": {
+                  "mode": "inline",
+                  "selectedKey": "iqc",
+                  "items": [
+                    {
+                      "key": "iqc",
+                      "label": "来料检验",
+                      "icon": "check"
+                    },
+                    {
+                      "key": "ipqc",
+                      "label": "过程检验",
+                      "icon": "activity"
+                    },
+                    {
+                      "key": "oqc",
+                      "label": "出货检验",
+                      "icon": "send"
+                    },
+                    {
+                      "key": "ncr",
+                      "label": "不合格品",
+                      "icon": "alert"
+                    },
+                    {
+                      "key": "stats",
+                      "label": "检验统计",
+                      "icon": "chart"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "n-iqc-header",
+            "type": "Header",
+            "props": {
+              "title": "来料检验"
+            }
+          },
+          {
+            "id": "n-iqc-content",
+            "type": "Content",
+            "children": [
+              {
+                "id": "n-iqc-title",
+                "type": "Space",
+                "props": {
+                  "align": "center",
+                  "size": 12,
+                  "justify": "space-between",
+                  "block": true
+                },
+                "children": [
+                  {
+                    "id": "n-iqc-title-l",
+                    "type": "Space",
+                    "props": {
+                      "align": "center",
+                      "size": 12
+                    },
+                    "children": [
+                      {
+                        "id": "n-iqc-h1",
+                        "type": "Typography",
+                        "props": {
+                          "level": 1,
+                          "text": "来料检验任务"
+                        }
+                      },
+                      {
+                        "id": "n-iqc-seg",
+                        "type": "Segmented",
+                        "props": {
+                          "options": [
+                            "全部 342",
+                            "待检验 18",
+                            "检验中 6",
+                            "待判定 3"
+                          ],
+                          "value": "全部 342"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-iqc-title-r",
+                    "type": "Space",
+                    "props": {
+                      "align": "center",
+                      "size": 8
+                    },
+                    "children": [
+                      {
+                        "id": "n-btn-stats",
+                        "type": "Button",
+                        "props": {
+                          "text": "检验统计",
+                          "icon": "chart"
+                        }
+                      },
+                      {
+                        "id": "n-btn-export",
+                        "type": "Button",
+                        "props": {
+                          "text": "导出",
+                          "capability": "cap-iqc-export",
+                          "icon": "download"
+                        }
+                      },
+                      {
+                        "id": "n-btn-new",
+                        "type": "Button",
+                        "props": {
+                          "text": "新建检验任务",
+                          "type": "primary",
+                          "capability": "cap-iqc-create",
+                          "icon": "plus"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "n-iqc-table",
+                "type": "Table",
+                "props": {
+                  "size": "xs",
+                  "tableLayout": "fixed",
+                  "stickyHeader": true,
+                  "maxHeight": "calc(100vh - 438px)",
+                  "stickyFooter": true,
+                  "filterBar": "grid3",
+                  "query": [
+                    {
+                      "label": "任务单号",
+                      "type": "Input",
+                      "placeholder": "如 IQC-20261022-0019"
+                    },
+                    {
+                      "label": "请验日期",
+                      "type": "DatePicker",
+                      "placeholder": "开始日期"
+                    },
+                    {
+                      "label": "状态",
+                      "type": "Select",
+                      "props": {
+                        "options": [
+                          {
+                            "value": "待检验",
+                            "label": "待检验"
+                          },
+                          {
+                            "value": "检验中",
+                            "label": "检验中"
+                          },
+                          {
+                            "value": "待判定",
+                            "label": "待判定"
+                          },
+                          {
+                            "value": "已关闭",
+                            "label": "已关闭"
+                          },
+                          {
+                            "value": "不合格",
+                            "label": "不合格"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "label": "物资名称",
+                      "type": "Input",
+                      "placeholder": "支持模糊匹配"
+                    },
+                    {
+                      "label": "批次号",
+                      "type": "Input",
+                      "placeholder": "如 LOT-A26"
+                    },
+                    {
+                      "label": "检验类型",
+                      "type": "Select",
+                      "props": {
+                        "options": [
+                          {
+                            "value": "来料检验",
+                            "label": "来料检验"
+                          },
+                          {
+                            "value": "复检",
+                            "label": "复检"
+                          },
+                          {
+                            "value": "免检抽验",
+                            "label": "免检抽验"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "queryId": "n-btn-query",
+                  "resetId": "n-btn-reset",
+                  "pagination": {
+                    "pageSize": 6,
+                    "current": 1
+                  },
+                  "columns": [
+                    {
+                      "title": "序号",
+                      "dataIndex": "no",
+                      "width": 54,
+                      "align": "left"
+                    },
+                    {
+                      "title": "任务单号",
+                      "dataIndex": "taskNo",
+                      "width": 182
+                    },
+                    {
+                      "title": "物资名称",
+                      "dataIndex": "material",
+                      "width": 125,
+                      "ellipsis": true
+                    },
+                    {
+                      "title": "批次号",
+                      "dataIndex": "lot",
+                      "width": 146
+                    },
+                    {
+                      "title": "取样·样品",
+                      "dataIndex": "samples",
+                      "width": 88,
+                      "align": "right"
+                    },
+                    {
+                      "title": "质检标准",
+                      "dataIndex": "standard",
+                      "width": 103,
+                      "ellipsis": true
+                    },
+                    {
+                      "title": "状态",
+                      "dataIndex": "status",
+                      "width": 80,
+                      "type": "tag"
+                    },
+                    {
+                      "title": "操作",
+                      "dataIndex": "op",
+                      "width": 88,
+                      "type": "action",
+                      "actions": [
+                        {
+                          "key": "detail",
+                          "label": "详情"
+                        },
+                        {
+                          "key": "start",
+                          "label": "开始",
+                          "capability": "cap-iqc-start"
+                        }
+                      ]
+                    }
+                  ],
+                  "data": [
+                    {
+                      "no": "1",
+                      "taskNo": "IQC-20261022-0020",
+                      "material": "三元正极材料 NCM811",
+                      "lot": "LOT-A26-1022",
+                      "samples": "12/3",
+                      "standard": "YS/T 798-2012 镍钴锰酸锂",
+                      "status": "待检验",
+                      "op": ""
+                    },
+                    {
+                      "no": "2",
+                      "taskNo": "IQC-20261022-0019",
+                      "material": "磷酸铁锂 LFP-200",
+                      "lot": "LOT-B14-1022",
+                      "samples": "8/2",
+                      "standard": "GB/T 24533-2019 石墨类负极",
+                      "status": "检验中",
+                      "op": ""
+                    },
+                    {
+                      "no": "3",
+                      "taskNo": "IQC-20261022-0018",
+                      "material": "超细球形钴酸锂 D50 12μm",
+                      "lot": "LOT-C08-1022",
+                      "samples": "6/2",
+                      "standard": "GB/T 26008-2020 电池用电解液",
+                      "status": "待判定",
+                      "op": ""
+                    },
+                    {
+                      "no": "4",
+                      "taskNo": "IQC-20261022-0017",
+                      "material": "导电炭黑 Super-P",
+                      "lot": "LOT-D31-1022",
+                      "samples": "4/1",
+                      "standard": "HG/T 3072-2019 炭黑吸碘值",
+                      "status": "待检验",
+                      "op": ""
+                    },
+                    {
+                      "no": "5",
+                      "taskNo": "IQC-20261022-0016",
+                      "material": "聚偏氟乙烯 PVDF 5130",
+                      "lot": "LOT-E02-1022",
+                      "samples": "5/1",
+                      "standard": "GB/T 32684-2016 胶粘剂",
+                      "status": "已关闭",
+                      "op": ""
+                    },
+                    {
+                      "no": "6",
+                      "taskNo": "IQC-20261022-0015",
+                      "material": "铝箔 12μm 双面光",
+                      "lot": "LOT-F19-1022",
+                      "samples": "10/2",
+                      "standard": "GB/T 36146-2018 锂电铝箔",
+                      "status": "已关闭",
+                      "op": ""
+                    }
+                  ],
+                  "rowKey": "taskNo",
+                  "rowClick": true,
+                  "emptyAction": {
+                    "text": "去建检验任务",
+                    "icon": "plus",
+                    "id": "n-btn-empty-new"
+                  }
+                }
+              },
+              {
+                "id": "n-iqc-drawer",
+                "type": "Drawer",
+                "props": {
+                  "title": "检验任务详情 · IQC-20261022-0020",
+                  "width": 560,
+                  "placement": "right"
+                },
+                "children": [
+                  {
+                    "id": "n-dw-desc",
+                    "type": "Descriptions",
+                    "props": {
+                      "column": 2,
+                      "size": "small",
+                      "items": [
+                        {
+                          "label": "任务单号",
+                          "value": "IQC-20261022-0020"
+                        },
+                        {
+                          "label": "状态",
+                          "value": "待检验"
+                        },
+                        {
+                          "label": "物资名称",
+                          "value": "三元正极材料 NCM811"
+                        },
+                        {
+                          "label": "批次号",
+                          "value": "LOT-A26-1022"
+                        },
+                        {
+                          "label": "请验数量",
+                          "value": "3,000 kg"
+                        },
+                        {
+                          "label": "取样数量",
+                          "value": "12 件 / 3 件"
+                        },
+                        {
+                          "label": "质检标准",
+                          "value": "YS/T 798-2012 镍钴锰酸锂"
+                        },
+                        {
+                          "label": "供应商",
+                          "value": "青海锂业新材料"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "n-dw-table-title",
+                    "type": "Typography",
+                    "props": {
+                      "text": "检验项目（6 项）"
+                    }
+                  },
+                  {
+                    "id": "n-dw-table",
+                    "type": "Table",
+                    "props": {
+                      "size": "small",
+                      "tableLayout": "fixed",
+                      "columns": [
+                        {
+                          "title": "项目",
+                          "dataIndex": "item",
+                          "width": 96
+                        },
+                        {
+                          "title": "方法",
+                          "dataIndex": "method",
+                          "width": 96
+                        },
+                        {
+                          "title": "标准值",
+                          "dataIndex": "spec",
+                          "width": 96,
+                          "align": "right"
+                        },
+                        {
+                          "title": "实测",
+                          "dataIndex": "value",
+                          "width": 72,
+                          "align": "right"
+                        },
+                        {
+                          "title": "结论",
+                          "dataIndex": "result",
+                          "width": 64,
+                          "type": "tag"
+                        }
+                      ],
+                      "data": [
+                        {
+                          "item": "镍含量",
+                          "method": "滴定",
+                          "spec": "≥ 88.0%",
+                          "value": "88.6%",
+                          "result": "合格"
+                        },
+                        {
+                          "item": "水分",
+                          "method": "卡尔费休",
+                          "spec": "≤ 500ppm",
+                          "value": "312ppm",
+                          "result": "合格"
+                        },
+                        {
+                          "item": "D50 粒度",
+                          "method": "激光粒度",
+                          "spec": "10–12μm",
+                          "value": "11.2μm",
+                          "result": "合格"
+                        },
+                        {
+                          "item": "比表面积",
+                          "method": "BET",
+                          "spec": "0.20–0.35",
+                          "value": "0.27",
+                          "result": "合格"
+                        },
+                        {
+                          "item": "磁性异物",
+                          "method": "磁棒吸附",
+                          "spec": "≤ 20ppb",
+                          "value": "14ppb",
+                          "result": "合格"
+                        },
+                        {
+                          "item": "pH 值",
+                          "method": "电位法",
+                          "spec": "10.5–11.5",
+                          "value": "11.8",
+                          "result": "不合格"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "n-dw-actions",
+                    "type": "Space",
+                    "props": {
+                      "align": "center",
+                      "size": 8
+                    },
+                    "children": [
+                      {
+                        "id": "n-dw-close",
+                        "type": "Button",
+                        "props": {
+                          "text": "关闭"
+                        }
+                      },
+                      {
+                        "id": "n-dw-start",
+                        "type": "Button",
+                        "props": {
+                          "text": "开始检验",
+                          "type": "primary",
+                          "capability": "cap-iqc-start"
+                        }
+                      },
+                      {
+                        "id": "n-dw-submit",
+                        "type": "Button",
+                        "props": {
+                          "text": "提交检验结果",
+                          "type": "primary",
+                          "capability": "cap-iqc-submit"
+                        }
+                      },
+                      {
+                        "id": "n-dw-approve",
+                        "type": "Button",
+                        "props": {
+                          "text": "判定合格",
+                          "type": "primary",
+                          "capability": "cap-iqc-approve"
+                        }
+                      },
+                      {
+                        "id": "n-dw-recheck",
+                        "type": "Button",
+                        "props": {
+                          "text": "需复检",
+                          "capability": "cap-iqc-recheck"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "s-default",
+          "name": "默认态",
+          "description": "默认：按请验时间倒序展示全部 342 条中的第 1 页（20 行）",
+          "vars": {},
+          "overrides": []
+        },
+        {
+          "id": "s-loading",
+          "name": "加载态",
+          "description": "加载中：表格骨架屏，筛选区与标题带保持可见",
+          "vars": {},
+          "overrides": [
+            {
+              "target": "n-iqc-table",
+              "prop": "loading",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "s-empty",
+          "name": "空态",
+          "description": "空：本月还没有建过检验任务 —— 给「去建检验任务」",
+          "vars": {},
+          "overrides": [
+            {
+              "target": "n-iqc-table",
+              "prop": "data",
+              "value": []
+            },
+            {
+              "target": "n-iqc-table",
+              "prop": "emptyText",
+              "value": "本月还没有来料检验任务"
+            },
+            {
+              "target": "n-iqc-table",
+              "prop": "emptyAction",
+              "value": {
+                "text": "去建检验任务",
+                "icon": "plus",
+                "id": "n-btn-empty-new"
+              }
+            }
+          ]
+        },
+        {
+          "id": "s-no-result",
+          "name": "零结果态",
+          "description": "零结果：筛选后 0 条 —— 文案与动作都不同于全空",
+          "vars": {},
+          "overrides": [
+            {
+              "target": "n-iqc-table",
+              "prop": "data",
+              "value": []
+            },
+            {
+              "target": "n-iqc-table",
+              "prop": "emptyText",
+              "value": "没有符合条件的检验任务，试试清空筛选"
+            },
+            {
+              "target": "n-iqc-table",
+              "prop": "emptyAction",
+              "value": {
+                "text": "清空筛选",
+                "id": "n-btn-empty-reset"
+              }
+            }
+          ]
+        },
+        {
+          "id": "s-error",
+          "name": "异常态",
+          "description": "异常：检验服务不可用",
+          "vars": {},
+          "overrides": [
+            {
+              "target": "n-iqc-table",
+              "prop": "data",
+              "value": []
+            },
+            {
+              "target": "n-iqc-table",
+              "prop": "emptyText",
+              "value": "检验服务暂时不可用，请稍后重试（IQC-503）"
+            }
+          ]
+        },
+        {
+          "id": "s-long-text",
+          "name": "超长文本态",
+          "description": "超长文本：物资名称与标准名远超列宽，验证 ellipsis + title 不撑行高",
+          "vars": {},
+          "overrides": [
+            {
+              "target": "n-iqc-table",
+              "prop": "data",
+              "value": [
+                {
+                  "no": "1",
+                  "taskNo": "IQC-20261022-0020",
+                  "material": "超细球形三元正极材料 NCM811（单晶，D50 10–12μm，比表 0.25m²/g）",
+                  "lot": "LOT-A26-1022",
+                  "samples": "12/3",
+                  "standard": "YS/T 798-2012 镍钴锰酸锂（含 2021 年第 2 号修改单，附录 B 粒度与比表方法）",
+                  "status": "待检验",
+                  "op": ""
+                },
+                {
+                  "no": "2",
+                  "taskNo": "IQC-20261022-0019",
+                  "material": "磷酸铁锂 LFP-200（碳包覆，压实密度 2.55g/cm³，克容量 155mAh/g）",
+                  "lot": "LOT-B14-1022",
+                  "samples": "8/2",
+                  "standard": "GB/T 24533-2019 锂离子电池石墨类负极材料（附录 C 首次库伦效率测定）",
+                  "status": "检验中",
+                  "op": ""
+                },
+                {
+                  "no": "3",
+                  "taskNo": "IQC-20261022-0018",
+                  "material": "超细球形钴酸锂 D50 12μm",
+                  "lot": "LOT-C08-1022",
+                  "samples": "6/2",
+                  "standard": "GB/T 26008-2020 电池用电解液",
+                  "status": "待判定",
+                  "op": ""
+                },
+                {
+                  "no": "4",
+                  "taskNo": "IQC-20261022-0017",
+                  "material": "导电炭黑 Super-P",
+                  "lot": "LOT-D31-1022",
+                  "samples": "4/1",
+                  "standard": "HG/T 3072-2019 炭黑吸碘值",
+                  "status": "待检验",
+                  "op": ""
+                },
+                {
+                  "no": "5",
+                  "taskNo": "IQC-20261022-0016",
+                  "material": "聚偏氟乙烯 PVDF 5130",
+                  "lot": "LOT-E02-1022",
+                  "samples": "5/1",
+                  "standard": "GB/T 32684-2016 胶粘剂",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "6",
+                  "taskNo": "IQC-20261022-0015",
+                  "material": "铝箔 12μm 双面光",
+                  "lot": "LOT-F19-1022",
+                  "samples": "10/2",
+                  "standard": "GB/T 36146-2018 锂电铝箔",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "7",
+                  "taskNo": "IQC-20261022-0014",
+                  "material": "铜箔 6μm 高抗拉",
+                  "lot": "LOT-G05-1022",
+                  "samples": "10/2",
+                  "standard": "GB/T 5230-2020 电解铜箔",
+                  "status": "检验中",
+                  "op": ""
+                },
+                {
+                  "no": "8",
+                  "taskNo": "IQC-20261021-0013",
+                  "material": "N-甲基吡咯烷酮 NMP",
+                  "lot": "LOT-H22-1021",
+                  "samples": "3/1",
+                  "standard": "GB/T 27563-2011 工业用 NMP",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "9",
+                  "taskNo": "IQC-20261021-0012",
+                  "material": "隔膜 16μm 陶瓷涂覆",
+                  "lot": "LOT-J11-1021",
+                  "samples": "8/2",
+                  "standard": "GB/T 36363-2018 锂电隔膜",
+                  "status": "待判定",
+                  "op": ""
+                },
+                {
+                  "no": "10",
+                  "taskNo": "IQC-20261021-0011",
+                  "material": "六氟磷酸锂 LiPF6",
+                  "lot": "LOT-K07-1021",
+                  "samples": "4/1",
+                  "standard": "GB/T 19282-2014 六氟磷酸锂",
+                  "status": "待检验",
+                  "op": ""
+                },
+                {
+                  "no": "11",
+                  "taskNo": "IQC-20261021-0010",
+                  "material": "石墨负极 S360 人造",
+                  "lot": "LOT-L30-1021",
+                  "samples": "9/2",
+                  "standard": "GB/T 24533-2019 石墨类负极",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "12",
+                  "taskNo": "IQC-20261021-0009",
+                  "material": "羧甲基纤维素钠 CMC",
+                  "lot": "LOT-M16-1021",
+                  "samples": "3/1",
+                  "standard": "GB 1886.232-2016 食品添加剂",
+                  "status": "不合格",
+                  "op": ""
+                },
+                {
+                  "no": "13",
+                  "taskNo": "IQC-20261020-0008",
+                  "material": "丁苯橡胶 SBR 乳液",
+                  "lot": "LOT-N09-1020",
+                  "samples": "5/1",
+                  "standard": "GB/T 8658-2020 丁苯胶乳",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "14",
+                  "taskNo": "IQC-20261020-0007",
+                  "material": "铝塑膜 113μm 银灰",
+                  "lot": "LOT-P24-1020",
+                  "samples": "6/1",
+                  "standard": "QB/T 5500-2020 铝塑复合膜",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "15",
+                  "taskNo": "IQC-20261020-0006",
+                  "material": "三元正极材料 NCM622",
+                  "lot": "LOT-Q13-1020",
+                  "samples": "12/3",
+                  "standard": "YS/T 798-2012 镍钴锰酸锂",
+                  "status": "检验中",
+                  "op": ""
+                },
+                {
+                  "no": "16",
+                  "taskNo": "IQC-20261020-0005",
+                  "material": "磷酸铁锂 LFP-300 高倍率",
+                  "lot": "LOT-R28-1020",
+                  "samples": "10/2",
+                  "standard": "GB/T 33827-2017 磷酸铁锂",
+                  "status": "待检验",
+                  "op": ""
+                },
+                {
+                  "no": "17",
+                  "taskNo": "IQC-20261019-0004",
+                  "material": "导电石墨 KS-6",
+                  "lot": "LOT-S04-1019",
+                  "samples": "4/1",
+                  "standard": "GB/T 3519-2008 微晶石墨",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "18",
+                  "taskNo": "IQC-20261019-0003",
+                  "material": "电解液 LB-347 高电压",
+                  "lot": "LOT-T18-1019",
+                  "samples": "4/1",
+                  "standard": "GB/T 26008-2020 电池用电解液",
+                  "status": "已关闭",
+                  "op": ""
+                },
+                {
+                  "no": "19",
+                  "taskNo": "IQC-20261019-0002",
+                  "material": "粘结剂 PVDF  HSV900",
+                  "lot": "LOT-U21-1019",
+                  "samples": "5/1",
+                  "standard": "GB/T 32684-2016 胶粘剂",
+                  "status": "待判定",
+                  "op": ""
+                },
+                {
+                  "no": "20",
+                  "taskNo": "IQC-20261019-0001",
+                  "material": "镍钴铝酸锂 NCA 92%",
+                  "lot": "LOT-V06-1019",
+                  "samples": "12/3",
+                  "standard": "YS/T 1125-2016 镍钴铝酸锂",
+                  "status": "已关闭",
+                  "op": ""
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "defaultStateId": "s-default",
+      "interactions": [
+        {
+          "id": "ix-row-detail",
+          "name": "点行打开详情抽屉",
+          "on": {
+            "event": "click",
+            "target": "n-iqc-table__row_*"
+          },
+          "actions": [
+            {
+              "type": "showDrawer",
+              "drawerId": "n-iqc-drawer"
+            }
+          ]
+        },
+        {
+          "id": "ix-drawer-close",
+          "name": "关闭详情抽屉",
+          "on": {
+            "event": "click",
+            "target": "n-dw-close"
+          },
+          "actions": [
+            {
+              "type": "hideDrawer",
+              "drawerId": "n-iqc-drawer"
+            }
+          ]
+        },
+        {
+          "id": "ix-start",
+          "name": "开始检验",
+          "on": {
+            "event": "click",
+            "target": "n-iqc-table__act_*_start"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "success",
+              "text": "已开始检验，状态变为「检验中」"
+            }
+          ]
+        },
+        {
+          "id": "ix-submit",
+          "name": "提交检验结果",
+          "on": {
+            "event": "click",
+            "target": "n-dw-submit"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "success",
+              "text": "结果已提交，状态变为「待判定」"
+            },
+            {
+              "type": "hideDrawer",
+              "drawerId": "n-iqc-drawer"
+            }
+          ]
+        },
+        {
+          "id": "ix-approve",
+          "name": "判定合格并关闭",
+          "on": {
+            "event": "click",
+            "target": "n-dw-approve"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "success",
+              "text": "已判定合格，批次放行，任务关闭"
+            },
+            {
+              "type": "hideDrawer",
+              "drawerId": "n-iqc-drawer"
+            }
+          ]
+        },
+        {
+          "id": "ix-recheck",
+          "name": "判定需复检",
+          "on": {
+            "event": "click",
+            "target": "n-dw-recheck"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "warning",
+              "text": "已生成复检任务，状态回到「检验中」"
+            },
+            {
+              "type": "hideDrawer",
+              "drawerId": "n-iqc-drawer"
+            }
+          ]
+        },
+        {
+          "id": "ix-new",
+          "name": "新建检验任务",
+          "on": {
+            "event": "click",
+            "target": "n-btn-new"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-iqc-new"
+            }
+          ]
+        },
+        {
+          "id": "ix-stats",
+          "name": "看检验统计",
+          "on": {
+            "event": "click",
+            "target": "n-btn-stats"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-iqc-stats"
+            }
+          ]
+        },
+        {
+          "id": "ix-export",
+          "name": "导出当前筛选结果",
+          "on": {
+            "event": "click",
+            "target": "n-btn-export"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "info",
+              "text": "已导出 342 条（按当前筛选）"
+            }
+          ]
+        },
+        {
+          "id": "ix-query",
+          "name": "按条件查询",
+          "on": {
+            "event": "click",
+            "target": "n-btn-query"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "info",
+              "text": "已按条件筛选"
+            }
+          ]
+        },
+        {
+          "id": "ix-reset",
+          "name": "重置筛选",
+          "on": {
+            "event": "click",
+            "target": "n-btn-reset"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "info",
+              "text": "筛选条件已清空"
+            }
+          ]
+        }
+      ],
+      "annotations": [],
+      "entryFrom": [],
+      "exitTo": [
+        "page-iqc-new",
+        "page-iqc-stats"
+      ],
+      "prd": {
+        "reqIds": [
+          "REQ-IQC-002",
+          "REQ-IQC-003"
+        ],
+        "sections": [
+          {
+            "id": "sec-iqc-1",
+            "heading": "页面职责",
+            "body": "检验员在这里完成三件事：**找到任务**、**看一眼详情**、**开始检验**。\n判定与关闭属于质量工程师（在详情抽屉里完成），新建是独立页面 —— 本页不承担它们。"
+          },
+          {
+            "id": "sec-iqc-2",
+            "heading": "为什么详情是抽屉不是跳页",
+            "body": "跳页会把「我在看第几行」从屏幕上抹掉，回来要重新找一遍。\n抽屉宽 560，866 档下还剩 306px 能看到当前行 —— **详情不许占用列表高度**，这是「一屏多 13 行」与「一屏 6 行」的差别所在。"
+          },
+          {
+            "id": "sec-iqc-3",
+            "heading": "为什么没有统计卡",
+            "body": "统计卡占 272px，正好是 8 行数据。要看数量用标题带的 `Segmented`（不额外占行），要看趋势去 `检验统计` 页 —— 那里没有数据行要抢高度。"
+          }
+        ]
+      }
+    }
+  ],
+  "components": [
+    {
+      "id": "c-dense-table",
+      "name": "作业型列表表格",
+      "antd": "Table",
+      "spec": "size:'xs' + tableLayout:'fixed' + 每列显式 width；设计行高 32 / 实测 34；1440 档 9 折算行（8 整行）",
+      "variants": [
+        {
+          "name": "验收档 866（8 列）"
+        },
+        {
+          "name": "验收档 1026（同一套 8 列拉伸）"
+        }
+      ],
+      "states": [
+        "默认",
+        "加载",
+        "空",
+        "零结果",
+        "异常",
+        "超长文本"
+      ]
+    },
+    {
+      "id": "c-filter-bar",
+      "name": "两行三列筛选区",
+      "antd": "Form",
+      "spec": "3 列栅格，label 76 右对齐，控件 240–320，动作独立一行",
+      "variants": [
+        {
+          "name": "6 字段两行"
+        },
+        {
+          "name": "3 字段一行"
+        },
+        {
+          "name": "收起"
+        }
+      ],
+      "states": [
+        "展开",
+        "收起"
+      ]
+    },
+    {
+      "id": "c-drawer",
+      "name": "详情抽屉",
+      "antd": "Drawer",
+      "spec": "560 宽，头体脚三件套，关闭后回到原行",
+      "variants": [
+        {
+          "name": "w-lg 560"
+        }
+      ],
+      "states": [
+        "打开",
+        "关闭"
+      ]
+    }
+  ],
+  "stateMachines": [
+    {
+      "id": "sm-iqc",
+      "name": "检验任务状态机",
+      "entity": "InspectionTask",
+      "initial": "pending",
+      "states": [
+        {
+          "id": "pending",
+          "name": "待检验",
+          "type": "warning"
+        },
+        {
+          "id": "testing",
+          "name": "检验中",
+          "type": "processing"
+        },
+        {
+          "id": "review",
+          "name": "待判定",
+          "type": "normal"
+        },
+        {
+          "id": "closed",
+          "name": "已关闭",
+          "type": "disabled"
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t-iqc-1",
+          "from": "pending",
+          "to": "testing",
+          "trigger": "检验员点击「开始检验」",
+          "role": "u-inspector",
+          "guard": "任务未被他人锁定",
+          "action": "记录开始时间并锁定任务",
+          "ui": {
+            "pageId": "page-iqc-list",
+            "interactionId": "ix-start"
+          }
+        },
+        {
+          "id": "t-iqc-2",
+          "from": "testing",
+          "to": "review",
+          "trigger": "检验员提交检验结果",
+          "role": "u-inspector",
+          "guard": "全部检验项目均已录入",
+          "action": "生成结果快照并通知质量工程师",
+          "ui": {
+            "pageId": "page-iqc-list",
+            "interactionId": "ix-submit"
+          }
+        },
+        {
+          "id": "t-iqc-3",
+          "from": "review",
+          "to": "closed",
+          "trigger": "质量工程师判定合格",
+          "role": "u-engineer",
+          "guard": "所有项目结论为合格",
+          "action": "放行批次并解锁待检区",
+          "ui": {
+            "pageId": "page-iqc-list",
+            "interactionId": "ix-approve"
+          }
+        },
+        {
+          "id": "t-iqc-4",
+          "from": "review",
+          "to": "testing",
+          "trigger": "质量工程师判定需复检",
+          "role": "u-engineer",
+          "guard": "至少一项结论不合格",
+          "action": "生成复检任务并保留原始结果",
+          "ui": {
+            "pageId": "page-iqc-list",
+            "interactionId": "ix-recheck"
+          }
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "cap-iqc-create",
+      "name": "新建检验任务",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-inspector"
+      ],
+      "from": [],
+      "policy": "disabled",
+      "effect": "生成待检验任务并回到列表",
+      "page": "page-iqc-new",
+      "requirement": "REQ-IQC-001"
+    },
+    {
+      "id": "cap-iqc-start",
+      "name": "开始检验",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-inspector"
+      ],
+      "from": [
+        "pending"
+      ],
+      "to": "testing",
+      "policy": "disabled",
+      "reason": "仅「待检验」可开始检验，当前为「检验中 / 待判定 / 已关闭」",
+      "effect": "状态进入检验中并锁定",
+      "page": "page-iqc-list",
+      "requirement": "REQ-IQC-002"
+    },
+    {
+      "id": "cap-iqc-export",
+      "name": "导出筛选结果",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-inspector",
+        "u-engineer"
+      ],
+      "from": [],
+      "policy": "disabled",
+      "effect": "导出当前筛选下的任务",
+      "page": "page-iqc-list",
+      "requirement": "REQ-IQC-003"
+    },
+    {
+      "id": "cap-iqc-submit",
+      "name": "提交检验结果",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-inspector"
+      ],
+      "from": [
+        "testing"
+      ],
+      "to": "review",
+      "policy": "disabled",
+      "reason": "仅「检验中」可提交检验结果，当前为「待检验 / 待判定 / 已关闭」",
+      "effect": "生成结果快照并进入待判定",
+      "page": "page-iqc-list",
+      "requirement": "REQ-IQC-005"
+    },
+    {
+      "id": "cap-iqc-approve",
+      "name": "判定合格",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-engineer"
+      ],
+      "from": [
+        "review"
+      ],
+      "to": "closed",
+      "policy": "disabled",
+      "reason": "仅「待判定」可判定合格，当前为「待检验 / 检验中 / 已关闭」",
+      "effect": "放行批次并关闭任务",
+      "page": "page-iqc-list",
+      "requirement": "REQ-IQC-005"
+    },
+    {
+      "id": "cap-iqc-recheck",
+      "name": "判定需复检",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-engineer"
+      ],
+      "from": [
+        "review"
+      ],
+      "to": "testing",
+      "policy": "disabled",
+      "reason": "仅「待判定」可判定需复检，当前为「待检验 / 检验中 / 已关闭」",
+      "effect": "生成复检任务并回到检验中",
+      "page": "page-iqc-list",
+      "requirement": "REQ-IQC-005"
+    },
+    {
+      "id": "cap-iqc-stats-export",
+      "name": "导出统计报表",
+      "entity": "InspectionTask",
+      "actor": [
+        "u-engineer"
+      ],
+      "from": [],
+      "policy": "disabled",
+      "effect": "导出当前时间范围的指标与图表数据",
+      "page": "page-iqc-stats",
+      "requirement": "REQ-IQC-004"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-IQC-001",
+      "pageId": "page-iqc-new",
+      "moduleId": "m-iqc",
+      "ui": {
+        "interactionId": "ix-save"
+      },
+      "title": "保存检验任务",
+      "pattern": "event-driven",
+      "trigger": "检验员填完物资、批次号与请验数量后点击「保存为待检验」",
+      "rule": "三个必填项齐全，批次号在 30 天内不得重复建任务",
+      "expected": "生成状态为「待检验」的任务并回到列表，列表首行出现该任务",
+      "stateMachine": "sm-iqc",
+      "role": "u-inspector",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "必填项为空时保存被拒绝，提示缺哪一项",
+        "重复批次号保存时提示「该批次已有在检任务」，并给出跳转"
+      ]
+    },
+    {
+      "id": "REQ-IQC-002",
+      "pageId": "page-iqc-list",
+      "moduleId": "m-iqc",
+      "ui": {
+        "interactionId": "ix-start"
+      },
+      "title": "开始检验",
+      "pattern": "state-driven",
+      "trigger": "检验员在「待检验」任务上点击「开始」",
+      "rule": "仅 pending 状态可开始；同一任务不可被两人同时开始",
+      "expected": "状态变为「检验中」，开始时间落库，他人界面上的「开始」置灰",
+      "stateMachine": "sm-iqc",
+      "role": "u-inspector",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "非待检验状态下「开始」不可点，并说明当前状态",
+        "两人同时点「开始」时，后到的一方收到「已被某某锁定」"
+      ]
+    },
+    {
+      "id": "REQ-IQC-003",
+      "pageId": "page-iqc-list",
+      "moduleId": "m-iqc",
+      "ui": {
+        "interactionId": "ix-export"
+      },
+      "title": "导出筛选结果",
+      "pattern": "event-driven",
+      "trigger": "点击标题带的「导出」",
+      "rule": "导出范围 = 当前筛选条件，不受分页限制；导出时若单据状态已变更，拒绝导出该行",
+      "expected": "生成 xlsx，列与列宽与列表一致",
+      "stateMachine": "sm-iqc",
+      "role": "u-inspector",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "342 条全部导出，不是当前页 20 条",
+        "超长文本列按显示值导出（已截断部分给完整值）",
+        "导出瞬间若该单状态已被他人改变，该行被拒绝并提示「状态已变更，请刷新」"
+      ]
+    },
+    {
+      "id": "REQ-IQC-004",
+      "pageId": "page-iqc-stats",
+      "moduleId": "m-iqc",
+      "ui": {
+        "interactionId": "ix-drill-review"
+      },
+      "title": "查看检验趋势并下钻",
+      "pattern": "event-driven",
+      "trigger": "进入检验统计页，或点击任一指标卡",
+      "rule": "默认本月，可切本周/本季；下钻只允许进入有权限的页面，无权限时拒绝并说明",
+      "expected": "四个指标 + 两张图，点击指标下钻到已预填筛选的列表",
+      "stateMachine": "sm-iqc",
+      "role": "u-engineer",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "切换时间范围后指标与两张图同步变化",
+        "点击「待判定」跳到列表且筛选已预填为该状态",
+        "无该模块权限的用户点下钻被拒绝，提示「无权限查看该状态的任务」，不跳页"
+      ]
+    },
+    {
+      "id": "REQ-IQC-005",
+      "pageId": "page-iqc-list",
+      "moduleId": "m-iqc",
+      "ui": {
+        "interactionId": "ix-approve"
+      },
+      "title": "提交结果并判定",
+      "pattern": "event-driven",
+      "trigger": "检验员在抽屉里点「提交检验结果」，或质量工程师点「判定合格 / 需复检」",
+      "rule": "提交仅限「检验中」，判定仅限「待判定」；判定合格需全部项目结论合格",
+      "expected": "提交后进入「待判定」；判定合格后关闭并放行，判定需复检后回到「检验中」",
+      "stateMachine": "sm-iqc",
+      "role": "u-engineer",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "非「检验中」状态下「提交检验结果」置灰，并说明当前状态",
+        "非「待判定」状态下「判定合格 / 需复检」置灰；已关闭的单据不可再流转，非法流转被拒绝"
+      ]
+    }
+  ],
+  "boardPlan": [],
+  "glossary": [
+    {
+      "term": "待判定",
+      "definition": "检验结果已录入但尚未给出合格/不合格结论"
+    },
+    {
+      "term": "取样·样品",
+      "definition": "同一格并列两个数：取样件数 / 送检样品件数"
+    },
+    {
+      "term": "验收档",
+      "definition": "评审态折叠 PRD 后的内容宽：1440 得 866、1600 得 1026"
+    }
+  ],
+  "openQuestions": [],
+  "dataModel": {
+    "entities": [
+      {
+        "id": "e-iqc",
+        "name": "InspectionTask",
+        "table": "inspection_task",
+        "description": "来料检验任务主表",
+        "pageIds": [
+          "page-iqc-list",
+          "page-iqc-new",
+          "page-iqc-stats"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "key": "pk"
+          },
+          {
+            "name": "taskNo",
+            "type": "varchar(32)",
+            "required": true,
+            "unique": true,
+            "constraint": "IQC-YYYYMMDD-NNNN"
+          },
+          {
+            "name": "status",
+            "type": "varchar(24)",
+            "required": true,
+            "constraint": "pending|testing|review|closed"
+          },
+          {
+            "name": "material",
+            "type": "varchar(120)",
+            "required": true
+          },
+          {
+            "name": "lot",
+            "type": "varchar(32)",
+            "required": true
+          },
+          {
+            "name": "sampleCount",
+            "type": "int"
+          },
+          {
+            "name": "standard",
+            "type": "varchar(160)"
+          },
+          {
+            "name": "supplierId",
+            "type": "bigint"
+          },
+          {
+            "name": "createdAt",
+            "type": "datetime",
+            "required": true
+          }
+        ]
+      }
+    ]
+  }
+}

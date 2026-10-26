@@ -158,7 +158,8 @@ P1–P19 的规格见 `项目治理/迭代/I-07-形态与密度方案.md` §6；
        ⑥ 自证里有 `V01_zoom`（N-d 独立红）、`V01_maxw`（N-a 盲区）与三条 `INCOMPLETE` 造红；
           加上 `P7` 两个方向、`P21`、`P22` 各一条，再有 `P2b` 的两条**第三态**注入
           （`SKIP(… total 未声明)` 与 `INCOMPLETE(INSUFFICIENT_ROWS) total 342 ≥ 9，行数 6`），
-          共 25 条注入，另加 N-c 手写壳样本 1 条与 XX-047 结论段 1 条，自证覆盖 **27 条** ——
+          共 25 条注入，另加 N-c 手写壳样本 1 条、`P2a/P2b` 条件式 SKIP 样本 1 条、XX-047 结论段 1 条，
+          自证覆盖 **28 条** ——
           **「新增判据每一条都要有一条能红的注入」**，P7 是本轮抓 CAPA 的主力，
           它自己没被证过能红，等于「门能判 ≠ 门会拦」。N-c 那条不进 `INJECTIONS`：它改的是整份 DOM
           而不是 JSON/CSS，塞进「基线产物 + 注入」那套循环里会让 P1–P25 一起把手写壳当产物判。
@@ -207,6 +208,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONTAINER = ROOT / "assets" / "container" / "index.html"
 EXDIR = ROOT / "assets" / "examples"
+# 样本（**不是容器产物**）：与 `example-*` 分开放，`default_targets()` 的 glob 取不到。
+P2_FIXTURE = ROOT / "tests" / "fixtures" / "fixture-p2-rows-skip.json"
+NC_FIXTURE = ROOT / "tests" / "fixtures" / "fixture-nc-manual-shell.html"
 DEFAULT_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # 两档视口。1600 是评审台常见尺寸，1440 是笔记本；两档都是「用户会打开看到的」。
@@ -3194,6 +3198,12 @@ def selfcheck(chrome, base_file=None):
         else:
             ok_all = False
         total += 1
+        # ---- XX-045 验收 ①：行数不足 + total 未声明 → 条件式 SKIP 必须被白名单放行
+        if p2_skip_fixture_check(chrome, tmp):
+            covered += 1
+        else:
+            ok_all = False
+        total += 1
         # ---- XX-047：结论段不许早退（INCOMPLETE 压掉 V8 结论的同一次事故）
         if conclude_check():
             covered += 1
@@ -3235,6 +3245,57 @@ def conclude_check():
     if not ok:
         print("          ↳ rc=%s ｜ 期望 rc=1 且同段含「3 行 INCOMPLETE（P2a、P2b）」"
               "与「V8 FAIL 集与期望名单不符」——只含一个说明还在早退" % rc)
+    return ok
+
+
+def p2_skip_fixture_check(chrome, tmp):
+    """XX-045 验收 ①：**行数不足 + `total` 未声明** 时，`P2a/P2b` 的条件式 SKIP 必须被白名单放行。
+
+    样本 `tests/fixtures/fixture-p2-rows-skip.json`（6 行；`pagination` 里**只有 `pageSize`、没有 `total` 键**）。
+    断言三行 **(状态, 值) 精确对**，外加「该行不在 `bad_skip` 里」—— 后者才是 V13 的理由：
+    证明了「它会 SKIP」不代表「这个 SKIP 有正当条件」，反过来说把验收写成「→ SKIP」是**同义反复**。
+
+    为什么不要求整轮 `RESULT PASS`：`default_targets()` 里有 example-05 的登记红，
+    全量模式结构上不可能 PASS。这里证的是「这一行 SKIP 被放行」。
+
+    样本为什么不放 `assets/examples/`：那里每多一份要同步 `check_docs.EXPECTED_EXAMPLES`、
+    `README` 引用可达、`check_generators` 的 `gen_exampleNN.py` **三处**；而
+    `default_targets()` 只 glob `example-*.json`，放 `fixtures/` 也不会被全量模式收进去。
+
+    四个写法里只有两种同时满足「有分页脚」与「total 未声明」：`{"pageSize": 6}` 或 `pagination: true`。
+    `{"total": 6, ...}` 会挂在正则上（值变 `total 6 < 14`）；不写 `pagination` 会挂 P16
+    （裸 `SKIP(无分页脚)`，不在白名单）。
+    """
+    want = {1440: [("P2a", r"^SKIP\(行数 6 < 14，total 未声明\)$"),
+                   ("P2b", r"^SKIP\(行数 6 < 9，total 未声明\)$")],
+            1600: [("P2b", r"^SKIP\(行数 6 < 12，total 未声明\)$")]}
+    data = json.loads(P2_FIXTURE.read_text(encoding="utf-8"))
+    page = pick_page(data)
+    if page is None:
+        print("  %-18s SELFCHECK-FAIL ｜ fixture 里没有作业型列表页" % "P2 条件式 SKIP")
+        return False
+    hp = tmp / "p2-skip.html"
+    build_case(CONTAINER, data, page["id"], hp)
+    ok_all, seen, bad_all = True, [], set()
+    for w, _h in VIEWPORTS:
+        d = run_viewport(chrome, hp, w, _h)
+        rows = evaluate(props_of(page, d), d, page, w)
+        bad_all |= {r["id"] for r in rows if r["status"] == "SKIP" and not skip_allowed(r)}
+        for pid, rx in want.get(w, []):
+            r0 = next((x for x in rows if x["id"] == pid), None)
+            st = (r0 or {}).get("status") or "—"
+            val = (r0 or {}).get("value") or ""
+            good = st == "SKIP" and re.match(rx, val)
+            seen.append("%s@%d %s%s" % (pid, w, val or st, "" if good else " ✗"))
+            if not good:
+                ok_all = False
+    ok = ok_all and not bad_all
+    print("  %-18s %s ｜ 白名单外 SKIP=%s ｜ %s"
+          % ("P2 条件式 SKIP", " ｜ ".join(seen), sorted(bad_all) or "[]",
+             "OK" if ok else "SELFCHECK-FAIL"))
+    if not ok:
+        print("          ↳ 期望 P2a/P2b 是 SKIP 且值匹配「行数 6 < 所需，total 未声明」，"
+              "且不出现在白名单外 —— 放宽正则或改样本都不许")
     return ok
 
 

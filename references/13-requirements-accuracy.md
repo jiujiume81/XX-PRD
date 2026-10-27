@@ -223,11 +223,12 @@ CAPA 产物把「纠正任务」与「系统性措施」合并成一张 8 列子
 > 若 `r` 出现在**任一** `capabilities[].actor` 中，则必须存在至少一个页面 `p`，满足：
 > 1. `p.contract.actor` 含 `r`；
 > 2. `p` 在 `tasks[]` 里对应一条 `task`，且 `task.actor` 含 `r`；
-> 3. `p` 有入口：`p.entryFrom` 非空，**或** `p` 是初始页 / 导航根节点。
+> 3. `p` **声明了入口**：`p.entryFrom` 非空，**或** `p` 是入口页（`meta.currentPageId`）。
 >    （字段在**页面顶层**，不是 `contract.entryFrom` —— `contract` 只承载 `actor` / `owns` / `doneWhen`。
 >    2026-10-27 修正：v1 写 `p.contract.entryFrom`，而 `example-05` / CAPA 两个产物的入口都写在
 >    `pages[].entryFrom`，`contract.entryFrom` 逐页为 `None` —— 按原文实现会把每一页都判成「无入口」，
 >    包括教材。这是字段名写错，不是阈值问题。）
+>    **这一条只判「声明了来源」，不判「到得了」**：`entryFrom` 是 `goBack` 的第 2 级兜底（弱边，画虚线、点不动），指向一个自己也进不去的页时照样算「有入口」。**「到得了」的判定式只有一个，在 `04-container-schema.md` §0.2**：从 `meta.currentPageId` 只沿 `navigate` 跳转边 BFS（全部页面都要过，见 `XX-051` / `XX-052` 的判据 A）。
 
 任一不满足 → **ERROR**，输出形如：
 
@@ -242,6 +243,9 @@ R3 角色待办覆盖：u-qa ✓ / u-dept ✗ / u-manager ✓ (2/3)
 若某 role 的 capability 中有一条 `stage: "submit"`（见 R4），则该 role 必须有页面满足：`contract.owns` 含该 submit 命令，且 `contract.doneWhen` 描述了"提交完成"。
 
 **不看页面名。** 页面叫「我的任务」「待办」还是「执行台」都不影响判定 —— 文字判据改个名就绿。
+
+**声明即承诺**：写了 `contract.doneWhen` 的页，必须能从 `meta.currentPageId` 只沿 `navigate` 跳转边到达（判定式见 `04-container-schema.md` §0.2）。完成态写了却点不到，等于没写。
+这句话**不是**新增闸门：闸门就是 §0.2 那条「除入口页外每页必须强边可达」，全部页面都要过。它在这一页被重述，只是因为「完成态」这个承诺最容易在点不到的地方被写出来。**反过来不成立** —— 不许拿「这页写没写 `doneWhen`」决定「判不判它到得了」：那样越不写越免检。
 
 ### 3.3 「我的任务」的形态：**Owner 已裁定为独立页面**（2026-10-27）
 
@@ -272,7 +276,7 @@ R3 角色待办覆盖：u-qa ✓ / u-dept ✗ / u-manager ✓ (2/3)
 | 1 | 独立页的视图与该 role 的待办**同源**：导航角标 / 汇总数引用同一 `viewId` | 两处各写一套筛选 → ERROR |
 | 2 | 该页 `contract.actor` 含该 role，`contract.doneWhen` 描述「提交完成」 | 与 §3.2 同款 |
 | 3 | 该页 `contract.owns` **覆盖该 role 的全部提交类命令** | 缺一条 → ERROR（**前置条件见下**） |
-| 4 | 该页在导航里可达：`p.entryFrom` 非空，**或**它是根页 | 与 §3.1 第 3 条同款 |
+| 4 | 该页**声明了入口**：`p.entryFrom` 非空，**或**它是入口页 | 与 §3.1 第 3 条同款（只判声明，不判到得了 —— 见 §3.1 那条的注） |
 
 **约束 3 的取数口径（2026-10-27 已实现为 `R3-b`）**：判「提交类命令」靠 `capabilities[].stage`，
 而它在**现有全部产物里都是 `null`**（`example-05` 十项、`CAPA` 十六项实测）。没有 `stage` 就只剩
@@ -469,7 +473,7 @@ R2 一对多
 
 R3 角色待办
   □ 每个有 capability 的角色，都有一个页面是它的
-  □ 那个页面有入口（entryFrom 或根节点）
+  □ 那个页面声明了入口（`entryFrom` 非空或它是入口页）—— 只是声明，到不到得了看 `04` §0.2
   □ 有 submit 命令的角色，那个页面的 doneWhen 说的是"提交完成"
   □ 有提交命令的角色有**独立待办页**（不是从别人的单据页借道）
      —— Owner 2026-10-27 裁定：「我的任务」这类功能是独立页面

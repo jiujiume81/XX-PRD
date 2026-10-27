@@ -159,7 +159,7 @@ PRD 板块 (boardPlan)
 - [ ] 页面至少覆盖 默认/加载/空/异常 四态
 - [ ] 状态变量命名与 `when` 表达式一致
 - [ ] 所有 `on.target` 和 `overrides.target` 指向存在的 `n-` id 或合法合成 id
-- [ ] 主路径上的页面**互相可达**（不是孤岛）：列表能进详情、详情能返回
+- [ ] 除 `meta.currentPageId` 外每页都能从它**只沿 `navigate` 跳转边**走到（判定式见 `04-container-schema.md` §0.2；「返回」是退路不是进路，`entryFrom` 只画虚线）
 - [ ] 带参跳转的目标页在 `states[].vars` 里有默认值，可独立渲染
 - [ ] 写了 `{{row.字段}}` 的目标确实在表格行/行内按钮上
 - [ ] **主从结构**（一条主记录挂多条明细）用了 `MasterDetail`，主表没有设 `rowClick`

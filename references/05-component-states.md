@@ -162,7 +162,7 @@
 |---|---|
 | `Modal` | `title`、`open`、`width`、`okText`、`cancelText`、`footer`(bool)、`content`、`confirmLoading`、`centered`；底部按钮合成 id `<节点 id>__ok` / `__cancel`（`__cancel` 内建关闭弹窗） |
 | `Drawer` | `title`、`open`、`placement`(`right`(默认)\|`left`\|`top`\|`bottom`；`top`/`bottom` 满宽、限高 70%、**不吃 `width`**)、`width`、`content`、`footer`(插槽) |
-| `Drawer` · 宽档（v0.8.0 补充） | `width` 取 **560** 时为「详情抽屉」档（渲成 `.ant-drawer.w-lg`，默认 420）。**声明宽必须由渲染器读**：`R.Drawer` 读 `p.width`，≥560 走 `.w-lg`、其它数值用 inline，不写才吃默认 420 —— 漏读就会退回 420。**实际只有 420 / 560 两档**：`width:600` 会渲成 560、`"600px"` 会被 `Number()` 成 NaN 而回 420 —— 两种都是「声明 ≠ 渲染」，由 `04 §6.8` 的 R6 判 ERROR。验收必须打开抽屉量 `offsetWidth`，只贴 JSON 的 `width: 560` 不算证据（为什么与怎么量见 `08-container-choice.md` §0.8） |
+| `Drawer` · 宽档（v0.8.0 补充） | `width` 取 **560** 时为「详情抽屉」档（渲成 `.ant-drawer.w-lg`，默认 420）。**声明宽必须由渲染器读**：`R.Drawer` 读 `p.width`，≥560 走 `.w-lg`、其它数值用 inline，不写才吃默认 420 —— 漏读就会退回 420。**视觉档位只有 420 / 560 两个**（**不是**说允许值只有两个：`0 < 宽 < 560` 走 inline、声明几渲几，`440` / `520` 合法且 `example-01` / `04` / `05` 正在用）：`width:600` 会渲成 560、`"600px"` 会被 `Number()` 成 NaN 而回 420 —— 两种都是「声明 ≠ 渲染」，由 `04 §6.8` 的 R6 判 ERROR。验收必须打开抽屉量 `offsetWidth`，只贴 JSON 的 `width: 560` 不算证据（为什么与怎么量见 `08-container-choice.md` §0.8） |
 | `Popconfirm` | `title`、`description`、`okText`、`cancelText` |
 | `Spin` | `size`、`tip`、`spinning` |
 | `Result` | `status`(`success`\|`error`\|`info`\|`warning`\|`404`\|`403`\|`500`)、`title`、`subTitle`；插槽 `extra` |

@@ -18,6 +18,69 @@
 > 实测 `PASS placeholders: 16 处命中均已在显式允许清单内`。**留着它们既诚实、也不妨碍放行。**）
 > `[0.5.1]` 段对应的核验命令：`bash tests/run.sh`（回归）、`python3 tests/check_generators.py`（生成器一致性）。
 
+## [未发布] - 2026-10-27（XX-050：props 契约与 SS-01）
+
+**breaking: 是（两条：① `TextArea.rows` 让已写 `rows` 的产物变高；② 存量产物会在 SS-01 上多红）**
+
+### 新增判据 SS-01「props 消费闭合」（`references/04` §6.8）
+
+容器是逐字段手写读 `props` 的（`p.xxx`），没有整包透传：写一个容器没读的键 = 写了不生效，
+**而且不报错**；几何判据只量像素，对这类键完全免疫。所以另立一条**只读声明**的判据。
+白名单由 `scripts/props_contract.py` 从容器源码机械提取，**不许手写**（手写的白名单一定会在
+某次改容器后悄悄分叉）。
+
+三态：`PASS` / `ERROR`（键不在该 type 的可读集，或值域不合法）/ `INCOMPLETE`（契约缺失、
+无法解析、与容器逐类型比对不一致 —— 后三种是**工具链缺失**，任何档都非 0 退出）。
+
+**不设 WARN**：「键被别的类型读过」不是作者的处境差异，是键写错了节点。判成 WARN 就是假绿 ——
+`example-06` 的两个 `Alert` 把正文写在 `props.text`（Alert 只读 `message`），画面是两条
+**空白告警条**，而 WARN 口径下退出码仍是 0。
+
+### 容器新增 5 项读取（`assets/container/index.html`）
+
+| 键 | 语义 | 兼容性 |
+|---|---|---|
+| `Drawer.placement` | `right`(默认)/`left`/`top`/`bottom` | 只新增取值；`right` 的渲染与旧版逐像素相同（实测 `w=400 x=476` 不变）。写非法值 → 容器 `warn()` 并退回 `right`，**不静默** |
+| `FormItem.extra` | 常态说明文字，恒为 `--ant-text-3` | 新增；老产物 0 处使用 |
+| `TextArea.rows` | `min-height = max(64, 21×rows+14)` | **破坏性**：`example-02` 的 `n-apply-ta-desc` 实测 64 → 77px（`rows:3`）。`check_ui_shape` 不测那一页，所以回归数字不变 —— 这一条只能靠本行留痕 |
+| `Card.bordered` | 1px 边框 + 去投影（CSS 早已写好，渲染器从未加 class） | 新增；CAPA 里 15 处 `bordered:true` 此前全是空转 |
+| `Alert.visible` | **不新增读取**：`renderNode` 的通用处理早已对**所有** type 生效（`props.visible===false → display:none`），`visible` 进契约的 `shared` 集 | 无变化。实测旧版就渲染成 `DIV.ant-alert display:none`，此前「写了 false 照样显示」的说法不成立 |
+
+### 契约生成器重写（`scripts/props_contract.py`）
+
+- **两种注册都认**：`R.X=function` 与 `R['List.Item']=function`。此前只认前者，
+  渲染器数少一个（67 → 实际 **68**），`renderItem` 模板一进判据就是整类假红。
+- **函数体用括号配平**（跳过字符串/模板串/正则/注释），不再用「下一个 `R.*` 起点」。
+  旧口径把 `R.Frame` 之后 11 万字符（文件尾 46%）算成 Frame 读的键。
+- **helper 闭包**：渲染器体里以 `p` 为首参调用的同文件函数（`buildFilterBar(p,ctx)`）算它的读取点；
+  **只认 `p` 作首参** —— `getPath(o,p)` 那种普通形参不算，否则 `p.split` 会进白名单。
+- **注释与字符串里的 `p.xxx` 不计**：注释写「Col 读不到 p.gutter」不该让 Row 凭空多一个可读键。
+- 清单真源改为 `references/props-unsupported.json`（扁平 `entries[]` + `type:"*"` 通配，17 条）。
+  **文件缺失或格式不符 → 生成器 ERROR 退出**，不许静默 0 条。
+- `sourceSha256` 降级为诊断；`--check` 与 SS-01 都改成**逐类型比对**。
+  整文件 sha 对「改一行注释」过敏（全线 INCOMPLETE），对「清单换格式」却失明。
+
+### 闸门
+
+- SS-01 的 `INCOMPLETE`（工具链缺失）**任何档都非 0**；R 组的 `INCOMPLETE`（存量产物缺
+  `contract` / `fieldRegistry`）仍按原口径默认不拦。两类不再混在一个退出码里。
+- `check_release.py` 新增 **DoD 13**：契约同步 + 绿样本（`example-03`，分母 80）+ 造红
+  （`example-06` 点名 `Alert.text` ×2）+ 契约缺失时非 0，三态各验一次。
+
+### 存量产物读数（**未修，属 XX-051/052 的范围**）
+
+| 示例 | SS-01 | 说明 |
+|---|---|---|
+| `example-01` | ERROR ×1 | `Descriptions.bordered` |
+| `example-02` | ERROR ×5 | `Descriptions.bordered`、`InputNumber.min/max/step`、`Upload.multiple` |
+| `example-03` | PASS（分母 80） | 绿样本 |
+| `example-04` | ERROR ×1 | `Space.style` |
+| `example-05` | ERROR ×2 | `Table.rowKey`、`Descriptions.size` |
+| `example-06` | ERROR ×4 | `Alert.text`×2、`Descriptions.size`、`InputNumber.placeholder`、`Table.rowKey` |
+
+`run.sh` 仍是 `TOTAL ok=757`（`137/123/136/150/117` 全部未动）；`check_ui_shape` 仍是
+`PASS=105 FAIL=20 SKIP=15`，与接线前逐字相同。
+
 ## [0.10.0] - 2026-10-27
 
 **breaking: 是（新增四条判据，存量产物会多红）** —— 只新增、不改任何既有阈值。

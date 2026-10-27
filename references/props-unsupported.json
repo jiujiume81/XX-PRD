@@ -1,0 +1,111 @@
+{
+  "schema": "xx-prd/props-unsupported/1",
+  "updatedAt": "2026-10-27",
+  "sourceOfTruth": "本文件是「容器明知不读、且不打算读」的 props 键的唯一真源。规则见 references/04-container-schema.md §6.8。仓库内不许有第二份副本（旧路径 scripts/props-unsupported.json 必须删除）。",
+  "lookup": "先按 (type, key) 精确命中；未命中再退到 (\"*\", key)；都没有时用通用措辞「容器源码 0 命中」。",
+  "entryRule": "进这张表的是**裁决**（不打算支持），不是**缺陷**（还没支持）。每条必须有 why 与 instead：只告诉人「不能写」而不给出口，下一次他会换个地方再写一遍。",
+  "entries": [
+    {
+      "type": "*",
+      "key": "style",
+      "why": "节点级 `style` 在容器里**没有任何读取点**（0 处）：`renderNode` 只处理 `visible`，各渲染器只用字面量样式。它同时犯两条：① 写了完全不生效；② 一旦哪天接上，它就是绕开 token、绕开 4px 栅格、绕开一切判据的逃逸口（判据按属性名取值，读不到 CSS 字符串里的语义），`L-01` / `A-03` 会一起失效。所以不是「先不用」，是**不许用**。",
+      "instead": "间距用 `Space` 的 `props.size`（4 的倍数）或父容器的 `gap`，上下留白用 `Divider`，宽度用 `width`（**只在有读取点的类型上**）。确实需要破例：先改 `12` 立条款、再改容器接线，不许在产物里先写。"
+    },
+    {
+      "type": "Table",
+      "key": "rowKey",
+      "why": "容器不是 React，没有 reconciliation；`data` 是静态数组，行 key 既不参与渲染也不驱动任何交互。写了与不写完全一样。",
+      "instead": "直接删掉。主子联动写在**父节点** `MasterDetail` 的 `bind` / `bindTo` 上（不是写在 Table 上）；单表本身不需要行 key。"
+    },
+    {
+      "type": "Upload",
+      "key": "multiple",
+      "why": "容器的 Upload 是**静态示意区**：一个虚线框 + 一句文案，不渲染文件列表。「多选」与「单选」在这里没有可观察差别。对照组：`accept` 会渲染「支持 …」副行，有承载，所以它被支持。",
+      "instead": "要表达可多选，写进 `props.text`，例如「点击或拖拽文件到此区域（可多选）」。"
+    },
+    {
+      "type": "Upload",
+      "key": "dragger",
+      "why": "容器里的 Upload **恒为拖拽区**（默认文案就是「点击或拖拽文件到此区域」），没有第二种形态。写 `false` 时声明与渲染**方向相反** —— 比没生效更糟。",
+      "instead": "什么都不用写。要纯按钮形态，换 `Button`。"
+    },
+    {
+      "type": "Upload",
+      "key": "listType",
+      "why": "没有 `.ant-upload.picture` 之类的第二形态 CSS，渲染器也不读它；写了与不写一样。",
+      "instead": "要展示已上传的文件列表，用 `List`（`data` + `renderItem`）+ 每行一个「移除」`Button`。"
+    },
+    {
+      "type": "InputNumber",
+      "key": "step",
+      "why": "容器的 InputNumber 是静态展示（`− 值 +` 三个元素，没有点击逻辑，不改变 `value`），步长没有可观察结果。",
+      "instead": "把步长写进 `props.help` 或旁边的说明文字，例如「步长 5」。"
+    },
+    {
+      "type": "InputNumber",
+      "key": "min",
+      "why": "静态展示不参与取值，最小值既不约束输入也不改变外观。",
+      "instead": "把范围写进 `props.help`（如「0 ~ 899」），或放到字段旁的常态说明里。"
+    },
+    {
+      "type": "InputNumber",
+      "key": "max",
+      "why": "同上：静态展示，最大值没有承载。",
+      "instead": "把范围写进 `props.help`（如「0 ~ 899」）。"
+    },
+    {
+      "type": "InputNumber",
+      "key": "disabled",
+      "why": "`.ant-num` 只有一种形态，没有禁用样式；渲染器也不读 `disabled`。写了看不出区别。",
+      "instead": "要表达不可编辑，用 `Input` 的 `disabled`（有 `.dis` 样式），或在旁边写「（不可修改）」。"
+    },
+    {
+      "type": "InputNumber",
+      "key": "placeholder",
+      "why": "InputNumber 渲染的是数值本身（`<b>` 里），没有输入框，占位符无落点。`05` 也没承诺它，但 `example-06` 写过 `placeholder:'kg'`（单位因此丢失）。",
+      "instead": "单位写进 `props.help`（如「单位：kg」）。"
+    },
+    {
+      "type": "DatePicker",
+      "key": "showTime",
+      "why": "`R.DatePicker` 只渲染 `value` 与 `placeholder`，没有时间列。写 `true` 不会多出时间选择；`value` 里带的时间串本来就照原样显示，容易让人误以为是它生效了。（`TimePicker` 直接委托 `DatePicker`，同一个缺口。）",
+      "instead": "要「日期 + 时间」，直接把完整串写进 `props.value`（如 `2026-10-23 16:20`）或 `props.placeholder`。"
+    },
+    {
+      "type": "TimePicker",
+      "key": "showTime",
+      "why": "`R.TimePicker` 直接委托 `R.DatePicker`，不渲染时间列，`showTime` 没有承载对象。",
+      "instead": "把完整时间串写进 `props.placeholder`（如「请选择时间 2026-10-27 14:00」）或 `props.value`。"
+    },
+    {
+      "type": "DatePicker",
+      "key": "disabled",
+      "why": "`.ant-picker` 没有禁用态 CSS，渲染器也不读 `disabled`；写了与不写一样。对照组：`Input` / `Select` / `TextArea` 的 `disabled` 渲成 `.dis`，所以那三处被支持。",
+      "instead": "要表达不可选，把 `placeholder` 写成「暂不可选」，并在旁边说明原因。"
+    },
+    {
+      "type": "Descriptions",
+      "key": "bordered",
+      "why": "`.ant-desc .d-item` **本来就恒有 1px 边框**（CSS 自带，靠 `margin:-1px` 做网格线合并）。写 `true` 无差别，写 `false` **会骗人**：边框照样在。",
+      "instead": "要无边框的「标签 — 值」清单，用 `List`（`title` + `description`）或 `Space direction=\"vertical\"` + `Text`。"
+    },
+    {
+      "type": "Descriptions",
+      "key": "size",
+      "why": "容器只有一种密度：`.d-item` 的 `padding:14px 16px` 写死在 CSS 里，没有 `small`/`middle` 变体；渲染器也不读它。",
+      "instead": "密度靠 `column`（列数）与区块留白调整；确实要更紧凑，用 `Table size=\"small\"`。"
+    },
+    {
+      "type": "Alert",
+      "key": "banner",
+      "why": "没有 `banner` 形态的 CSS（通栏、无圆角、无左右留白），渲染器也不读它。写了与不写一样。",
+      "instead": "要通栏提示，把 `Alert` 放在 `Layout` 顶部（`Header` 下、`Content` 上），视觉上就是通栏。"
+    },
+    {
+      "type": "Alert",
+      "key": "text",
+      "why": "**这不是「不支持的 AntD 属性」，是写错了键**：Alert 的正文键是 `message`。`text` 被 `Tag`/`Button`/`Text` 等类型读，所以按「全局有没有读过」判会放过它 —— 而 `R.Alert` 只读 `message`，结果是**图标和边框都在、正文空白**。`example-06` 有两处（`n-new-alert` / `n-st-alert`）。",
+      "instead": "正文改用 `message`（副文本用 `description`）。"
+    }
+  ]
+}

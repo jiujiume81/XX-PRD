@@ -1,0 +1,710 @@
+{
+ "allKeys": [
+  "accept",
+  "activeKey",
+  "align",
+  "allowClear",
+  "alt",
+  "autoSelectFirst",
+  "avatar",
+  "back",
+  "bind",
+  "bindTo",
+  "block",
+  "bordered",
+  "buttonStyle",
+  "cancelText",
+  "capability",
+  "checked",
+  "class",
+  "className",
+  "closable",
+  "code",
+  "collapsible",
+  "color",
+  "column",
+  "columns",
+  "content",
+  "count",
+  "current",
+  "danger",
+  "dashed",
+  "data",
+  "dataSource",
+  "defaultCollapsed",
+  "del",
+  "description",
+  "detailTitle",
+  "detailTools",
+  "direction",
+  "disabled",
+  "disabledReason",
+  "dot",
+  "ellipsisTitle",
+  "empty",
+  "emptyAction",
+  "emptyText",
+  "extra",
+  "filterBar",
+  "fixed",
+  "footer",
+  "gutter",
+  "height",
+  "help",
+  "hoverable",
+  "icon",
+  "italic",
+  "items",
+  "justify",
+  "label",
+  "layout",
+  "level",
+  "loading",
+  "logo",
+  "mark",
+  "max",
+  "maxHeight",
+  "maxLength",
+  "message",
+  "min",
+  "modalId",
+  "mode",
+  "name",
+  "okText",
+  "open",
+  "options",
+  "pageSize",
+  "pagination",
+  "percent",
+  "placeholder",
+  "placement",
+  "plain",
+  "prefix",
+  "query",
+  "queryActions",
+  "queryExtra",
+  "queryId",
+  "radio",
+  "renderItem",
+  "required",
+  "resetId",
+  "rowClick",
+  "rowSelection",
+  "rows",
+  "selectedKey",
+  "shape",
+  "showAllWhenEmpty",
+  "showCount",
+  "showIcon",
+  "showInfo",
+  "size",
+  "span",
+  "src",
+  "status",
+  "stickyFooter",
+  "stickyHeader",
+  "strong",
+  "subTitle",
+  "suffix",
+  "tableLayout",
+  "targetKeys",
+  "text",
+  "tip",
+  "title",
+  "toolbar",
+  "toolbarRight",
+  "toolbarRightItems",
+  "total",
+  "trend",
+  "type",
+  "validateStatus",
+  "value",
+  "visible",
+  "width",
+  "wrap"
+ ],
+ "byType": {
+  "Alert": [
+   "closable",
+   "description",
+   "message",
+   "showIcon",
+   "type"
+  ],
+  "Avatar": [
+   "shape",
+   "size",
+   "src",
+   "text"
+  ],
+  "Badge": [
+   "count",
+   "dot",
+   "status",
+   "text"
+  ],
+  "Breadcrumb": [
+   "items"
+  ],
+  "Button": [
+   "block",
+   "capability",
+   "danger",
+   "disabled",
+   "disabledReason",
+   "icon",
+   "loading",
+   "size",
+   "text",
+   "type"
+  ],
+  "Calendar": [],
+  "Card": [
+   "bordered",
+   "hoverable",
+   "loading",
+   "size",
+   "title"
+  ],
+  "Carousel": [
+   "items"
+  ],
+  "Cascader": [
+   "disabled",
+   "options",
+   "placeholder",
+   "status",
+   "value"
+  ],
+  "Chart": [
+   "data",
+   "height",
+   "title",
+   "type"
+  ],
+  "Checkbox": [
+   "checked",
+   "disabled",
+   "label"
+  ],
+  "CheckboxGroup": [
+   "direction",
+   "options",
+   "value"
+  ],
+  "Col": [
+   "gutter",
+   "span"
+  ],
+  "Collapse": [
+   "activeKey",
+   "items"
+  ],
+  "Content": [],
+  "DatePicker": [
+   "placeholder",
+   "value"
+  ],
+  "Descriptions": [
+   "column",
+   "items",
+   "title"
+  ],
+  "Divider": [
+   "dashed",
+   "plain",
+   "text"
+  ],
+  "Drawer": [
+   "class",
+   "className",
+   "modalId",
+   "open",
+   "placement",
+   "title",
+   "width"
+  ],
+  "Dropdown": [
+   "text"
+  ],
+  "Empty": [
+   "description"
+  ],
+  "Footer": [
+   "text"
+  ],
+  "Form": [
+   "layout"
+  ],
+  "FormItem": [
+   "extra",
+   "help",
+   "label",
+   "required",
+   "validateStatus"
+  ],
+  "Frame": [
+   "height",
+   "label",
+   "width"
+  ],
+  "Header": [
+   "back",
+   "logo",
+   "title"
+  ],
+  "Icon": [
+   "color",
+   "name",
+   "size"
+  ],
+  "Image": [
+   "alt",
+   "height",
+   "width"
+  ],
+  "Input": [
+   "allowClear",
+   "disabled",
+   "placeholder",
+   "prefix",
+   "status",
+   "suffix",
+   "value"
+  ],
+  "InputNumber": [
+   "value"
+  ],
+  "Layout": [
+   "layout"
+  ],
+  "List": [
+   "bordered",
+   "data",
+   "emptyText",
+   "loading",
+   "renderItem"
+  ],
+  "List.Item": [
+   "avatar",
+   "description",
+   "title"
+  ],
+  "MasterDetail": [
+   "autoSelectFirst",
+   "bind",
+   "bindTo",
+   "collapsible",
+   "defaultCollapsed",
+   "detailTitle",
+   "detailTools",
+   "emptyText",
+   "showAllWhenEmpty"
+  ],
+  "Menu": [
+   "items",
+   "mode",
+   "selectedKey"
+  ],
+  "Modal": [
+   "cancelText",
+   "content",
+   "footer",
+   "modalId",
+   "okText",
+   "open",
+   "title"
+  ],
+  "Pagination": [
+   "current",
+   "pageSize",
+   "total"
+  ],
+  "Paragraph": [
+   "text",
+   "type"
+  ],
+  "Placeholder": [
+   "height",
+   "text"
+  ],
+  "Popconfirm": [
+   "title"
+  ],
+  "Progress": [
+   "percent",
+   "showInfo",
+   "status",
+   "type"
+  ],
+  "Radio": [
+   "checked",
+   "disabled",
+   "label"
+  ],
+  "RadioGroup": [
+   "buttonStyle",
+   "options",
+   "value"
+  ],
+  "Rate": [
+   "count",
+   "value"
+  ],
+  "Result": [
+   "status",
+   "subTitle",
+   "title"
+  ],
+  "Row": [
+   "align",
+   "gutter",
+   "justify"
+  ],
+  "Segmented": [
+   "options",
+   "value"
+  ],
+  "Select": [
+   "disabled",
+   "options",
+   "placeholder",
+   "status",
+   "value"
+  ],
+  "Sider": [
+   "title",
+   "width"
+  ],
+  "Skeleton": [
+   "rows"
+  ],
+  "Slider": [
+   "max",
+   "min",
+   "value"
+  ],
+  "Space": [
+   "align",
+   "block",
+   "direction",
+   "justify",
+   "size",
+   "wrap"
+  ],
+  "Spin": [
+   "tip"
+  ],
+  "Statistic": [
+   "prefix",
+   "suffix",
+   "title",
+   "trend",
+   "value"
+  ],
+  "Steps": [
+   "current",
+   "direction",
+   "items",
+   "status"
+  ],
+  "Switch": [
+   "checked",
+   "size"
+  ],
+  "Table": [
+   "bordered",
+   "columns",
+   "data",
+   "ellipsisTitle",
+   "empty",
+   "emptyAction",
+   "emptyText",
+   "filterBar",
+   "fixed",
+   "loading",
+   "maxHeight",
+   "pagination",
+   "query",
+   "queryActions",
+   "queryExtra",
+   "queryId",
+   "radio",
+   "resetId",
+   "rowClick",
+   "rowSelection",
+   "size",
+   "stickyFooter",
+   "stickyHeader",
+   "tableLayout",
+   "title",
+   "toolbar",
+   "toolbarRight",
+   "toolbarRightItems"
+  ],
+  "Tabs": [
+   "activeKey",
+   "items",
+   "type"
+  ],
+  "Tag": [
+   "closable",
+   "color",
+   "text"
+  ],
+  "Text": [
+   "strong",
+   "text",
+   "type"
+  ],
+  "TextArea": [
+   "disabled",
+   "maxLength",
+   "placeholder",
+   "rows",
+   "showCount",
+   "status",
+   "value"
+  ],
+  "TimePicker": [
+   "placeholder",
+   "value"
+  ],
+  "Timeline": [
+   "items"
+  ],
+  "Tooltip": [
+   "title"
+  ],
+  "Transfer": [
+   "dataSource",
+   "targetKeys"
+  ],
+  "Tree": [
+   "data"
+  ],
+  "Typography": [
+   "code",
+   "del",
+   "italic",
+   "level",
+   "mark",
+   "strong",
+   "text",
+   "type"
+  ],
+  "Upload": [
+   "accept",
+   "text"
+  ]
+ },
+ "generatedBy": "scripts/props_contract.py",
+ "helpers": 151,
+ "nonPropP": [
+  "annotations",
+  "componentTree",
+  "contract",
+  "defaultStateId",
+  "entity",
+  "entryFrom",
+  "exitTo",
+  "goal",
+  "id",
+  "interactions",
+  "layout",
+  "metrics",
+  "moduleId",
+  "name",
+  "nonGoals",
+  "oneLiner",
+  "parentId",
+  "positioning",
+  "prd",
+  "route",
+  "states",
+  "x",
+  "y"
+ ],
+ "note": "此文件由 scripts/props_contract.py 生成，**不要手改**。`shared` 是对所有 type 都生效的通用键（renderNode 统一处理，现为 visible）；`byType` 已包含渲染器调用的同文件 helper 与委托继承键。改容器后必须重跑生成器；validate_prd_json 的 SS-01 会运行时重算并与本文件逐类型比对，不一致即 INCOMPLETE（工具链缺失，任何档都非 0）。",
+ "renderers": 68,
+ "shared": [
+  "visible"
+ ],
+ "source": "assets/container/index.html",
+ "sourceLines": 4580,
+ "sourceSha256": "a550fcb6945011c5891821b94fef4963d30226d1f1e614c14f16a6df3702ab3b",
+ "unsupported": [
+  {
+   "instead": "间距用 `Space` 的 `props.size`（4 的倍数）或父容器的 `gap`，上下留白用 `Divider`，宽度用 `width`（**只在有读取点的类型上**）。确实需要破例：先改 `12` 立条款、再改容器接线，不许在产物里先写。",
+   "key": "style",
+   "type": "*",
+   "why": "节点级 `style` 在容器里**没有任何读取点**（0 处）：`renderNode` 只处理 `visible`，各渲染器只用字面量样式。它同时犯两条：① 写了完全不生效；② 一旦哪天接上，它就是绕开 token、绕开 4px 栅格、绕开一切判据的逃逸口（判据按属性名取值，读不到 CSS 字符串里的语义），`L-01` / `A-03` 会一起失效。所以不是「先不用」，是**不许用**。"
+  },
+  {
+   "instead": "直接删掉。主子联动写在**父节点** `MasterDetail` 的 `bind` / `bindTo` 上（不是写在 Table 上）；单表本身不需要行 key。",
+   "key": "rowKey",
+   "type": "Table",
+   "why": "容器不是 React，没有 reconciliation；`data` 是静态数组，行 key 既不参与渲染也不驱动任何交互。写了与不写完全一样。"
+  },
+  {
+   "instead": "要表达可多选，写进 `props.text`，例如「点击或拖拽文件到此区域（可多选）」。",
+   "key": "multiple",
+   "type": "Upload",
+   "why": "容器的 Upload 是**静态示意区**：一个虚线框 + 一句文案，不渲染文件列表。「多选」与「单选」在这里没有可观察差别。对照组：`accept` 会渲染「支持 …」副行，有承载，所以它被支持。"
+  },
+  {
+   "instead": "什么都不用写。要纯按钮形态，换 `Button`。",
+   "key": "dragger",
+   "type": "Upload",
+   "why": "容器里的 Upload **恒为拖拽区**（默认文案就是「点击或拖拽文件到此区域」），没有第二种形态。写 `false` 时声明与渲染**方向相反** —— 比没生效更糟。"
+  },
+  {
+   "instead": "要展示已上传的文件列表，用 `List`（`data` + `renderItem`）+ 每行一个「移除」`Button`。",
+   "key": "listType",
+   "type": "Upload",
+   "why": "没有 `.ant-upload.picture` 之类的第二形态 CSS，渲染器也不读它；写了与不写一样。"
+  },
+  {
+   "instead": "把步长写进 `props.help` 或旁边的说明文字，例如「步长 5」。",
+   "key": "step",
+   "type": "InputNumber",
+   "why": "容器的 InputNumber 是静态展示（`− 值 +` 三个元素，没有点击逻辑，不改变 `value`），步长没有可观察结果。"
+  },
+  {
+   "instead": "把范围写进 `props.help`（如「0 ~ 899」），或放到字段旁的常态说明里。",
+   "key": "min",
+   "type": "InputNumber",
+   "why": "静态展示不参与取值，最小值既不约束输入也不改变外观。"
+  },
+  {
+   "instead": "把范围写进 `props.help`（如「0 ~ 899」）。",
+   "key": "max",
+   "type": "InputNumber",
+   "why": "同上：静态展示，最大值没有承载。"
+  },
+  {
+   "instead": "要表达不可编辑，用 `Input` 的 `disabled`（有 `.dis` 样式），或在旁边写「（不可修改）」。",
+   "key": "disabled",
+   "type": "InputNumber",
+   "why": "`.ant-num` 只有一种形态，没有禁用样式；渲染器也不读 `disabled`。写了看不出区别。"
+  },
+  {
+   "instead": "单位写进 `props.help`（如「单位：kg」）。",
+   "key": "placeholder",
+   "type": "InputNumber",
+   "why": "InputNumber 渲染的是数值本身（`<b>` 里），没有输入框，占位符无落点。`05` 也没承诺它，但 `example-06` 写过 `placeholder:'kg'`（单位因此丢失）。"
+  },
+  {
+   "instead": "要「日期 + 时间」，直接把完整串写进 `props.value`（如 `2026-10-23 16:20`）或 `props.placeholder`。",
+   "key": "showTime",
+   "type": "DatePicker",
+   "why": "`R.DatePicker` 只渲染 `value` 与 `placeholder`，没有时间列。写 `true` 不会多出时间选择；`value` 里带的时间串本来就照原样显示，容易让人误以为是它生效了。（`TimePicker` 直接委托 `DatePicker`，同一个缺口。）"
+  },
+  {
+   "instead": "把完整时间串写进 `props.placeholder`（如「请选择时间 2026-10-27 14:00」）或 `props.value`。",
+   "key": "showTime",
+   "type": "TimePicker",
+   "why": "`R.TimePicker` 直接委托 `R.DatePicker`，不渲染时间列，`showTime` 没有承载对象。"
+  },
+  {
+   "instead": "要表达不可选，把 `placeholder` 写成「暂不可选」，并在旁边说明原因。",
+   "key": "disabled",
+   "type": "DatePicker",
+   "why": "`.ant-picker` 没有禁用态 CSS，渲染器也不读 `disabled`；写了与不写一样。对照组：`Input` / `Select` / `TextArea` 的 `disabled` 渲成 `.dis`，所以那三处被支持。"
+  },
+  {
+   "instead": "要无边框的「标签 — 值」清单，用 `List`（`title` + `description`）或 `Space direction=\"vertical\"` + `Text`。",
+   "key": "bordered",
+   "type": "Descriptions",
+   "why": "`.ant-desc .d-item` **本来就恒有 1px 边框**（CSS 自带，靠 `margin:-1px` 做网格线合并）。写 `true` 无差别，写 `false` **会骗人**：边框照样在。"
+  },
+  {
+   "instead": "密度靠 `column`（列数）与区块留白调整；确实要更紧凑，用 `Table size=\"small\"`。",
+   "key": "size",
+   "type": "Descriptions",
+   "why": "容器只有一种密度：`.d-item` 的 `padding:14px 16px` 写死在 CSS 里，没有 `small`/`middle` 变体；渲染器也不读它。"
+  },
+  {
+   "instead": "要通栏提示，把 `Alert` 放在 `Layout` 顶部（`Header` 下、`Content` 上），视觉上就是通栏。",
+   "key": "banner",
+   "type": "Alert",
+   "why": "没有 `banner` 形态的 CSS（通栏、无圆角、无左右留白），渲染器也不读它。写了与不写一样。"
+  },
+  {
+   "instead": "正文改用 `message`（副文本用 `description`）。",
+   "key": "text",
+   "type": "Alert",
+   "why": "**这不是「不支持的 AntD 属性」，是写错了键**：Alert 的正文键是 `message`。`text` 被 `Tag`/`Button`/`Text` 等类型读，所以按「全局有没有读过」判会放过它 —— 而 `R.Alert` 只读 `message`，结果是**图标和边框都在、正文空白**。`example-06` 有两处（`n-new-alert` / `n-st-alert`）。"
+  }
+ ],
+ "unsupportedIndex": {
+  "*.style": {
+   "instead": "间距用 `Space` 的 `props.size`（4 的倍数）或父容器的 `gap`，上下留白用 `Divider`，宽度用 `width`（**只在有读取点的类型上**）。确实需要破例：先改 `12` 立条款、再改容器接线，不许在产物里先写。",
+   "why": "节点级 `style` 在容器里**没有任何读取点**（0 处）：`renderNode` 只处理 `visible`，各渲染器只用字面量样式。它同时犯两条：① 写了完全不生效；② 一旦哪天接上，它就是绕开 token、绕开 4px 栅格、绕开一切判据的逃逸口（判据按属性名取值，读不到 CSS 字符串里的语义），`L-01` / `A-03` 会一起失效。所以不是「先不用」，是**不许用**。"
+  },
+  "Alert.banner": {
+   "instead": "要通栏提示，把 `Alert` 放在 `Layout` 顶部（`Header` 下、`Content` 上），视觉上就是通栏。",
+   "why": "没有 `banner` 形态的 CSS（通栏、无圆角、无左右留白），渲染器也不读它。写了与不写一样。"
+  },
+  "Alert.text": {
+   "instead": "正文改用 `message`（副文本用 `description`）。",
+   "why": "**这不是「不支持的 AntD 属性」，是写错了键**：Alert 的正文键是 `message`。`text` 被 `Tag`/`Button`/`Text` 等类型读，所以按「全局有没有读过」判会放过它 —— 而 `R.Alert` 只读 `message`，结果是**图标和边框都在、正文空白**。`example-06` 有两处（`n-new-alert` / `n-st-alert`）。"
+  },
+  "DatePicker.disabled": {
+   "instead": "要表达不可选，把 `placeholder` 写成「暂不可选」，并在旁边说明原因。",
+   "why": "`.ant-picker` 没有禁用态 CSS，渲染器也不读 `disabled`；写了与不写一样。对照组：`Input` / `Select` / `TextArea` 的 `disabled` 渲成 `.dis`，所以那三处被支持。"
+  },
+  "DatePicker.showTime": {
+   "instead": "要「日期 + 时间」，直接把完整串写进 `props.value`（如 `2026-10-23 16:20`）或 `props.placeholder`。",
+   "why": "`R.DatePicker` 只渲染 `value` 与 `placeholder`，没有时间列。写 `true` 不会多出时间选择；`value` 里带的时间串本来就照原样显示，容易让人误以为是它生效了。（`TimePicker` 直接委托 `DatePicker`，同一个缺口。）"
+  },
+  "Descriptions.bordered": {
+   "instead": "要无边框的「标签 — 值」清单，用 `List`（`title` + `description`）或 `Space direction=\"vertical\"` + `Text`。",
+   "why": "`.ant-desc .d-item` **本来就恒有 1px 边框**（CSS 自带，靠 `margin:-1px` 做网格线合并）。写 `true` 无差别，写 `false` **会骗人**：边框照样在。"
+  },
+  "Descriptions.size": {
+   "instead": "密度靠 `column`（列数）与区块留白调整；确实要更紧凑，用 `Table size=\"small\"`。",
+   "why": "容器只有一种密度：`.d-item` 的 `padding:14px 16px` 写死在 CSS 里，没有 `small`/`middle` 变体；渲染器也不读它。"
+  },
+  "InputNumber.disabled": {
+   "instead": "要表达不可编辑，用 `Input` 的 `disabled`（有 `.dis` 样式），或在旁边写「（不可修改）」。",
+   "why": "`.ant-num` 只有一种形态，没有禁用样式；渲染器也不读 `disabled`。写了看不出区别。"
+  },
+  "InputNumber.max": {
+   "instead": "把范围写进 `props.help`（如「0 ~ 899」）。",
+   "why": "同上：静态展示，最大值没有承载。"
+  },
+  "InputNumber.min": {
+   "instead": "把范围写进 `props.help`（如「0 ~ 899」），或放到字段旁的常态说明里。",
+   "why": "静态展示不参与取值，最小值既不约束输入也不改变外观。"
+  },
+  "InputNumber.placeholder": {
+   "instead": "单位写进 `props.help`（如「单位：kg」）。",
+   "why": "InputNumber 渲染的是数值本身（`<b>` 里），没有输入框，占位符无落点。`05` 也没承诺它，但 `example-06` 写过 `placeholder:'kg'`（单位因此丢失）。"
+  },
+  "InputNumber.step": {
+   "instead": "把步长写进 `props.help` 或旁边的说明文字，例如「步长 5」。",
+   "why": "容器的 InputNumber 是静态展示（`− 值 +` 三个元素，没有点击逻辑，不改变 `value`），步长没有可观察结果。"
+  },
+  "Table.rowKey": {
+   "instead": "直接删掉。主子联动写在**父节点** `MasterDetail` 的 `bind` / `bindTo` 上（不是写在 Table 上）；单表本身不需要行 key。",
+   "why": "容器不是 React，没有 reconciliation；`data` 是静态数组，行 key 既不参与渲染也不驱动任何交互。写了与不写完全一样。"
+  },
+  "TimePicker.showTime": {
+   "instead": "把完整时间串写进 `props.placeholder`（如「请选择时间 2026-10-27 14:00」）或 `props.value`。",
+   "why": "`R.TimePicker` 直接委托 `R.DatePicker`，不渲染时间列，`showTime` 没有承载对象。"
+  },
+  "Upload.dragger": {
+   "instead": "什么都不用写。要纯按钮形态，换 `Button`。",
+   "why": "容器里的 Upload **恒为拖拽区**（默认文案就是「点击或拖拽文件到此区域」），没有第二种形态。写 `false` 时声明与渲染**方向相反** —— 比没生效更糟。"
+  },
+  "Upload.listType": {
+   "instead": "要展示已上传的文件列表，用 `List`（`data` + `renderItem`）+ 每行一个「移除」`Button`。",
+   "why": "没有 `.ant-upload.picture` 之类的第二形态 CSS，渲染器也不读它；写了与不写一样。"
+  },
+  "Upload.multiple": {
+   "instead": "要表达可多选，写进 `props.text`，例如「点击或拖拽文件到此区域（可多选）」。",
+   "why": "容器的 Upload 是**静态示意区**：一个虚线框 + 一句文案，不渲染文件列表。「多选」与「单选」在这里没有可观察差别。对照组：`accept` 会渲染「支持 …」副行，有承载，所以它被支持。"
+  }
+ }
+}

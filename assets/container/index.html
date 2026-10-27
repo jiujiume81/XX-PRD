@@ -302,6 +302,11 @@ select.sel:hover{border-color:var(--ant-primary)}
 .ant-form-item .fi-label{display:block;margin-bottom:6px;font-size:14px;color:var(--ant-text)}
 .ant-form-item .fi-label .req{color:var(--ant-error);margin-right:3px}
 .ant-form-item .fi-help{font-size:12px;margin-top:4px;color:var(--ant-text-3)}
+/* `FormItem.extra`（I-11）：常态说明文字，与 `help` 语义不同 —— help 是**校验结果**
+   （随 validateStatus 变色），extra 是**常态说明**。参照 AntD，extra 用 0.45（text-3）
+   而不是 0.25（text-4）：12px 下 0.25 的对比度约 1.9:1，投影/打印近乎不可见。
+   两者的区分靠位置（help 在上），不靠把 extra 调浅。 */
+.ant-form-item .fi-extra{font-size:12px;margin-top:4px;color:var(--ant-text-3);line-height:1.5}
 .ant-form-item .fi-help.error{color:var(--ant-error)}
 .ant-form-item .fi-help.warning{color:var(--ant-warning)}
 .ant-form-item .fi-help.success{color:var(--ant-success)}
@@ -616,6 +621,13 @@ h5.ant-typography{font-size:14px;font-weight:600;margin:0 0 4px}
    为什么是 560：866 档内容宽 866−560=306，刚好还能看到「当前行在列表里的位置」；
    再宽就变成「详情页」而不是「详情抽屉」了（见方案 T-5）。 */
 .ant-drawer.w-lg{width:560px}
+/* 抽屉方向（`Drawer.placement`，I-11）：默认 right。top/bottom 恒满宽、限高 70%，
+   且**不吃 width 声明** —— 横向的 width 在上下抽屉里没有语义，和 `.w-lg` 一起用会打架。
+   同优先级的 `.ant-drawer.w-lg` 在这条（0,3,0）之下，不会把满宽顶回去。 */
+.ant-drawer-mask.pl-left{justify-content:flex-start}
+.ant-drawer-mask.pl-top{align-items:flex-start}
+.ant-drawer-mask.pl-bottom{align-items:flex-end}
+.ant-drawer-mask.pl-top .ant-drawer,.ant-drawer-mask.pl-bottom .ant-drawer{width:100%;max-width:100%;max-height:70%}
 .ant-drawer .d-head{padding:16px 22px;font-size:16px;font-weight:600;border-bottom:1px solid var(--ant-border-2)}
 .ant-drawer .d-body{padding:20px 22px;flex:1;overflow:auto}
 .ant-drawer .d-foot{padding:12px 22px;border-top:1px solid var(--ant-border-2);display:flex;justify-content:flex-end;gap:8px}
@@ -1377,6 +1389,10 @@ R.Input=function(p,ctx,node){
 R.TextArea=function(p,ctx,node){
   var cls='ant-textarea'+(p.status?' '+(p.status==='error'?'err':'warn'):'')+(p.disabled?' dis':'');
   var w=h('div',cls);
+  /* `rows`（I-11）：原来只吃 `min-height:64px`，写 `rows:3` 与 `rows:6` 长得一样。
+     行高 1.5×14px = 21px；`*{box-sizing:border-box}` 下 min-height 含 padding(6×2) 与
+     边框(1×2)，故 21×rows + 14；64 仍是下限（两行输入框不会比一行还矮）。 */
+  if(isFinite(Number(p.rows))&&Number(p.rows)>0) w.style.minHeight=Math.max(64,21*Number(p.rows)+14)+'px';
   if(p.value) w.appendChild(txt(p.value)); else w.appendChild(h('span','ph',{text:p.placeholder||''}));
   if(p.showCount) w.appendChild(h('span',null,{style:'position:absolute;right:10px;bottom:6px;font-size:12px;color:var(--ant-text-3)',text:((p.value||'').length+'/'+(p.maxLength||200))}));
   if(p.showCount) w.style.position='relative';
@@ -1446,6 +1462,7 @@ R.FormItem=function(p,ctx,node){
   d.appendChild(lab);
   var body=h('div'); renderChildren(node,ctx).forEach(function(c){body.appendChild(c)}); d.appendChild(body);
   if(p.help) d.appendChild(h('div','fi-help '+(p.validateStatus||''),{text:p.help}));
+  if(p.extra) d.appendChild(h('div','fi-extra',{text:p.extra}));
   return d;
 };
 R.Slider=function(p,ctx,node){
@@ -1907,7 +1924,7 @@ R['List.Item']=function(p,ctx,node){
   return d;
 };
 R.Card=function(p,ctx,node){
-  var d=h('div','ant-card'+(p.hoverable?' hoverable':'')+(p.size?' sm':''));
+  var d=h('div','ant-card'+(p.bordered?' bordered':'')+(p.hoverable?' hoverable':'')+(p.size?' sm':''));
   if(p.loading){ d.appendChild(h('div','c-head',null,h('div','ant-skel-line'))); d.appendChild(h('div','c-body',null,h('div','ant-skel-line'))); return d; }
   var cover=slotFirst(node,'cover',ctx); if(cover) d.appendChild(cover);
   if(p.title||node.slots&&node.slots.extra){
@@ -2081,11 +2098,19 @@ R.Drawer=function(p,ctx,node){
   var cls='ant-drawer';
   var w=Number(p.width);
   var authored=String(p.class||p.className||'');
-  var lg=isFinite(w)&&w>=560&&authored.indexOf('w-lg')<0;
+  /* placement（I-11）：只有 right/left/top/bottom 四值。写错时**不许静默退回右边** ——
+     那是「声明与渲染脱钩」最隐蔽的一种：画面正常，只是方向不是作者写的那个。 */
+  var place=String(p.placement||'right');
+  if(['right','left','top','bottom'].indexOf(place)<0){
+    warn('Drawer placement 只支持 right/left/top/bottom（收到 '+place+'），已按 right 处理');
+    place='right';
+  }
+  var horiz=(place==='top'||place==='bottom');
+  var lg=!horiz&&isFinite(w)&&w>=560&&authored.indexOf('w-lg')<0;
   if(lg) cls+=' w-lg';
   var dr=h('div',cls,null,[h('div','d-head',{text:p.title||''}),body,foot?h('div','d-foot',null,foot):null]);
-  if(isFinite(w)&&w>0&&!lg&&!(authored.indexOf('w-lg')>=0&&w===560)) dr.style.width=w+'px';
-  return h('div','ant-drawer-mask',null,dr);
+  if(!horiz&&isFinite(w)&&w>0&&!lg&&!(authored.indexOf('w-lg')>=0&&w===560)) dr.style.width=w+'px';
+  return h('div','ant-drawer-mask'+(place!=='right'?' pl-'+place:''),null,dr);
 };
 R.Popconfirm=function(p,ctx,node){ return h('span','ant-btn',{text:p.title||'确认?'}); };
 R.Spin=function(p,ctx,node){ return h('div','ant-spin',null,[h('span','sp-ring'),txt(p.tip||'加载中')]); };

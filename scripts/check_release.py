@@ -597,6 +597,54 @@ def check_r_group(_docs, _ph, _gen):
     return STATUS_PASS, detail, []
 
 
+def check_props_contract_dod(_docs, _ph, _gen):
+    """DoD 13：props 契约与 SS-01 三态（references/04 §6.8）。
+
+    为什么要单独一项：SS-01 的 INCOMPLETE 有三种来源，处置完全不同 ——
+      ① 契约缺失 / 与容器不同步  = **工具链缺失**，任何档都非 0（不修就没法判）；
+      ② 产物里没有节点级 props    = 没有可判输入，不许当 PASS；
+      ③ 真正越界                  = 产物 ERROR。
+    DoD 1 只看 errors/warns，会把 ① 读成绿；本项把 ① 的退出码、② 的措辞、③ 的点名
+    三件事各验一次，缺一件就是「判据在、闸门没装」。
+
+    三步都不改仓库文件：契约缺失那一态靠进程内把常量指到不存在的路径来模拟。
+    """
+    script = os.path.join(SCRIPTS, "props_contract.py")
+    proc = subprocess.run([sys.executable, script, "--check"],
+                          capture_output=True, text=True, cwd=ROOT)
+    if proc.returncode != 0:
+        return STATUS_FAIL, "契约与容器不同步", first_lines((proc.stdout or "") + (proc.stderr or ""), 5)
+
+    ex3 = os.path.join(ROOT, "assets", "examples", "example-03-nav-tree.json")
+    ex6 = os.path.join(ROOT, "assets", "examples", "example-06-dense-list.json")
+    vp = os.path.join(SCRIPTS, "validate_prd_json.py")
+    p3 = subprocess.run([sys.executable, vp, ex3], capture_output=True, text=True, cwd=ROOT)
+    p6 = subprocess.run([sys.executable, vp, ex6], capture_output=True, text=True, cwd=ROOT)
+    out6 = (p6.stdout or "") + (p6.stderr or "")
+    if p3.returncode != 0:
+        return STATUS_FAIL, "绿样本 example-03 被判红", first_lines(p3.stdout or p3.stderr, 5)
+    if p6.returncode == 0 or "Alert).props.text" not in out6:
+        return STATUS_FAIL, "造红失败：example-06 应点名 Alert.text 且非 0", first_lines(out6, 6)
+    if "疑似写错节点" in out6 or "疑似写错节点" in (p3.stdout or ""):
+        return STATUS_FAIL, "仍出现「疑似写错节点」（WARN 口径未删）", []
+
+    # 第三态：契约缺失 → INCOMPLETE 且**任何档**非 0（进程内模拟，不动文件）
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_vpr", vp)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod._PROPS_CONTRACT = os.path.join(ROOT, ".no-such-dir", "props-contract.json")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = mod.run([ex3], as_json=False)
+    txt = buf.getvalue()
+    if rc == 0 or "INCOMPLETE [SS-01]" not in txt:
+        return STATUS_FAIL, "契约缺失时未按「工具链缺失」非 0 退出（rc=%d）" % rc, first_lines(txt, 4)
+
+    info = next((l.strip(" ·") for l in (p3.stdout or "").splitlines() if "props 消费闭合" in l), "")
+    return STATUS_PASS, "契约同步｜绿样本 03 PASS｜造红 06 点名 Alert.text｜缺契约 rc=%d｜%s" % (rc, info[:60]), []
+
+
 ITEMS = [
     ("全部示例结构 + 语义校验通过", check_examples),
     ("容器回归全绿", check_regression),
@@ -610,6 +658,7 @@ ITEMS = [
     ("反样本守卫（红在登记项上）", check_reject_guard),
     ("形态判据（示例 example-06）", check_shape_gate),
     ("需求准确性 R1–R4（绿样本 + 逐条造红）", check_r_group),
+    ("props 契约与 SS-01 三态", check_props_contract_dod),
 ]
 
 

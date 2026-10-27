@@ -135,6 +135,9 @@ class Report:
         self.incomplete_msgs = []
         # R1–R4 的逐条状态：[(rid, "PASS"/"ERROR"/"INCOMPLETE"/"WARN")]，供自证脚本按 rid 断言。
         self.r_group = []
+        # SS-01 的 INCOMPLETE 是**工具链缺失**（契约文件没有 / 与容器不同步），
+        # 不是产物的错：不修就没法判，所以任何档都要非 0 退出（XX-050 裁定）。
+        self.toolchain_fail = False
 
     def error(self, msg):
         self.errors.append(msg)
@@ -352,6 +355,196 @@ def transition_is_system(t):
 
 def interaction_ids_of(page):
     return {ix.get("id") for ix in (page or {}).get("interactions") or []}
+
+
+# ---------- SS-01：props 消费闭合（I-11 / XX-050） ----------
+# 来历：容器逐字段手写读 props（`p.xxx`），没有整包透传。产物里写一个容器没读的键
+# = 写了不生效，而且不报任何错；几何判据（check_ui_shape）只量像素，对这类键完全免疫。
+# 所以从**声明侧**判，白名单由 scripts/props_contract.py 从容器源码机械提取。
+#
+# 判定口径（references/04 §6.8.4）：
+#   PASS        每个 (type,key) 都在「该 type 可读集 ∪ shared 通用键」里
+#   ERROR       越界。**不设 WARN**：「键被别的类型读过」不是作者的处境差异，
+#               是这个键写错了节点 —— 判成 WARN 就是假绿（example-06 的 Alert.text
+#               在 WARN 口径下退出码是 0，而画面是两条空白告警条）
+#   INCOMPLETE  契约缺失 / 无法解析 / 与容器源码逐类型比对不一致 / 产物里一个节点级
+#               props 都没有。前三种是**工具链缺失**，任何档都非 0。
+#
+# 同步判据用「运行时重算 byType 与服务端比对」，不用整文件 sha：
+# sha 对「改一行注释」过敏（全线 INCOMPLETE），对「清单换格式」失明。
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SCRIPTS = os.path.join(_ROOT, "scripts")
+_PROPS_CONTRACT = os.path.join(_ROOT, "assets", "container", "props-contract.json")
+_CONTAINER_HTML = os.path.join(_ROOT, "assets", "container", "index.html")
+
+# 值域也是一部分契约（R5）：写了合法键、给了非法值，同样是「声明不生效」。
+_VALUE_DOMAIN = [
+    ("Drawer", "placement", ("right", "left", "top", "bottom"), "right/left/top/bottom 四值"),
+    ("*", "visible", (True, False), "布尔"),
+]
+
+
+def _load_props_contract(rep):
+    """读契约并**运行时重算**比对。返回契约 dict；判不了时返回 None（已记 INCOMPLETE）。"""
+    if not os.path.exists(_PROPS_CONTRACT):
+        rep.incomplete("[SS-01] props 契约文件缺失（先跑 python3 scripts/props_contract.py）")
+        rep.toolchain_fail = True
+        return None
+    try:
+        with open(_PROPS_CONTRACT, encoding="utf-8") as f:
+            c = json.load(f)
+    except Exception as e:
+        rep.incomplete("[SS-01] props 契约文件无法解析：%s" % e)
+        rep.toolchain_fail = True
+        return None
+    if not os.path.exists(_CONTAINER_HTML):
+        rep.incomplete("[SS-01] 找不到容器源码 %s，无法校验契约是否过期" % _CONTAINER_HTML)
+        rep.toolchain_fail = True
+        return None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_props_contract", os.path.join(_SCRIPTS, "props_contract.py"))
+        pc = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pc)
+        with open(_CONTAINER_HTML, encoding="utf-8") as f:
+            cur = pc.extract(f.read())
+    except Exception as e:
+        rep.incomplete("[SS-01] 重算契约失败（生成器不可用）：%s" % e)
+        rep.toolchain_fail = True
+        return None
+
+    diffs = []
+    if c.get("renderers") != cur["rendererCount"]:
+        diffs.append("渲染器数：契约 %s / 源码 %s" % (c.get("renderers"), cur["rendererCount"]))
+    if sorted(c.get("shared") or []) != sorted(cur["shared"]):
+        diffs.append("shared：契约 %s / 源码 %s" % (c.get("shared"), cur["shared"]))
+    cb = {k: set(v) for k, v in (c.get("byType") or {}).items()}
+    nb = {k: set(v) for k, v in cur["byType"].items()}
+    for t in sorted(set(cb) | set(nb)):
+        if cb.get(t, set()) != nb.get(t, set()):
+            diffs.append("%s：源码多 %s / 契约多 %s"
+                         % (t, sorted(nb.get(t, set()) - cb.get(t, set())) or "-",
+                            sorted(cb.get(t, set()) - nb.get(t, set())) or "-"))
+    if diffs:
+        rep.incomplete("[SS-01] props 契约与容器源码不一致（%d 处）—— 先跑 "
+                       "python3 scripts/props_contract.py：%s%s"
+                       % (len(diffs), "；".join(diffs[:5]), " 等" if len(diffs) > 5 else ""))
+        rep.toolchain_fail = True
+        return None
+    return c
+
+
+def _iter_prop_nodes(node, path, page_id):
+    """遍历节点级 props，**包含没有 id 的模板节点**与 renderItem 里的节点模板。
+
+    没有 id 不等于不在范围内：example-02 的 `List.Item` 就没有 id，
+    按 id 过滤会让整类模板静默漏检（假绿）。
+    """
+    if not isinstance(node, dict):
+        return
+    t = node.get("type")
+    label = node.get("id") or path
+    pr = node.get("props")
+    if t and isinstance(pr, dict):
+        yield page_id, label, t, pr
+    for i, c in enumerate(node.get("children") or []):
+        for x in _iter_prop_nodes(c, "%s.children[%d]" % (label, i), page_id):
+            yield x
+    for k, arr in (node.get("slots") or {}).items():
+        for i, c in enumerate(arr or []):
+            for x in _iter_prop_nodes(c, "%s.slots.%s[%d]" % (label, k, i), page_id):
+                yield x
+    pr = pr if isinstance(pr, dict) else {}
+    # 列表页「三件套」：toolbar / queryActions 的节点式条目（属性式条目 type 是视觉类型，跳过）
+    for key in ("toolbar", "queryActions"):
+        for i, it in enumerate(pr.get(key) or []):
+            if isinstance(it, dict) and it.get("type") in WHITELIST:
+                for x in _iter_prop_nodes(it, "%s.props.%s[%d]" % (label, key, i), page_id):
+                    yield x
+    # renderItem 模板（R7）：模板里的节点模板同样是节点
+    ri = pr.get("renderItem")
+    if isinstance(ri, dict) and ri.get("type"):
+        for x in _iter_prop_nodes(ri, "%s.props.renderItem" % label, page_id):
+            yield x
+
+
+def _more_samples(samples, limit=3):
+    """同一个键还出现在哪些节点 —— 只报一处会让人修一轮冒一批。"""
+    uniq, seen = [], set()
+    for s in samples:
+        if s in seen:
+            continue
+        seen.add(s)
+        uniq.append(s)
+    if len(uniq) <= 1:
+        return ""
+    return "（同键共 %d 处：%s%s）" % (len(uniq), "、".join(uniq[:limit]), "等" if len(uniq) > limit else "")
+
+
+def check_props_contract(data, rep):
+    """SS-01：每个节点 `props` 下的键，必须被容器**该类型**（或 shared 通用处理）读过。"""
+    c = _load_props_contract(rep)
+    if c is None:
+        return
+
+    by_type = {k: set(v) for k, v in (c.get("byType") or {}).items()}
+    shared = set(c.get("shared") or [])
+    index = c.get("unsupportedIndex") or {}
+
+    pairs = {}   # (type, key) -> [样例标签]
+    bad_values = []
+    occ = 0
+    for page in data.get("pages") or []:
+        pid = page.get("id")
+        for pid2, label, t, pr in _iter_prop_nodes(page.get("componentTree") or {}, "componentTree", pid):
+            for k, v in pr.items():
+                occ += 1
+                pairs.setdefault((t, k), []).append("%s `%s`(%s).props.%s" % (pid2, label, t, k))
+                for dom_t, dom_k, allowed, human in _VALUE_DOMAIN:
+                    if dom_k != k or dom_t not in ("*", t):
+                        continue
+                    ok = (isinstance(v, bool) if allowed == (True, False) else v in allowed)
+                    if not ok:
+                        bad_values.append("%s `%s`(%s).props.%s = %r（只能是 %s）"
+                                          % (pid2, label, t, k, v, human))
+    if not pairs:
+        rep.info("SS-01 props 消费闭合：INCOMPLETE（产物里没有任何节点级 props，无从判）")
+        return
+
+    bad = []
+    for (t, k), samples in sorted(pairs.items()):
+        if k in shared:
+            continue
+        if k not in by_type.get(t, set()):
+            bad.append((t, k, samples))
+
+    head = ("props 消费闭合（契约 %d 键 / %d 渲染器 / shared=%s）："
+            "分母 %d 个 type×key（来源 %d 处出现）"
+            % (len(c.get("allKeys") or []), c.get("renderers"),
+               ",".join(sorted(shared)) or "-", len(pairs), occ))
+
+    if bad or bad_values:
+        lines = []
+        for t, k, samples in bad[:40]:
+            u = index.get("%s.%s" % (t, k)) or index.get("*.%s" % k)
+            if u:
+                lines.append("%s ← 容器明确不支持：%s 替代：%s%s"
+                             % (samples[0], u["why"], u["instead"], _more_samples(samples)))
+            else:
+                lines.append("%s ← 容器源码 0 命中%s" % (samples[0], _more_samples(samples)))
+        if len(bad) > 40:
+            lines.append("…另有 %d 个 type×key 越界未列出" % (len(bad) - 40))
+        lines.extend(bad_values[:10])
+        if bad:
+            tail = "**%d 个键容器不读**" % len(bad)
+            if bad_values:
+                tail += "；另有 %d 处取值非法" % len(bad_values)
+        else:
+            tail = "%d 处取值非法" % len(bad_values)
+        rep.error(head + "｜" + tail + "：" + "；".join(lines))
+    else:
+        rep.info(head + "｜全部被容器读取")
 
 
 # ---------- 校验主体 ----------
@@ -1747,6 +1940,10 @@ def validate(data, rep: Report, strict=False):
              f"INCOMPLETE={_n_inc} / WARN={_n_warn}"
              + (f"｜未判：{', '.join(_inc_ids)}" if _inc_ids else ""))
 
+    # SS-01：声明侧判据（references/04 §6.8）。放在 R 组之后 —— 几何判据量像素，
+    # 这条量「声明有没有落地」，两者互补，互不替代。
+    check_props_contract(data, rep)
+
 
 def run(paths, as_json=False, profile="default", require_r=False):
     strict = profile == "delivery"
@@ -1779,12 +1976,17 @@ def run(paths, as_json=False, profile="default", require_r=False):
         # （`check_release.py` 的 DoD 12 就是那样调的），那时 INCOMPLETE 与非 0 退出等价。
         if require_r and rep.incomplete_msgs:
             worst = 1
+        # SS-01 的 INCOMPLETE 是工具链缺失（契约缺失/不同步），与交付档无关：
+        # 判据自己没装好，任何档都不许算过（XX-050 裁定）。
+        if rep.toolchain_fail:
+            worst = 1
         results.append(rep)
 
     if as_json:
         out = [{"target": r.target, "profile": r.profile,
                 "errors": r.errors, "warns": r.warns, "infos": r.infos,
-                "incomplete": r.incomplete_msgs}
+                "incomplete": r.incomplete_msgs,
+                "toolchain_fail": getattr(r, "toolchain_fail", False)}
                for r in results]
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return worst
@@ -1811,9 +2013,15 @@ def run(paths, as_json=False, profile="default", require_r=False):
         print(f"  => {status}  (errors={len(r.errors)}, warnings={len(r.warns)}, "
               f"incomplete={len(r.incomplete_msgs)}, profile={r.profile})")
     total_inc = sum(len(r.incomplete_msgs) for r in results)
+    _toolchain = any(getattr(r, "toolchain_fail", False) for r in results)
     print("=" * 68)
-    print(f"结论（profile={profile}）："
-          + ("存在 ERROR，必须修复后交付" if worst else "全部通过结构校验")
+    if any(r.errors for r in results):
+        _verdict = "存在 ERROR，必须修复后交付"
+    elif _toolchain:
+        _verdict = "判据工具链不可用（SS-01 契约缺失或与容器不同步），不算通过"
+    else:
+        _verdict = "全部通过结构校验"
+    print(f"结论（profile={profile}）：" + _verdict
           + (f"｜INCOMPLETE={total_inc} 条（判据在但输入缺，"
              + ("--require-r 下视为不可交付）" if require_r else "默认不拦，但不许当 PASS）")
              if total_inc else ""))

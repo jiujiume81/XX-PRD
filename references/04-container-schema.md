@@ -520,7 +520,8 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
   "state": "normal",               // normal | loading | disabled | error | success | active | empty
   "when": "",                      // 条件渲染表达式，空=总是渲染。例："status === 'draft'"
   "children": [ /* Node[] */ ],
-  "slots": { "extra": [ /* Node[] */ ] }   // 具名插槽（如 Card.extra / FormItem.help）
+  "slots": { "extra": [ /* Node[] */ ] }   // 具名插槽。**插槽名按 type 不同**（如 Card.extra / Drawer.footer），
+                                           // 写错 type 不读的插槽会被静默丢弃 —— 见 §6.8 R2
 }
 ```
 
@@ -531,7 +532,7 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
   ```jsonc
   { "id": "n-list", "type": "List", "props": { "data": ["a","b"], "renderItem": { "type":"List.Item", "props": { "title": "{{item}}" } } } }
   ```
-  > `renderItem` 必须写在 **`props` 内**（写在节点级容器不认，会静默渲染成空列表；校验器会给 WARN）。模板占位用 `{{item.字段}}` / `{{item}}` / `{{index}}`。
+  > `renderItem` 的**规范位置是 `props.renderItem`**。写在节点级时容器**会兼容读**（`R.List` 的 `p.renderItem||node.renderItem`），所以列表**照常渲染**，不是空列表 —— 这条老说法是错的（I-11 更正）。但那个位置不在契约键空间内：校验器会按节点级未知字段给 WARN，SS-01 也**判 ERROR 并要求挪进 `props`**（见 §6.8.2 R7）。模板占位用 `{{item.字段}}` / `{{item}}` / `{{index}}`。
 - 条件渲染优先用 `when` 表达式，而不是拆两棵子树。
 - 需要「从别处带参跳进来」的字段，用 `{{变量名}}` 写在 `props` 里（见 §0.2），并给页面 `states[].vars` 写默认值。
 
@@ -792,6 +793,180 @@ B2B 原型最常见的缺陷是「单据有多个状态，按钮却永远可点�
 
 > 主表配套的列表页三件套（`query` 查询条 / `toolbar` 操作条 / `pagination` 分页脚）
 > 见 `references/05-component-states.md` §2.4。可运行示例：`assets/examples/example-04-master-detail.json`。
+
+---
+
+## 6.8 props 可读性契约（写了必须被读）
+
+> 本节管**声明侧**：产物里写了、容器没读，会怎样。
+> 它与 `check_ui_shape`（量渲染结果）互补 —— 几何判据对一个「写在哪都不改变像素」的键**完全免疫**。
+
+### 6.8.1 为什么单列
+
+容器不是 React：背后没有组件库兜底。每种 `type` 各有一个渲染器（**共 68 个**；注册有两种写法：`R.X=function(...)` 与 `R['List.Item']=function(...)`，后者漏掉就是一个类型整体判假红），
+**逐字段手写读 props**（`R.X=function(p,ctx,node){ … p.title … }`），**没有整包透传**。
+
+> **引用容器位置的约定（I-11 定）**：本节一律用**函数名 + 代码片段**锚定，**不靠行号**。行号只在必要时作**当次快照**，且以 `bbcf8cc`（2026-10-27 的工作树与它一致；更早的封版点 `3a1bb09` 已经差 12 行）为准 —— 容器还在改（每加一个读取点，后面每行都会后移），按行号翻会翻到不相干的代码，然后怀疑自己看错。这跟本节要治的病同族：**能找到 ≠ 找对**。
+于是一个键写错，症状分四种，**没有一种会自己报错**：
+
+| 症状 | 典型输入 | 画面 | 只有谁能看见 |
+|---|---|---|---|
+| 写了没人读 | `Upload.multiple` | 与不写**完全一样** | 声明侧 |
+| 读了但读在别的类型上 | `Alert.text`（Alert 的正文键是 `message`） | 告警条空白，图标和边框都在 | 声明侧 |
+| 值类型不对，开关失效 | `visible:"false"`（字符串） | 该隐藏的**照常显示**，方向相反 | 声明侧 |
+| 键放错层级 | `renderItem` 写到节点级 | **照常渲染**（容器在 `R.List` 里兼容读 `node.renderItem`）—— 位置错但能跑，最难发现的一种 | 校验器的节点级未知字段 WARN + SS-01 的 R7（判 ERROR，要求挪进 `props`） |
+
+**几何判据抓不到前三种**：它们的共性是「输出像素不变」，而 `check_ui_shape` 只量像素。
+**`validate_prd_json.py` 的节点级未知字段检查也抓不到**：它比的是 `set(node) - NODE_KEYS`，
+`props` 是白名单里的一个键，里面的内容它一个都不看。
+所以必须另立一条**只读声明**的判据，就是本节的 SS-01。
+
+### 6.8.2 什么算「可读」：四类键，四种取法
+
+| 类别 | 定义 | 现阶段成员 | 怎么取 |
+|---|---|---|---|
+| **通用键** | 由 `renderNode` 对所有节点统一处理，不属任何单个渲染器 | `visible`（`false` → `display:none`；`true` → 恢复） | 契约的 `shared` 集，**对每个 type 都算可读** |
+| **类型键** | 该 `type` 的渲染器（**含它调用的同文件 helper**）真正读的键 | 见契约 `byType` | 提取器闭包，见 §6.8.3 |
+| **委托键** | `R.X` 把整包 props 转给 `R.Y`，X 自己不再读 | `Radio→Checkbox`、`TimePicker→DatePicker`、`Cascader→Select` | `X ⊇ Y`，按链求**不动点** |
+| **插槽键** | `node.slots.NAME`，不是 props | `Header.extra`、`Card.extra/cover/actions`、`Drawer.footer`、`Result.extra` | 按 type 单独取，**不继承** |
+
+> **通用键 `visible` 的语义边界**：它只做 `display:none` —— 节点**仍在 DOM**、尺寸为 0，
+> 不要给被隐藏的节点挂标注（锚点会落到容器左上角）；要真正不生成节点，用节点级 `when`（渲染前就返回 null）。
+> 也**不许在单个渲染器里重复实现它**：`R.Alert` 里加 `return null` 会被 `renderNode` 兜底成 `<span>`，
+> 节点从 `DIV` 变 `SPAN`，按 class 取的截图与断言会一起失效。`visible` 必须是**布尔**：字符串 `"false"` 让 `===false` 不成立 → 开关失效、方向相反（R5）。
+
+**七条规则（R1–R7）**
+
+| # | 规则 | 违反的后果 |
+|---|---|---|
+| **R1** | 写进 `props` 的每个键，必须在**该 type** 的可读集里 | ERROR：声明空转 |
+| **R2** | `slots` 的键同理，**按 type 判**，不许拿「全局有过就算」 | ERROR：插槽被静默丢弃（`FormItem` **一个插槽都不读**，只有 `children` 与 `help`/`extra` 两个 prop） |
+| **R3** | 通用键（`visible`）不受 R1 约束，**每个 type 都可用** | 把它当「Alert 专属」会造出假红 |
+| **R4** | 委托继承必须**机械求不动点**，不许手写补 | 手写必分叉：加一个委托渲染器就多一批假红 |
+| **R5** | 值域也是契约：枚举与类型写错同样是 ERROR | `placement:"center"` 会静默退化成 `right`；`visible:"false"` 会静默失效 |
+| **R6** | `Drawer` 的声明必须等于渲染：① `top`/`bottom` **不吃 `width`**，同时写 → ERROR；② `width` 必须是数字（`"600px"` 经 `Number()` 得 NaN → 静默回 420）；③ 只有 **420 / 560** 两档，`≥560 且 ≠560`（如 600）会渲成 560 → ERROR | ① 声明 560、渲成满宽；② 声明 `600px`、渲成 420；③ 声明 600、渲成 560。三条画面都「看起来正常」，只有量出来才知道 |
+| **R7** | `props.renderItem` 里的**节点模板**同样是节点，受 R1–R6 约束，**无 `id` 也必须在范围内**（`renderItem` 是**单对象**，不是数组）。模板**只能**放在 `props.renderItem`：写在节点级 `node.renderItem` 时容器**兼容读**（能渲染），但那个位置不在契约键空间内 → **ERROR**，修法是挪进 `props`。寻址与取值见下表 | 只遍历 `children`/`slots` 会整棵漏掉；按 `id` 过滤会让模板节点静默跳过 —— 两种都是假绿。位置错的那条更麻烦：它**能跑**，所以只有声明侧判得出来 |
+
+**R7 的寻址格式（模板节点怎么点名）**
+
+模板节点常常没有 `id`，而且**加 `id` 也解决不了寻址**：`cloneTpl`（`assets/container/index.html`，找把 `id` 改写成 `<原 id｜tpl>-<行号>-<自增序号>` 的那三行，即 `x.id=(x.id||'tpl')+'-'+idx+'-'+(++uid)`）在渲染时改写每个模板节点的 `id`。也就是说作者写不写 `id`，运行期拿到的都不是它 —— 既不能拿 `data-node-id` 反查声明位置，也不能靠补 `id` 让消息可读。所以寻址只走**声明结构**：
+
+```
+<页面>/<节点段>( /<节点段> )*
+节点段 := <id>(<type>)                 带 id 的节点：直接用 id
+        | children[<k>](<type>)       无 id 的兄弟：在 children 里的原始下标（0 起，不跳过任何元素）
+        | slots.<name>[<k>](<type>)   插槽里的节点（cloneTpl 也遍历 slots，所以 R2 同样适用）
+        | props.renderItem(<type>)    模板根：持有它的那个节点的 props.renderItem
+```
+
+| 位置 | 路径写法 |
+|---|---|
+| 列表节点自己的键 | `合同列表/order-list(List).props.title` |
+| 模板根（`List.Item`）的键 | `合同列表/order-list(List).props.renderItem(List.Item).props.title` |
+| 模板里**第二个**同类型子节点 | `…props.renderItem(List.Item).children[1](Tag).props.color` |
+| 模板里再套一层模板 | `…renderItem(List.Item).children[0](List).props.renderItem(Text).props.content` |
+
+| 问题 | 规定 |
+|---|---|
+| 报错消息怎么点名 | 打**整条路径** + `.props.<key>`，**不要求**作者给模板节点补 `id`（补了也会被改写，见上） |
+| 同一模板里出现两个同类型节点怎么区分 | 靠上层下标 `children[k]` / `slots.<name>[k]`。**没有 `renderItem[k]` 这种写法** —— 一份模板渲染 N 行数据仍然只有**一个**地址，所以模板内的错只报**一次**（重复出现只体现在分母的「M 处出现」里） |
+| `{{item.xxx}}` 算不算「值」，值域判据进不进去判 | 算，但按**声明侧原值**判、不展开插值；键名照判（插值不是写死键的挡箭牌）。值域：`subst()` 只产出**字符串**（同文件找 `if(typeof v!=='string') return v;` 的 `function subst`，它把 `{{item.x}}` 一律换成 `String(x)` 或 `''`），而 `visible` 判的是 `props.visible===false`（`renderNode` 里那句 `if(props.visible===false) el.style.display='none'`）→ **布尔键与数值键写插值一律 ERROR**（`visible:"{{item.on}}"` 永远不隐藏；`Drawer.width:"{{item.w}}"` 在声明侧核不出 420/560 两档，见 R6）。**字符串键**（`title` / `description` / `content` 等）允许插值，不做内容校验 |
+
+> **两条禁令**：① 不许把「给模板节点加 `id`」当修法 —— 那等于要求作者**为了能报错而写**，而且加了也会被改写；② 不许用「`data` 是空的所以跳过」当理由 —— SS-01 遍历的是**声明树**，与有没有数据行无关。`renderItem` 整段不存在才是「没有可判对象」，此时不报错，也**不是** INCOMPLETE。
+>
+> **顺带记一条容器缺口**（不在 SS-01 职责内，别指望判据拦）：`cloneTpl` 只替换 `props` 里的字符串值，**节点级 `when` 不参与插值** —— 模板里写 `when:"{{item.x}}"` 会走表达式求值，结果与数据行无关（求值失败按 `true` 处理并 warn，或取不到值恒假），所以模板内目前**没有「按行隐藏」的合法写法**。`visible` 也救不了（插值必失效）。要按行隐藏，只能等容器补 `renderItem` 的行内条件，或把行做成子节点由 `data` 驱动。
+>
+> **边界**：本节只管**节点 `props` 的一级键**与**插槽名**。
+> `columns[]` / `items[]` / `query[]` / `options[]` 这些**数组元素的内部字段**不在本判据内
+> （它们的契约在 `05` 各 type 行的括号说明里）。不划这条边界，键空间会无限膨胀。
+
+### 6.8.3 白名单从哪来（不许手写）
+
+| 项 | 约定 |
+|---|---|
+| 生成器 | `scripts/props_contract.py`，从容器源码机械提取（必须同时认 `R.X=` 与 `R['X']=` 两种注册） |
+| 契约文件 | `assets/container/props-contract.json`，带**两个**哈希：容器 `sourceSha256` + 不支持清单 `unsupportedSha256` |
+| 提取闭包 | 渲染器函数体 **+ 它调用链上的同文件函数**（`buildFilterBar` / `buildQueryBar` 等），可传递。**机械判定只有一条**：调用点**第一个实参恰好是 props 形参**才跟进（现状所有渲染器首参都叫 `p`，所以等价于「第一个实参写作 `p`」）；看实参位置，不看函数名 |
+| 不跟进的调用 | `getPath(o,p)`（那个 `p` 是**路径串**，`p.split`）、`parseAtom(t,p,vars)`（那个 `p` 是 **token 位置对象** `{i:0}`，`p.i`）—— 它们的 `p` 不是 props。不加这条会凭空长出 `split` / `i` 两个「合法键」，是**假绿**；同理不跟进动态分发（`fn(props,…)` 里的 `fn` 是变量，跟进去会把所有类型串成一锅） |
+| 注释与字符串 | 词法扫描必须跳过 `//`、`/* */`、字符串 / 模板串 / 正则字面量后再取 `p.<key>`。容器里确有注释提到 `p.xxx`（`R.Row` 那句「Col 自己读不到 `p.gutter`」），它今天不制造假键（`R.Row` 真的读 `p.gutter`）；但**白名单被注释放行比没有白名单更危险**：下一条注释写一个不存在的键，就多一个永远抓不到的假绿 |
+| 前提 | 所有渲染器**首参必须叫 `p`**（现状 68/68）。提取器据此取数；真要改名，它必须**非 0 退出并说明签名变了**，不许静默取到 0 个键 |
+| 禁用的取法 | 「按 `R.*` 区块切段」—— 段与段之间的 helper 会被算成**上一个渲染器**的键。实测：`queryId` / `resetId` 由 `buildFilterBar` 读，切段法把它们记在 `Transfer` 名下，于是 `Table.queryId` 变「疑似写错节点」、`Transfer.queryId` 变「合法」——**一假红一假绿** |
+| 同步 | 任一枚哈希与其源文件不符 → **INCOMPLETE**，不许判 PASS（判一份过期白名单比不判更危险）。只校容器是**不够的**：改了清单不重生成，契约里会留一份过期的理由表，没有任何门会发现 |
+| 清单缺失 / 格式不符 | 生成器**非 0 退出、不写契约**。宁可没有契约（→ INCOMPLETE），也不许产出一份「条目 0、理由全丢」的契约 —— 那种退化看起来一切正常 |
+
+> **为什么必须机械提取**：手写白名单不会当场错，它会在某次改容器后**悄悄分叉** ——
+> 那种错没有报错、没有红、只有一份看起来很像样子的假绿。
+
+### 6.8.4 SS-01 判定：三态、分母、消息
+
+| 状态 | 触发 | 说明 |
+|---|---|---|
+| `PASS` | 所有 `(type,key)` 都在可读集 | 必须同时打出分母 |
+| `ERROR` | 任一 `(type,key)` 越界 | 逐条点名，命中不支持清单时附**理由 + 替代写法** |
+| `INCOMPLETE` | 契约缺失 / 无法解析 / 与容器不同步；**或**产物里一个节点级 props 都没有 | 「判据在、没有可判的输入」 |
+
+| 口径 | 规定 |
+|---|---|
+| 分母 | `(type, key)` **去重**后的组合数，不是出现次数（`placement` 写 9 次也只是 1 个键） |
+| 打印 | `分母 N 个 type×key（来源 M 处出现）` —— 两个数都要有，否则读不出覆盖面 |
+| 不设 WARN | 「键被别的类型读过」不是作者的处境差异，是提取器归属没做对的痕迹。判成 WARN 就是**假绿**：实测 `example-06` 的 `Alert.text`（2 处，告警条整条空白）在 WARN 口径下永远是绿的 |
+| 消息形态 | **整条路径** + `.props.<key>` + 结论 + 修法，段语法见 §6.8.2：普通节点 `页面/节点id(type).props.key`，模板节点 `…props.renderItem(List.Item).children[1](Tag).props.fooBar`（**不要求**补 `id`）。模板内的同一 `(type,key)` 只报**一次**，不按数据行重复。只报「未知字段」等于把题面丢回给作者。`id` 唯一性由 `validate_prd_json.py` 另判，本节只依赖它成立 |
+| 闸门 | `ERROR` → 非 0 退出。`INCOMPLETE` 默认不拦（存量产物），但 `check_release.py` 必须把它当失败 —— 闸门自己没装好，不许算过 |
+
+**SS-01 抓不到什么**（写在这里，免得下一个人以为它全能）：
+它判的是「这个键有没有人读」，**不判「读得对不对」**。容器把 `message` 读成 `title` 这种
+语义错读，键是合法的、渲染是错的，SS-01 会给绿 —— 那要靠标注与评审。
+
+### 6.8.5 明确不支持的键：唯一真源在 `references/`
+
+| 项 | 约定 |
+|---|---|
+| 文件 | **`references/props-unsupported.json`** |
+| 为什么在这 | 它是**规范内容**（「这个键不生效，改用 X」），不是实现细节。放在 `scripts/` 下等于把规范写在工程目录里 |
+| 谁读 | `scripts/props_contract.py` 只**读**它并原样并入契约；`validate_prd_json.py` 命中时用它生成修法。**仓库内不许有第二份副本** |
+| 查找顺序 | 先 `(type, key)` 精确命中，再退到 `("*", key)`，都没有时用通用措辞 |
+| 迁移顺序 | **先改读取路径、再删旧副本**。反了会静默降级：实测删掉 `scripts/` 旧文件后生成器仍 exit 0、不支持条目 0、无任何警告，而「理由 + 替代」整块消失 |
+| 什么该进 | 「明知容器不读、且**不应该**读」的键。只是「还没实现」的不进来 —— 那是缺陷，不是裁决 |
+| 每条必填 | `type` / `key` / `why`（为什么不支持）/ `instead`（改成什么）。**答不出 `instead` 的条目不许进**：只告诉人「不能写」而不给出口，下一次他会换个地方再写一遍 |
+
+`05-component-states.md` §2 的 props 列是**语义承诺**（AntD 上应该长这样），
+本文件是**可执行事实**（容器实际读了什么）。两者不一致时**以契约为准**，
+差额要么补容器、要么进不支持清单 —— 不许两边各说一套。
+
+### 6.8.6 造红（验收用，缺一条就是没接线）
+
+> **这是 §6.8 全节的验收清单，不只属 SS-01**：最后一列「归属」= `backlog.json` 里的迭代卡号（治理工作区，不随包发布 —— 包内读者只需知道这行归哪张卡）。
+> 表与卡必须同时改 —— 表是验收清单，卡是派工单，**两处两说就是两套口径**。
+
+| 输入 | 期望 | 证明什么 | 归属 |
+|---|---|---|---|
+| `Table` 节点写 `rowKey` | ERROR，且消息带替代写法 | 全局 0 命中的键会被点名 | XX-050 |
+| `FormItem` 写 `slots.extra` | ERROR | 插槽按 type 判，不吃「全局有过」 | XX-050 |
+| `Alert` 写 `visible:"false"` | ERROR（类型） | 值域判据能红，不是只判键名 | XX-050 |
+| `Drawer` 写 `width:600` / `"600px"` | 两条都 ERROR | 声明—渲染对账（600 会渲成 560；`600px` 会渲成 420） | XX-050 |
+| 删掉 `assets/container/props-contract.json` | INCOMPLETE，且**不是** PASS | 判据缺失不许冒充通过 | XX-050 |
+| 改 `references/props-unsupported.json` 任一条 `why` 而不重生成契约 | INCOMPLETE | 清单的哈希也参与同步，否则过期理由表无人发现 | XX-050 |
+| `example-03-nav-tree.json` | PASS（80 个 type×key） | 绿样本：接线后不能把干净产物判红 | XX-050 |
+| 在容器里加一句注释 `/* 读 p.fooBar */` 并重生成契约 | 任何 `byType` 都不含 `fooBar`；产物里写 `fooBar` **仍 ERROR** | 注释不是代码。白名单被注释放行 = 一个永远抓不到的假绿 | XX-050 |
+| 查契约里有没有 `split` / `i` | 任何 `byType` 都不含 `split` / `i` | `getPath` / `parseAtom` 的 `p` 不是 props；不加这条会凭空长键 | XX-050 |
+| 往 `List.renderItem` 模板里塞 `Upload.multiple` | ERROR，路径形如 `页面/列表id(List).props.renderItem(List.Item).props.multiple` | 模板内部在范围内，**且无 `id` 的模板节点不许被跳过** | XX-054 |
+| 同一模板里放两个同类型 `Tag`，只给**第二个**写死键 | ERROR 只点 `children[1](Tag)`，不点 `children[0]` | 同类型兄弟靠下标区分；按 type 去重会把两个当成一个 | XX-054 |
+| 把 `props.renderItem` 整段删掉 | **PASS**（不异常、不 INCOMPLETE） | 「不存在」与「找不到」在实现里长得一样；这条专防把「没有模板」判成「遍历失败」 | XX-054 |
+| 把同一个模板从 `props.renderItem` 挪到节点级 `renderItem` | ERROR，消息含「挪进 `props`」 | 这个位置**能跑**（容器兼容读），不判就永远没人挪 —— 声明空转里最隐蔽的一类 | XX-054 |
+| `data:[]` 的 `List` 但带模板、模板里有死键 | ERROR | 判据读声明树，与有没有数据行无关 | XX-054 |
+| 模板里写 `visible:"{{item.on}}"` | ERROR（布尔键不许插值） | 插值经 `subst` 只会得到字符串，`===false` 永不成立 —— 写了等于没写 | XX-054 |
+
+### 6.8.7 新增一个 props 键的流程（四步，缺一步必分叉）
+
+```
+1) 容器真的读它：在**该 type** 的渲染器（或其 helper）里出现 `p.<key>`
+2) 重新生成契约：python3 scripts/props_contract.py   → sourceSha256 变
+3) 若决定**不做**：写进 references/props-unsupported.json（why + instead）
+4) 05 §2 该 type 行同步；`--check` 断言两者一致
+```
+
+> 只做第 1 步 = 契约过期 → 全线 INCOMPLETE；只做第 4 步 = 文档承诺一个不存在的键。
+> 这四步的顺序不能换：**先有读取，再有白名单，最后才是文档**。
 
 ---
 

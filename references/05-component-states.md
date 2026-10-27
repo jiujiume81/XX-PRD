@@ -49,6 +49,18 @@
 
 ## 2. 组件白名单与属性
 
+> **这一列是「语义承诺」，不是「实现事实」。**
+> 容器是逐字段手写读 props 的，表里写了不等于渲染器会读 —— 自 I-11 起，
+> **唯一可执行的真相是 props 契约**（`assets/container/props-contract.json`，
+> 规则见 `04-container-schema.md` §6.8）。两者不一致时**以契约为准**：
+> 差额要么补容器，要么进 `references/props-unsupported.json`，不许两边各说一套。
+> 本表尚未逐行按契约核对，剩余差额由 `XX-053` 机械收口。
+>
+> 已按 I-11 裁决从本表移除的键（写它们不会生效，替代写法见清单）：
+> `InputNumber.min/max/step/disabled`、`DatePicker.showTime/disabled`、
+> `Upload.multiple/dragger/listType`、`Table.rowKey`、`Descriptions.bordered`、`Alert.banner`。
+> 另外两条不在本表、但同样不许写：节点级 `style`（任何类型都不读）、`Alert.text`（正文键是 `message`）。
+
 ### 2.1 布局类
 
 | type | props |
@@ -82,18 +94,18 @@
 | `Button` | `text`、`type`(`primary`\|`default`\|`dashed`\|`text`\|`link`)、`size`、`danger`、`disabled`、`disabledReason`、`loading`、`block`、`icon`、**`capability`**（引用 `capabilities[].id`，可用性由角色 × 状态求值） |
 | `Input` | `placeholder`、`value`、`prefix`、`suffix`、`size`、`disabled`、`allowClear`、`status`(`error`\|`warning`) |
 | `TextArea` | `placeholder`、`rows`、`value`、`maxLength`、`showCount` |
-| `InputNumber` | `value`、`min`、`max`、`step`、`disabled` |
+| `InputNumber` | `value` |
 | `Select` | `placeholder`、`value`、`options`(`[{label,value,disabled}]`)、`mode`(`multiple`)、`disabled`、`allowClear` |
 | `Checkbox` | `label`、`checked`、`disabled` |
 | `CheckboxGroup` | `options`、`value`(`[string]`)、`direction` |
 | `Radio` | `label`、`checked`、`disabled` |
 | `RadioGroup` | `options`、`value`、`buttonStyle`(bool 表示按钮组) |
 | `Switch` | `checked`、`disabled`、`checkedText`、`unCheckedText`、`size` |
-| `DatePicker` | `placeholder`、`value`、`showTime`、`disabled` |
+| `DatePicker` | `placeholder`、`value` |
 | `TimePicker` | `placeholder`、`value` |
-| `Upload` | `text`、`accept`、`multiple`、`listType`(`text`\|`picture`)、`dragger`(bool) |
+| `Upload` | `text`、`accept` |
 | `Form` | `layout`(`horizontal`\|`vertical`\|`inline`)、`labelWidth` |
-| `FormItem` | `label`、`required`、`help`、`validateStatus`(`error`\|`warning`\|`success`\|`validating`) |
+| `FormItem` | `label`、`required`、`help`(校验结果，随 `validateStatus` 变色)、`extra`(常态说明，12px、`--ant-text-3`（与 `help` 同色；**不用 `--ant-text-4`**，那是 placeholder 级，12px 下看不清）；与 `help` 可同时出现，`help` 在上)、`validateStatus`(`error`\|`warning`\|`success`\|`validating`) |
 | `Slider` | `value`、`min`、`max`、`marks` |
 | `Rate` | `value`、`count` |
 | `Cascader` | `placeholder`、`options`(`[{value,label,children}]`) |
@@ -116,7 +128,7 @@
 
 | type | props |
 |---|---|
-| `Table` | `columns`(`[{title,dataIndex,width,align,type:'text'\|'tag'\|'avatar'\|'action'\|'progress'\|'index',actions?}]`)、`data`(`[{}]`)、`loading`、`empty`、`emptyText`、`bordered`、`size`、`rowSelection`、`radio`、`rowKey`、`rowClick`、`title` |
+| `Table` | `columns`(`[{title,dataIndex,width,align,type:'text'\|'tag'\|'avatar'\|'action'\|'progress'\|'index',actions?}]`)、`data`(`[{}]`)、`loading`、`empty`、`emptyText`、`bordered`、`size`、`rowSelection`、`radio`、`rowClick`、`title` |
 | `Table` · 列表页三件套 | `query`(`[{label,type,props,placeholder}]` 查询条件区)、`queryExtra`(bool，默认 true，渲染「设置查询字段 / 搜索 / 展开」)、`queryActions`(`[{text,type,icon,id}]` 追加到查询条右侧)、`toolbar`(`[{text,type,icon,disabled,id}]` 或 `[{type:'Button',id,props}]`)、`toolbarRight`(bool，默认 true，渲染列设置图标)、`toolbarRightItems`、`pagination`(`{total,pageSize,current,maxShow,jump}` 或 `true`) |
 | `Table` · 密度与吸附（v0.8.0 新增） | `size`(`'xs'`\|`'small'`，渲成 `.xs` / `.sm` 类；**没有 `'sm'` 这个值**，`'sm'` 是类名)、`tableLayout`(`'fixed'`)、`stickyHeader`(bool，**须与 `maxHeight` 同时给**才生成吸附容器)、`stickyFooter`(bool，配合 `pagination` 把分页脚贴底)、`maxHeight`(CSS 长度，如 `calc(100vh - 438px)`，写进 `--tw-max`)、`rowClick`(bool，整行点击触发)、`ellipsisTitle`(bool，默认 true，截断列的 `title` 兜底) |
 | `Table` · 筛选区渲染器（v0.8.0 新增） | `filterBar`(`'grid3'` = 两行三列 + 独立动作行；**不写则沿用旧 `query` 单行路径**)、`queryId` / `resetId`(字符串，写入「查询 / 重置」按钮的 `data-node-id`，可被 `interactions.on.target` 引用) |
@@ -125,8 +137,8 @@
 | `MasterDetail` | `bind`(主表字段名)、`bindTo`(子表字段名，默认同 `bind`)、`detailTitle`、`collapsible`(默认 true)、`defaultCollapsed`、`autoSelectFirst`(默认 true)、`showAllWhenEmpty`、`emptyText`、`detailTools`(`[{text,icon,id}]`)；**children 必须正好 2 个**：`[主表 Table, 子表 Table]` |
 | `List` | `data`、`renderItem`(Node 模板，写在 **props 内**；占位 `{{item.字段}}` / `{{item}}` / `{{index}}`)、`bordered`、`loading`、`empty`、`size` |
 | `List.Item` | `title`、`description`、`extra`(插槽)、`avatar` |
-| `Card` | `title`、`bordered`、`hoverable`、`size`、`loading`；插槽 `extra`、`cover`、`actions` |
-| `Descriptions` | `title`、`column`、`bordered`、`items`(`[{label,value,span}]`) |
+| `Card` | `title`、`bordered`(`true` → 1px 边框 + 无投影，满足 `12` `L-02`)、`hoverable`、`size`、`loading`；插槽 `extra`、`cover`、`actions` |
+| `Descriptions` | `title`、`column`、`items`(`[{label,value,span}]`) |
 | `Tag` | `text`、`color`(`default`\|`blue`\|`green`\|`red`\|`orange`\|`purple`\|`cyan`\|`success`\|`processing`\|`error`\|`warning`)、`closable` |
 | `Badge` | `count`、`status`、`text`、`dot`、`color` |
 | `Avatar` | `text`、`src`、`size`(数字或 `small`\|`large`)、`shape`(`circle`\|`square`) |
@@ -138,7 +150,7 @@
 | `Empty` | `description`、`image`(`simple`) |
 | `Progress` | `percent`、`type`(`line`\|`circle`)、`status`(`normal`\|`active`\|`success`\|`exception`)、`showInfo` |
 | `Skeleton` | `rows`、`avatar`、`active` |
-| `Alert` | `message`、`description`、`type`(`success`\|`info`\|`warning`\|`error`)、`showIcon`、`closable`、`banner`、`visible` |
+| `Alert` | `message`(正文，**不是 `text`**)、`description`、`type`(`success`\|`info`\|`warning`\|`error`)、`showIcon`、`closable`、`visible`(通用键，所有节点都认) |
 | `Image` | `src`、`alt`、`width`、`height`、`placeholder` |
 | `Carousel` | `items`(`[{title,text}]`)、`autoplay` |
 | `Calendar` | `value`、`mode`(`month`\|`year`)、`marks` |
@@ -149,8 +161,8 @@
 | type | props |
 |---|---|
 | `Modal` | `title`、`open`、`width`、`okText`、`cancelText`、`footer`(bool)、`content`、`confirmLoading`、`centered`；底部按钮合成 id `<节点 id>__ok` / `__cancel`（`__cancel` 内建关闭弹窗） |
-| `Drawer` | `title`、`open`、`placement`(`right`\|`left`)、`width`、`content`、`footer`(插槽) |
-| `Drawer` · 宽档（v0.8.0 补充） | `width` 取 **560** 时为「详情抽屉」档（渲成 `.ant-drawer.w-lg`，默认 420）。**声明宽必须由渲染器读**：`R.Drawer` 读 `p.width`，≥560 走 `.w-lg`、其它数值用 inline，不写才吃默认 420 —— 漏读就会退回 420。验收必须打开抽屉量 `offsetWidth`，只贴 JSON 的 `width: 560` 不算证据（为什么与怎么量见 `08-container-choice.md` §0.8） |
+| `Drawer` | `title`、`open`、`placement`(`right`(默认)\|`left`\|`top`\|`bottom`；`top`/`bottom` 满宽、限高 70%、**不吃 `width`**)、`width`、`content`、`footer`(插槽) |
+| `Drawer` · 宽档（v0.8.0 补充） | `width` 取 **560** 时为「详情抽屉」档（渲成 `.ant-drawer.w-lg`，默认 420）。**声明宽必须由渲染器读**：`R.Drawer` 读 `p.width`，≥560 走 `.w-lg`、其它数值用 inline，不写才吃默认 420 —— 漏读就会退回 420。**实际只有 420 / 560 两档**：`width:600` 会渲成 560、`"600px"` 会被 `Number()` 成 NaN 而回 420 —— 两种都是「声明 ≠ 渲染」，由 `04 §6.8` 的 R6 判 ERROR。验收必须打开抽屉量 `offsetWidth`，只贴 JSON 的 `width: 560` 不算证据（为什么与怎么量见 `08-container-choice.md` §0.8） |
 | `Popconfirm` | `title`、`description`、`okText`、`cancelText` |
 | `Spin` | `size`、`tip`、`spinning` |
 | `Result` | `status`(`success`\|`error`\|`info`\|`warning`\|`404`\|`403`\|`500`)、`title`、`subTitle`；插槽 `extra` |

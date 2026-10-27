@@ -25,6 +25,9 @@
 """
 import json
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from genlib import finalize, dump
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "example-06-dense-list.json")
@@ -175,7 +178,6 @@ def page_list():
         "pagination": {"total": 342, "pageSize": 20, "current": 1, "jump": False},
         "columns": COLUMNS,
         "data": rows(),
-        "rowKey": "taskNo",
         "rowClick": True,
         # 空态动作**不写 type**：`.ant-btn` 不带 primary 就是 default。
         # 为什么：标题带的「新建检验任务」已经占掉本页唯一的 primary 位（P12「标题带内恰 1 个」），
@@ -229,7 +231,7 @@ def page_list():
                     "title": "检验任务详情 · IQC-20261022-0020", "width": 560, "placement": "right"},
                  "children": [
                      {"id": "n-dw-desc", "type": "Descriptions", "props": {
-                         "column": 2, "size": "small",
+                         "column": 2,
                          "items": [
                              {"label": "任务单号", "value": "IQC-20261022-0020"},
                              {"label": "状态", "value": "待检验"},
@@ -425,7 +427,7 @@ def page_new():
                     # 错误提示只在异常态出现：默认态用 state.hidden 收起来。
                     # 表单页也要有加载/空/异常三态 —— 「这一页只会正常」是原型里最常见的谎。
                     {"id": "n-new-alert", "type": "Alert", "props": {
-                        "type": "error", "text": "请验单查询失败（SRV-502），请重试或手工录入"}},
+                        "type": "error", "message": "请验单查询失败（SRV-502），请重试或手工录入"}},
                     {"id": "n-new-form", "type": "Form", "props": {"layout": "vertical"}, "children": [
                         {"id": "n-new-fi1", "type": "FormItem", "props": {"label": "物资", "required": True},
                          "children": [{"id": "n-new-material", "type": "Select", "props": {
@@ -433,8 +435,8 @@ def page_new():
                                          {"value": "LFP200", "label": "磷酸铁锂 LFP-200"}]}}]},
                         {"id": "n-new-fi2", "type": "FormItem", "props": {"label": "批次号", "required": True},
                          "children": [{"id": "n-new-lot", "type": "Input", "props": {"placeholder": "如 LOT-A26-1022"}}]},
-                        {"id": "n-new-fi3", "type": "FormItem", "props": {"label": "请验数量", "required": True},
-                         "children": [{"id": "n-new-qty", "type": "InputNumber", "props": {"placeholder": "kg"}}]},
+                        {"id": "n-new-fi3", "type": "FormItem", "props": {"label": "请验数量", "required": True, "help": "单位 kg"},
+                         "children": [{"id": "n-new-qty", "type": "InputNumber", "props": {}}]},
                         {"id": "n-new-fi4", "type": "FormItem", "props": {"label": "检验类型"},
                          "children": [{"id": "n-new-kind", "type": "RadioGroup", "props": {
                              "options": [{"value": "full", "label": "全检"},
@@ -530,7 +532,7 @@ def page_stats():
                           ]},
                      ]},
                     {"id": "n-st-alert", "type": "Alert", "props": {
-                        "type": "error", "text": "统计服务暂时不可用（STA-503），请稍后重试"}},
+                        "type": "error", "message": "统计服务暂时不可用（STA-503），请稍后重试"}},
                     # 统计页才允许四张指标卡：这里没有数据行要抢高度
                     {"id": "n-st-row", "type": "Row", "props": {"gutter": 16}, "children": [
                         {"id": "n-st-c1", "type": "Col", "props": {"span": 6}, "children": [
@@ -847,10 +849,8 @@ def build():
 
 def main():
     data = build()
-    with open(OUT, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    print("wrote %s (%d bytes)" % (OUT, os.path.getsize(OUT)))
+    finalize(data, "example-06")
+    dump(data, OUT)
 
 
 if __name__ == "__main__":

@@ -329,6 +329,23 @@
                 }
               },
               {
+                "id": "n-quick",
+                "type": "Space",
+                "props": {
+                  "size": 8
+                },
+                "children": [
+                  {
+                    "id": "n-quick-mkt",
+                    "type": "Button",
+                    "props": {
+                      "text": "营销中心",
+                      "icon": "gift"
+                    }
+                  }
+                ]
+              },
+              {
                 "id": "n-stat-row",
                 "type": "Row",
                 "props": {
@@ -636,6 +653,20 @@
             {
               "type": "navigate",
               "pageId": "page-order-list"
+            }
+          ]
+        },
+        {
+          "id": "ix-ov-marketing",
+          "name": "进入营销中心（优惠券列表）",
+          "on": {
+            "event": "click",
+            "target": "n-quick-mkt"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-coupon-list"
             }
           ]
         },

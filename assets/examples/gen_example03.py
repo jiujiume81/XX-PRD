@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 """生成 example-03：多模块 + 多级页面（电商运营后台），用于验证左侧树形导航。"""
 import json, io, os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from genlib import finalize, dump
 
 MENU = [
     {"key": "dash", "label": "概览", "icon": "dashboard"},
@@ -114,6 +117,9 @@ pages.append({
     "componentTree": layout_sider("dash", [
         crumb(["首页", "数据概览"]),
         alert(),
+        {"id": "n-quick", "type": "Space", "props": {"size": 8}, "children": [
+            {"id": "n-quick-mkt", "type": "Button",
+             "props": {"text": "营销中心", "icon": "gift"}}]},
         {"id": "n-stat-row", "type": "Row", "props": {"gutter": 16}, "children": [
             {"id": "n-c1", "type": "Col", "props": {"span": 6}, "children": [
                 {"id": "n-s1", "type": "Card", "props": {"size": True}, "children": [
@@ -148,6 +154,9 @@ pages.append({
          "actions": [{"type": "navigate", "pageId": "page-goods-list"}]},
         {"id": "ix-ov-orders", "name": "查看订单管理", "on": {"event": "click", "target": "n-c2"},
          "actions": [{"type": "navigate", "pageId": "page-order-list"}]},
+        {"id": "ix-ov-marketing", "name": "进入营销中心（优惠券列表）",
+         "on": {"event": "click", "target": "n-quick-mkt"},
+         "actions": [{"type": "navigate", "pageId": "page-coupon-list"}]},
         {"id": "ix-ov-refresh", "name": "刷新指标", "on": {"event": "click", "target": "n-crumb"},
          "actions": [{"type": "message", "level": "success", "text": "指标已刷新"}]},
     ],
@@ -1041,7 +1050,8 @@ data = {
 }
 
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "example-03-nav-tree.json")
-io.open(out, "w", encoding="utf-8").write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+finalize(data, "example-03")
+dump(data, out)
 print("written", out)
 print("pages=%d modules=%d reqs=%d sm=%d" % (len(data["pages"]), len(data["modules"]),
                                              len(data["requirements"]), len(data["stateMachines"])))

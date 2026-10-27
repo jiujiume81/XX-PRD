@@ -468,10 +468,7 @@
                     "id": "n-apply-input-amount",
                     "type": "InputNumber",
                     "props": {
-                      "value": 899,
-                      "min": 0,
-                      "max": 899,
-                      "step": 1
+                      "value": 899
                     }
                   }
                 ]
@@ -506,9 +503,8 @@
                     "id": "n-apply-upload",
                     "type": "Upload",
                     "props": {
-                      "text": "点击上传图片或视频",
-                      "accept": "jpg / png / mp4",
-                      "multiple": true
+                      "text": "点击上传图片或视频（可多选，最多 6 张）",
+                      "accept": "jpg / png / mp4"
                     }
                   }
                 ]
@@ -667,6 +663,10 @@
               "type": "message",
               "level": "success",
               "text": "退款申请已提交"
+            },
+            {
+              "type": "navigate",
+              "pageId": "page-refund-review"
             }
           ]
         }
@@ -937,7 +937,6 @@
                             "type": "Descriptions",
                             "props": {
                               "column": 2,
-                              "bordered": true,
                               "items": [
                                 {
                                   "label": "订单号",

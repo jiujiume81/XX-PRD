@@ -1479,7 +1479,7 @@
                 "id": "n-d-actions",
                 "type": "Space",
                 "props": {
-                  "style": "margin:12px 0"
+                  "size": 12
                 },
                 "children": [
                   {

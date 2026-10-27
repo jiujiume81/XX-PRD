@@ -17,6 +17,9 @@
 """
 import json
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from genlib import finalize, dump
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "example-05-behavior-model.json")
@@ -117,16 +120,19 @@ def page_list():
                             {"title": "采购金额", "dataIndex": "amount", "align": "right"},
                             {"title": "采购员", "dataIndex": "buyer"},
                             {"title": "期望到货", "dataIndex": "expected"},
-                            {"title": "操作", "dataIndex": "op", "type": "action", "width": 210,
+                            {"title": "操作", "dataIndex": "op", "type": "action", "width": 300,
                              "actions": [
                                  {"key": "detail", "label": "详情"},
+                                 {"key": "approve", "label": "审批",
+                                  "capability": "cap-po-approve"},
+                                 {"key": "receive", "label": "收货",
+                                  "capability": "cap-po-receive"},
                                  {"key": "submit", "label": "提交审批", "capability": "cap-po-submit"},
                                  {"key": "cancel", "label": "取消", "type": "danger",
                                   "capability": "cap-po-cancel"},
                              ]},
                         ],
                         "data": ORDER_ROWS,
-                        "rowKey": "poNo",
                     }},
                     {"id": "n-modal-cancel", "type": "Modal", "props": {
                         "modalId": "m-cancel", "title": "取消采购订单",
@@ -162,6 +168,14 @@ def page_list():
              "on": {"event": "click", "target": "n-po-table__act_*_submit"},
              "actions": [{"type": "message", "level": "success",
                           "text": "已提交审批，等待采购主管处理"}]},
+            {"id": "ix-approve", "name": "进入审批页（改由状态驱动按钮可用性）",
+             "on": {"event": "click", "target": "n-po-table__act_*_approve"},
+             "actions": [{"type": "navigate", "pageId": "page-po-approve",
+                          "params": {"poNo": "{{row.poNo}}", "supplier": "{{row.supplier}}"}}]},
+            {"id": "ix-receive", "name": "进入收货页",
+             "on": {"event": "click", "target": "n-po-table__act_*_receive"},
+             "actions": [{"type": "navigate", "pageId": "page-po-receive",
+                          "params": {"poNo": "{{row.poNo}}"}}]},
             {"id": "ix-cancel", "name": "取消订单（二次确认）",
              "on": {"event": "click", "target": "n-po-table__act_*_cancel"},
              "actions": [{"type": "showModal", "modalId": "m-cancel"}]},
@@ -225,7 +239,7 @@ def page_detail():
                         "message": "本单当前为「{{__entState}}」",
                         "description": "可修改明细或提交审批；提交后进入审批流，不能再直接编辑。"}},
                     {"id": "n-d-desc", "type": "Descriptions", "props": {
-                        "column": 3, "size": "small",
+                        "column": 3,
                         "items": [
                             {"label": "供应商", "value": "{{supplier}}"},
                             {"label": "采购员", "value": "张伟"},
@@ -410,7 +424,7 @@ def page_approve():
                         "message": "该供应商近 90 天有 1 次延期交付",
                         "description": "建议核对交期后再决定；驳回会退回采购员修改，不进入审批记录。"}},
                     {"id": "n-ap-desc", "type": "Descriptions", "props": {
-                        "column": 3, "size": "small",
+                        "column": 3,
                         "items": [
                             {"label": "供应商", "value": "宁波恒信电子"},
                             {"label": "采购金额", "value": "¥86,200.00"},
@@ -499,7 +513,7 @@ def page_receive():
                          {"id": "n-rcv-tag", "type": "Tag", "props": {"text": "{{__entState}}", "color": "success"}},
                      ]},
                     {"id": "n-rcv-desc", "type": "Descriptions", "props": {
-                        "column": 3, "size": "small",
+                        "column": 3,
                         "items": [
                             {"label": "供应商", "value": "苏州华瑞精密"},
                             {"label": "收货仓库", "value": "华东中心仓"},
@@ -990,10 +1004,8 @@ def main():
             ],
         },
     }
-    with open(OUT, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    print("written", OUT)
+    finalize(data, "example-05")
+    dump(data, OUT)
 
 
 if __name__ == "__main__":

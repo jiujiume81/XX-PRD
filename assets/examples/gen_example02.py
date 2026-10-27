@@ -1,0 +1,1774 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""生成 example-02-refund-flow.json —— 售后退款流程（申请 + 审批，两步走通）
+
+本文件是这份示例的**唯一真源**：改内容改这里，然后重跑，不要手改 JSON。
+    python3 gen_example02.py
+
+生成出口强制三条不变量（见 `genlib.py`）：
+  I1 `props` 的每个键都被该 type 的渲染器读过（白名单来自容器契约，不手写）
+  I2 除 `meta.currentPageId` 外每页都能只沿 `navigate` 跳转边到达
+  I3 有提交类能力的页都写了 `contract.doneWhen`
+
+三条任一不满足 → 生成失败，不写出产物。
+"""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from genlib import finalize, dump
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, "example-02-refund-flow.json")
+
+DOC = json.loads(r'''
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "product": "售后退款审批",
+    "version": "0.2.0",
+    "createdAt": "2026-10-15T09:00:00+08:00",
+    "updatedAt": "2026-10-15T09:50:00+08:00",
+    "reviewMode": false,
+    "currentPageId": "page-refund-apply",
+    "defaultPanel": "both"
+  },
+  "product": {
+    "name": "售后退款审批",
+    "oneLiner": "让用户 3 步提交退款申请，让客服 1 屏完成审批",
+    "positioning": "面向电商中小商家的售后工具。用户侧把退款申请压缩到 3 步，客服侧把审批所需信息全部前置到一屏内，减少来回沟通。",
+    "targetUsers": [
+      "C 端用户",
+      "客服专员",
+      "财务审核员"
+    ],
+    "coreValue": "退款申请一次提交成功率从 62% 提升到 90%",
+    "nonGoals": [
+      "不做自动风控决策模型",
+      "不做物流对接与退货上门取件",
+      "不做多币种结算"
+    ],
+    "metrics": [
+      {
+        "name": "申请一次提交成功率",
+        "target": "> 90%",
+        "type": "leading"
+      },
+      {
+        "name": "审批平均时长",
+        "target": "< 4h",
+        "type": "lagging"
+      }
+    ]
+  },
+  "users": [
+    {
+      "id": "u-customer",
+      "name": "C 端用户",
+      "description": "发起退款申请的人",
+      "goals": [
+        "快速提交申请",
+        "知道当前处理到哪一步"
+      ],
+      "painPoints": [
+        "不知道要填什么",
+        "提交后没有进度反馈"
+      ]
+    },
+    {
+      "id": "u-agent",
+      "name": "客服专员",
+      "description": "初审退款申请",
+      "goals": [
+        "一屏看完判断依据",
+        "批量处理同类申请"
+      ],
+      "painPoints": [
+        "要来回切换订单页和聊天记录"
+      ]
+    },
+    {
+      "id": "u-finance",
+      "name": "财务审核员",
+      "description": "终审并放款",
+      "goals": [
+        "确认金额与账户一致",
+        "留痕可追溯"
+      ],
+      "painPoints": [
+        "金额与订单不一致时需要人工核对"
+      ]
+    }
+  ],
+  "userFlows": [
+    {
+      "id": "flow-apply",
+      "name": "提交退款申请",
+      "role": "u-customer",
+      "goal": "把一笔订单的退款诉求完整提交给商家",
+      "steps": [
+        {
+          "id": "st-1",
+          "name": "从订单详情点击「申请退款」",
+          "pageId": "page-refund-apply",
+          "note": ""
+        },
+        {
+          "id": "st-2",
+          "name": "选择退款原因",
+          "pageId": "page-refund-apply",
+          "note": "单选"
+        },
+        {
+          "id": "st-3",
+          "name": "填写退款金额与说明，上传凭证",
+          "pageId": "page-refund-apply",
+          "note": "金额上限为实付金额"
+        },
+        {
+          "id": "st-4",
+          "name": "提交",
+          "pageId": "page-refund-apply",
+          "note": "生成申请单，状态=待初审"
+        }
+      ]
+    },
+    {
+      "id": "flow-approve",
+      "name": "客服初审",
+      "role": "u-agent",
+      "goal": "在 2 分钟内判断申请是否合理并给出结论",
+      "steps": [
+        {
+          "id": "st-5",
+          "name": "打开待办列表",
+          "pageId": "page-refund-review",
+          "note": ""
+        },
+        {
+          "id": "st-6",
+          "name": "进入申请详情，查看订单与凭证",
+          "pageId": "page-refund-review",
+          "note": ""
+        },
+        {
+          "id": "st-7",
+          "name": "点击「通过」或「驳回」并填写理由",
+          "pageId": "page-refund-review",
+          "note": "驳回必须填理由"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "m-refund",
+      "name": "退款申请",
+      "goal": "用户侧提交退款申请",
+      "priority": "P0",
+      "pageIds": [
+        "page-refund-apply"
+      ],
+      "dependsOn": []
+    },
+    {
+      "id": "m-review",
+      "name": "退款审批",
+      "goal": "客服与财务侧审批退款申请",
+      "priority": "P0",
+      "pageIds": [
+        "page-refund-review"
+      ],
+      "dependsOn": [
+        "m-refund"
+      ]
+    }
+  ],
+  "dataModel": {
+    "entities": [
+      {
+        "id": "e-refund",
+        "name": "RefundOrder",
+        "table": "refund",
+        "description": "退款申请单（对应状态机实体 RefundOrder）",
+        "pageIds": [
+          "page-refund-apply",
+          "page-refund-review"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "key": "pk",
+            "note": "ULID"
+          },
+          {
+            "name": "orderNo",
+            "type": "string",
+            "required": true,
+            "note": "关联订单号"
+          },
+          {
+            "name": "reason",
+            "type": "string",
+            "required": true,
+            "constraint": "≤ 200 字",
+            "note": "退款原因"
+          },
+          {
+            "name": "amount",
+            "type": "number",
+            "required": true,
+            "constraint": "> 0 且 ≤ 订单金额",
+            "note": "退款金额（元）"
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "required": true,
+            "constraint": "submitted|reviewing|approved|rejected|refunded",
+            "note": "见 sm-refund 状态机"
+          },
+          {
+            "name": "applicantId",
+            "type": "string",
+            "required": true,
+            "key": "fk",
+            "note": "→ user.id"
+          },
+          {
+            "name": "reviewerId",
+            "type": "string",
+            "required": false,
+            "key": "fk",
+            "note": "→ user.id，审批人"
+          },
+          {
+            "name": "createdAt",
+            "type": "datetime",
+            "required": true,
+            "note": ""
+          }
+        ],
+        "relations": [
+          {
+            "type": "belongs_to",
+            "target": "e-order",
+            "via": "orderNo",
+            "note": ""
+          },
+          {
+            "type": "belongs_to",
+            "target": "e-user",
+            "via": "applicantId",
+            "note": "申请人"
+          }
+        ],
+        "indexes": [
+          "orderNo",
+          "status"
+        ]
+      },
+      {
+        "id": "e-order",
+        "name": "Order",
+        "table": "orders",
+        "description": "被退款的订单",
+        "pageIds": [
+          "page-refund-apply"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "key": "pk",
+            "note": ""
+          },
+          {
+            "name": "no",
+            "type": "string",
+            "required": true,
+            "unique": true,
+            "note": "订单号"
+          },
+          {
+            "name": "amount",
+            "type": "number",
+            "required": true,
+            "note": "订单金额，退款金额上限"
+          },
+          {
+            "name": "paidAt",
+            "type": "datetime",
+            "required": true,
+            "note": "支付时间，退款时限判断依据"
+          }
+        ],
+        "relations": [
+          {
+            "type": "has_many",
+            "target": "e-refund",
+            "via": "orderNo",
+            "note": ""
+          }
+        ],
+        "indexes": [
+          "no"
+        ]
+      },
+      {
+        "id": "e-user",
+        "name": "User",
+        "table": "user",
+        "description": "买家 / 审核员",
+        "pageIds": [
+          "page-refund-apply",
+          "page-refund-review"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "key": "pk",
+            "note": ""
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "note": ""
+          },
+          {
+            "name": "role",
+            "type": "enum",
+            "required": true,
+            "constraint": "buyer|reviewer",
+            "note": ""
+          }
+        ],
+        "relations": [],
+        "indexes": [
+          "name"
+        ]
+      }
+    ],
+    "derived": [
+      {
+        "name": "可退金额",
+        "expr": "order.amount - sum(refund.amount where status in [approved, refunded])",
+        "fallback": "订单未支付时展示「不可退」",
+        "usedBy": [
+          "page-refund-apply"
+        ],
+        "reqId": "REQ-REFUND-001"
+      }
+    ]
+  },
+  "pages": [
+    {
+      "id": "page-refund-apply",
+      "moduleId": "m-refund",
+      "name": "退款申请页",
+      "route": "/refund/apply",
+      "goal": "让用户在 3 步内提交一笔完整的退款申请",
+      "entryFrom": [],
+      "exitTo": [
+        "page-refund-review"
+      ],
+      "layout": "blank",
+      "defaultStateId": "s-default",
+      "componentTree": {
+        "id": "n-apply-frame",
+        "type": "Frame",
+        "props": {
+          "width": 375,
+          "height": 720,
+          "label": "iPhone"
+        },
+        "children": [
+          {
+            "id": "n-apply-nav",
+            "type": "Header",
+            "props": {
+              "title": "申请退款",
+              "back": true
+            }
+          },
+          {
+            "id": "n-apply-body",
+            "type": "Content",
+            "children": [
+              {
+                "id": "n-apply-steps",
+                "type": "Steps",
+                "props": {
+                  "current": 0,
+                  "items": [
+                    {
+                      "title": "选原因"
+                    },
+                    {
+                      "title": "填信息"
+                    },
+                    {
+                      "title": "提交"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "n-apply-card-order",
+                "type": "Card",
+                "props": {
+                  "title": "订单信息",
+                  "size": true
+                },
+                "children": [
+                  {
+                    "id": "n-apply-order-list",
+                    "type": "List",
+                    "props": {
+                      "data": [
+                        {
+                          "title": "无线降噪耳机 Pro",
+                          "desc": "实付 ¥899.00 · 2026-10-02 下单"
+                        }
+                      ],
+                      "renderItem": {
+                        "type": "List.Item",
+                        "props": {
+                          "title": "{{item.title}}",
+                          "description": "{{item.desc}}"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-apply-fi-reason",
+                "type": "FormItem",
+                "props": {
+                  "label": "退款原因",
+                  "required": true
+                },
+                "children": [
+                  {
+                    "id": "n-apply-radio-reason",
+                    "type": "RadioGroup",
+                    "props": {
+                      "value": "quality",
+                      "options": [
+                        {
+                          "label": "商品质量问题",
+                          "value": "quality"
+                        },
+                        {
+                          "label": "与描述不符",
+                          "value": "mismatch"
+                        },
+                        {
+                          "label": "不想要了",
+                          "value": "noNeed"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-apply-fi-amount",
+                "type": "FormItem",
+                "props": {
+                  "label": "退款金额",
+                  "required": true,
+                  "help": "最高可退 ¥899.00"
+                },
+                "children": [
+                  {
+                    "id": "n-apply-input-amount",
+                    "type": "InputNumber",
+                    "props": {
+                      "value": 899
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-apply-fi-desc",
+                "type": "FormItem",
+                "props": {
+                  "label": "问题说明"
+                },
+                "children": [
+                  {
+                    "id": "n-apply-ta-desc",
+                    "type": "TextArea",
+                    "props": {
+                      "placeholder": "描述一下具体情况，有助于加快审核",
+                      "rows": 3,
+                      "maxLength": 200,
+                      "showCount": true
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-apply-fi-upload",
+                "type": "FormItem",
+                "props": {
+                  "label": "上传凭证"
+                },
+                "children": [
+                  {
+                    "id": "n-apply-upload",
+                    "type": "Upload",
+                    "props": {
+                      "text": "点击上传图片或视频（可多选，最多 6 张）",
+                      "accept": "jpg / png / mp4"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-apply-alert",
+                "type": "Alert",
+                "props": {
+                  "type": "info",
+                  "message": "提交后商家将在 48 小时内处理",
+                  "showIcon": true,
+                  "visible": true
+                }
+              },
+              {
+                "id": "n-apply-btn-submit",
+                "type": "Button",
+                "props": {
+                  "text": "提交申请",
+                  "type": "primary",
+                  "block": true,
+                  "disabled": false
+                }
+              }
+            ]
+          },
+          {
+            "id": "n-apply-result",
+            "type": "Result",
+            "props": {
+              "status": "success",
+              "title": "申请已提交",
+              "subTitle": "单号 RF20261015001，可在「我的退款」中查看进度"
+            }
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "s-default",
+          "name": "默认态",
+          "description": "用户正在填写申请",
+          "vars": {
+            "submitted": false,
+            "loading": false
+          },
+          "overrides": [
+            {
+              "target": "n-apply-result",
+              "prop": "visible",
+              "value": false
+            }
+          ]
+        },
+        {
+          "id": "s-loading",
+          "name": "提交中",
+          "description": "提交请求进行中",
+          "vars": {
+            "submitted": false,
+            "loading": true
+          },
+          "overrides": [
+            {
+              "target": "n-apply-result",
+              "prop": "visible",
+              "value": false
+            },
+            {
+              "target": "n-apply-btn-submit",
+              "prop": "loading",
+              "value": true
+            },
+            {
+              "target": "n-apply-btn-submit",
+              "prop": "text",
+              "value": "提交中"
+            }
+          ]
+        },
+        {
+          "id": "s-invalid",
+          "name": "校验失败",
+          "description": "金额超出实付金额",
+          "vars": {
+            "submitted": false,
+            "loading": false
+          },
+          "overrides": [
+            {
+              "target": "n-apply-result",
+              "prop": "visible",
+              "value": false
+            },
+            {
+              "target": "n-apply-fi-amount",
+              "prop": "validateStatus",
+              "value": "error"
+            },
+            {
+              "target": "n-apply-fi-amount",
+              "prop": "help",
+              "value": "退款金额不能超过实付金额 ¥899.00"
+            },
+            {
+              "target": "n-apply-btn-submit",
+              "prop": "disabled",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "s-submitted",
+          "name": "提交成功",
+          "description": "申请已生成，展示结果页",
+          "vars": {
+            "submitted": true,
+            "loading": false
+          },
+          "overrides": [
+            {
+              "target": "n-apply-body",
+              "prop": "hidden",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ix-apply-submit",
+          "name": "提交退款申请",
+          "on": {
+            "event": "click",
+            "target": "n-apply-btn-submit"
+          },
+          "conditions": [
+            "loading !== true"
+          ],
+          "actions": [
+            {
+              "type": "setNode",
+              "target": "n-apply-btn-submit",
+              "prop": "loading",
+              "value": true
+            },
+            {
+              "type": "delay",
+              "ms": 800
+            },
+            {
+              "type": "gotoState",
+              "stateId": "s-submitted"
+            },
+            {
+              "type": "message",
+              "level": "success",
+              "text": "退款申请已提交"
+            },
+            {
+              "type": "navigate",
+              "pageId": "page-refund-review"
+            }
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "id": "an-apply-1",
+          "pageId": "page-refund-apply",
+          "anchor": {
+            "nodeId": "n-apply-fi-upload",
+            "x": 0.5,
+            "y": 0.6
+          },
+          "text": "凭证上传希望支持「拍照」和「从相册选择」两个入口，现在只有一个笼统的点击区。",
+          "category": "interaction",
+          "author": "PM",
+          "status": "open",
+          "createdAt": "2026-10-15T09:35:00+08:00",
+          "replies": []
+        },
+        {
+          "id": "an-apply-2",
+          "pageId": "page-refund-apply",
+          "anchor": {
+            "nodeId": "n-apply-fi-amount",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "text": "金额输入框建议加「全额退款」快捷按钮，大多数场景都是全额退。",
+          "category": "ui",
+          "author": "PM",
+          "status": "resolved",
+          "createdAt": "2026-10-15T09:20:00+08:00",
+          "replies": [
+            {
+              "author": "AI",
+              "text": "已在 n-fi-amount 的 help 位置补充「最高可退 ¥899.00」，并在下版加入「全额退款」按钮（见 openQuestions q-2 待确认交互细节）。",
+              "createdAt": "2026-10-15T09:28:00+08:00"
+            }
+          ]
+        }
+      ],
+      "prd": {
+        "summary": "用户侧唯一的提交入口，目标是把申请一次提交成功率做到 90% 以上。",
+        "sections": [
+          {
+            "id": "sec-goal",
+            "heading": "页面目标",
+            "body": "让用户在 3 步内提交一笔完整的退款申请，并通过前置校验减少无效提交。"
+          },
+          {
+            "id": "sec-struct",
+            "heading": "页面结构",
+            "body": "顶部导航 + 步骤条；主体自上而下为：订单信息卡 → 退款原因（单选）→ 退款金额（数字）→ 问题说明（多行）→ 凭证上传 → 提示条 → 提交按钮。提交成功后整页替换为结果页。"
+          },
+          {
+            "id": "sec-ix",
+            "heading": "交互说明",
+            "body": "1. 退款原因默认选中「商品质量问题」，切换后金额与提示文案不变。\n2. 退款金额默认等于实付金额，输入超过实付金额时立即报错并禁用提交。\n3. 点击「提交申请」按钮进入 loading 态，成功后切换到结果页并展示单号。\n4. 返回按钮在表单已填写时二次确认是否放弃。"
+          },
+          {
+            "id": "sec-rules",
+            "heading": "业务规则",
+            "body": "- 退款原因必选。\n- 退款金额必填，取值范围 (0, 实付金额]。\n- 提交后订单进入「退款中」锁定状态，不可再次申请。\n- 同一订单 24 小时内最多提交 3 次申请。"
+          },
+          {
+            "id": "sec-states",
+            "heading": "页面状态",
+            "body": "默认态（填写中）、提交中（按钮 loading）、校验失败（金额超限报错并禁用提交）、提交成功（结果页）。"
+          },
+          {
+            "id": "sec-accept",
+            "heading": "验收条件",
+            "body": "- [ ] 金额输入 900 时出现红色提示且提交按钮禁用\n- [ ] 点击提交后按钮显示 loading，成功后整页变为结果页\n- [ ] 结果页展示单号，且单号格式为 RF + 日期 + 序号\n- [ ] 未选择退款原因时提交按钮禁用"
+          },
+          {
+            "id": "sec-flow",
+            "type": "flow",
+            "heading": "退款申请与审批流程",
+            "dir": "LR",
+            "caption": "退款申请 → 审批 → 退款到账（含驳回分支）",
+            "nodes": [
+              {
+                "id": "r1",
+                "label": "发起退款",
+                "sub": "/refund/apply",
+                "kind": "start"
+              },
+              {
+                "id": "r2",
+                "label": "订单可退？",
+                "kind": "decision"
+              },
+              {
+                "id": "r3",
+                "label": "提示不可退",
+                "sub": "超时限 / 已退完",
+                "kind": "warn"
+              },
+              {
+                "id": "r4",
+                "label": "提交申请",
+                "sub": "状态 submitted"
+              },
+              {
+                "id": "r5",
+                "label": "审批通过？",
+                "kind": "decision"
+              },
+              {
+                "id": "r6",
+                "label": "驳回",
+                "sub": "状态 rejected"
+              },
+              {
+                "id": "r7",
+                "label": "原路退款",
+                "sub": "状态 refunded",
+                "kind": "end"
+              }
+            ],
+            "edges": [
+              {
+                "from": "r1",
+                "to": "r2"
+              },
+              {
+                "from": "r2",
+                "to": "r3",
+                "label": "否"
+              },
+              {
+                "from": "r2",
+                "to": "r4",
+                "label": "是"
+              },
+              {
+                "from": "r4",
+                "to": "r5"
+              },
+              {
+                "from": "r5",
+                "to": "r6",
+                "label": "驳回"
+              },
+              {
+                "from": "r5",
+                "to": "r7",
+                "label": "通过"
+              },
+              {
+                "from": "r6",
+                "to": "r1",
+                "label": "重新申请"
+              }
+            ]
+          }
+        ],
+        "reqIds": [
+          "REQ-REFUND-001",
+          "REQ-REFUND-002",
+          "REQ-REFUND-003"
+        ]
+      },
+      "notApplicableStates": [
+        "empty"
+      ]
+    },
+    {
+      "id": "page-refund-review",
+      "moduleId": "m-review",
+      "name": "退款审批页",
+      "route": "/refund/review/:id",
+      "goal": "让客服在一屏内看完判断依据并给出结论",
+      "entryFrom": [
+        "page-refund-apply"
+      ],
+      "exitTo": [],
+      "layout": "header-content",
+      "defaultStateId": "s-default",
+      "componentTree": {
+        "id": "n-review-root",
+        "type": "Layout",
+        "props": {
+          "layout": "header-content"
+        },
+        "children": [
+          {
+            "id": "n-review-header",
+            "type": "Header",
+            "props": {
+              "title": "退款审批",
+              "back": true
+            }
+          },
+          {
+            "id": "n-review-content",
+            "type": "Content",
+            "children": [
+              {
+                "id": "n-review-title",
+                "type": "Space",
+                "props": {
+                  "size": 12,
+                  "align": "center"
+                },
+                "children": [
+                  {
+                    "id": "n-review-no",
+                    "type": "Typography",
+                    "props": {
+                      "text": "RF20261015001",
+                      "level": 4
+                    }
+                  },
+                  {
+                    "id": "n-review-tag",
+                    "type": "Tag",
+                    "props": {
+                      "text": "待初审",
+                      "color": "processing"
+                    }
+                  },
+                  {
+                    "id": "n-review-tag-amount",
+                    "type": "Tag",
+                    "props": {
+                      "text": "¥899.00",
+                      "color": "purple"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-review-alert",
+                "type": "Alert",
+                "props": {
+                  "type": "warning",
+                  "message": "该用户近 30 天有 2 次退款记录",
+                  "description": "建议核对凭证后决定",
+                  "showIcon": true,
+                  "visible": true
+                }
+              },
+              {
+                "id": "n-review-row",
+                "type": "Row",
+                "props": {
+                  "gutter": 16
+                },
+                "children": [
+                  {
+                    "id": "n-review-col-l",
+                    "type": "Col",
+                    "props": {
+                      "span": 14
+                    },
+                    "children": [
+                      {
+                        "id": "n-review-card-apply",
+                        "type": "Card",
+                        "props": {
+                          "title": "申请信息"
+                        },
+                        "children": [
+                          {
+                            "id": "n-review-desc",
+                            "type": "Descriptions",
+                            "props": {
+                              "column": 2,
+                              "items": [
+                                {
+                                  "label": "订单号",
+                                  "value": "OD20261002001"
+                                },
+                                {
+                                  "label": "下单时间",
+                                  "value": "2026-10-02 14:20"
+                                },
+                                {
+                                  "label": "退款原因",
+                                  "value": "商品质量问题"
+                                },
+                                {
+                                  "label": "申请时间",
+                                  "value": "2026-10-15 09:41"
+                                },
+                                {
+                                  "label": "问题说明",
+                                  "value": "左耳无声，已尝试重新配对无效",
+                                  "span": 2
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "id": "n-review-div",
+                            "type": "Divider",
+                            "props": {
+                              "text": "用户上传的凭证"
+                            }
+                          },
+                          {
+                            "id": "n-review-imgs",
+                            "type": "Space",
+                            "props": {
+                              "size": 8,
+                              "wrap": true
+                            },
+                            "children": [
+                              {
+                                "id": "n-review-img-1",
+                                "type": "Image",
+                                "props": {
+                                  "alt": "凭证 1",
+                                  "width": 120,
+                                  "height": 90
+                                }
+                              },
+                              {
+                                "id": "n-review-img-2",
+                                "type": "Image",
+                                "props": {
+                                  "alt": "凭证 2",
+                                  "width": 120,
+                                  "height": 90
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": "n-review-card-history",
+                        "type": "Card",
+                        "props": {
+                          "title": "该用户历史退款"
+                        },
+                        "children": [
+                          {
+                            "id": "n-review-table",
+                            "type": "Table",
+                            "props": {
+                              "size": "small",
+                              "columns": [
+                                {
+                                  "title": "单号",
+                                  "dataIndex": "no"
+                                },
+                                {
+                                  "title": "金额",
+                                  "dataIndex": "amount"
+                                },
+                                {
+                                  "title": "结果",
+                                  "dataIndex": "result",
+                                  "type": "tag"
+                                },
+                                {
+                                  "title": "时间",
+                                  "dataIndex": "time"
+                                }
+                              ],
+                              "data": [
+                                {
+                                  "no": "RF20260912007",
+                                  "amount": "¥128.00",
+                                  "result": "已完成",
+                                  "time": "2026-09-12"
+                                },
+                                {
+                                  "no": "RF20260803012",
+                                  "amount": "¥59.00",
+                                  "result": "已驳回",
+                                  "time": "2026-08-03"
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-review-col-r",
+                    "type": "Col",
+                    "props": {
+                      "span": 10
+                    },
+                    "children": [
+                      {
+                        "id": "n-review-card-flow",
+                        "type": "Card",
+                        "props": {
+                          "title": "审批流程"
+                        },
+                        "children": [
+                          {
+                            "id": "n-review-steps",
+                            "type": "Steps",
+                            "props": {
+                              "current": 1,
+                              "direction": "vertical",
+                              "items": [
+                                {
+                                  "title": "用户提交",
+                                  "description": "2026-10-15 09:41"
+                                },
+                                {
+                                  "title": "客服初审",
+                                  "description": "当前环节"
+                                },
+                                {
+                                  "title": "财务放款",
+                                  "description": "待初审通过后进入"
+                                },
+                                {
+                                  "title": "退款完成",
+                                  "description": "原路退回 1-3 个工作日"
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "id": "n-review-card-op",
+                        "type": "Card",
+                        "props": {
+                          "title": "审批操作"
+                        },
+                        "children": [
+                          {
+                            "id": "n-review-fi-reason",
+                            "type": "FormItem",
+                            "props": {
+                              "label": "审批意见",
+                              "help": "驳回时必填"
+                            },
+                            "children": [
+                              {
+                                "id": "n-review-ta",
+                                "type": "TextArea",
+                                "props": {
+                                  "placeholder": "填写审批意见",
+                                  "rows": 3,
+                                  "maxLength": 200,
+                                  "showCount": true
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "id": "n-review-space-op",
+                            "type": "Space",
+                            "props": {
+                              "size": 8,
+                              "wrap": true
+                            },
+                            "children": [
+                              {
+                                "id": "n-review-btn-reject",
+                                "type": "Button",
+                                "props": {
+                                  "text": "驳回",
+                                  "danger": true
+                                }
+                              },
+                              {
+                                "id": "n-review-btn-pass",
+                                "type": "Button",
+                                "props": {
+                                  "text": "通过并转财务",
+                                  "type": "primary"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "s-default",
+          "name": "默认态",
+          "description": "待初审，可操作",
+          "vars": {
+            "status": "reviewing"
+          },
+          "overrides": [
+            {
+              "target": "n-review-btn-pass",
+              "prop": "disabled",
+              "value": false
+            }
+          ]
+        },
+        {
+          "id": "s-loading",
+          "name": "加载态",
+          "description": "审批数据请求中",
+          "vars": {
+            "loading": true
+          },
+          "overrides": [
+            {
+              "target": "n-review-card-apply",
+              "prop": "loading",
+              "value": true
+            },
+            {
+              "target": "n-review-card-history",
+              "prop": "loading",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "s-rejected",
+          "name": "已驳回",
+          "description": "客服已驳回，流程终止",
+          "vars": {
+            "status": "rejected"
+          },
+          "overrides": [
+            {
+              "target": "n-review-tag",
+              "prop": "text",
+              "value": "已驳回"
+            },
+            {
+              "target": "n-review-tag",
+              "prop": "color",
+              "value": "error"
+            },
+            {
+              "target": "n-review-btn-pass",
+              "prop": "disabled",
+              "value": true
+            },
+            {
+              "target": "n-review-btn-reject",
+              "prop": "disabled",
+              "value": true
+            },
+            {
+              "target": "n-review-fi-reason",
+              "prop": "help",
+              "value": "已驳回：凭证无法证明商品存在质量问题"
+            }
+          ]
+        },
+        {
+          "id": "s-empty",
+          "name": "无权限",
+          "description": "当前账号不属于客服角色",
+          "vars": {
+            "error": true
+          },
+          "overrides": [
+            {
+              "target": "n-review-row",
+              "prop": "hidden",
+              "value": true
+            },
+            {
+              "target": "n-review-alert",
+              "prop": "type",
+              "value": "error"
+            },
+            {
+              "target": "n-review-alert",
+              "prop": "message",
+              "value": "无审批权限"
+            },
+            {
+              "target": "n-review-alert",
+              "prop": "description",
+              "value": "仅客服专员与财务审核员可查看本页"
+            }
+          ]
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ix-review-pass",
+          "name": "通过并转财务",
+          "on": {
+            "event": "click",
+            "target": "n-review-btn-pass"
+          },
+          "actions": [
+            {
+              "type": "setNode",
+              "target": "n-review-tag",
+              "prop": "text",
+              "value": "待放款"
+            },
+            {
+              "type": "setNode",
+              "target": "n-review-tag",
+              "prop": "color",
+              "value": "purple"
+            },
+            {
+              "type": "message",
+              "level": "success",
+              "text": "已通过初审，转财务放款"
+            }
+          ]
+        },
+        {
+          "id": "ix-review-reject",
+          "name": "驳回申请",
+          "on": {
+            "event": "click",
+            "target": "n-review-btn-reject"
+          },
+          "conditions": [
+            "status === 'reviewing'"
+          ],
+          "actions": [
+            {
+              "type": "gotoState",
+              "stateId": "s-rejected"
+            },
+            {
+              "type": "message",
+              "level": "warning",
+              "text": "已驳回，用户将收到通知"
+            }
+          ]
+        }
+      ],
+      "annotations": [],
+      "prd": {
+        "summary": "客服侧的唯一审批入口，目标是把单笔审批压缩到 2 分钟内完成。",
+        "sections": [
+          {
+            "id": "sec-goal",
+            "heading": "页面目标",
+            "body": "让客服在一屏内看完订单、申请、凭证与历史退款记录，并直接给出通过或驳回的结论。"
+          },
+          {
+            "id": "sec-struct",
+            "heading": "页面结构",
+            "body": "顶部为返回栏；标题行展示单号、状态标签与金额；风险提示条；主体左右两栏：左栏是「申请信息」卡（含凭证图片）与「历史退款」表，右栏是「审批流程」步骤条与「审批操作」表单。"
+          },
+          {
+            "id": "sec-ix",
+            "heading": "交互说明",
+            "body": "1. 点击「通过并转财务」：状态变为「待放款」，流程推进到第三步。\n2. 点击「驳回」：审批意见必填，未填写时按钮禁用；驳回后流程终止，按钮全部置灰。\n3. 凭证图片支持点击放大查看。\n4. 历史退款表格展示该用户近 90 天记录，用于辅助判断。"
+          },
+          {
+            "id": "sec-rules",
+            "heading": "业务规则",
+            "body": "- 仅客服专员（初审）与财务审核员（终审）可访问本页。\n- 驳回必须填写审批意见，长度 5–200 字。\n- 已驳回或已完成状态不可再次操作（终态）。\n- 通过初审后金额不可修改。"
+          },
+          {
+            "id": "sec-states",
+            "heading": "页面状态",
+            "body": "默认态（待初审）、加载态（卡片骨架屏）、已驳回（状态标签变红、操作按钮置灰、展示驳回意见）、无权限（隐藏主体，展示错误提示）。"
+          },
+          {
+            "id": "sec-accept",
+            "heading": "验收条件",
+            "body": "- [ ] 审批意见为空时「驳回」按钮禁用\n- [ ] 驳回后状态标签变为「已驳回」且颜色为红色\n- [ ] 驳回后两个操作按钮均不可点击\n- [ ] 非客服角色访问时展示「无审批权限」提示且不展示申请内容"
+          }
+        ],
+        "reqIds": [
+          "REQ-REFUND-004",
+          "REQ-REFUND-005"
+        ]
+      },
+      "notApplicableStates": [
+        "empty"
+      ]
+    }
+  ],
+  "components": [
+    {
+      "id": "c-refund-status",
+      "name": "退款状态标签",
+      "antd": "Tag",
+      "description": "退款单状态在全站的统一表达",
+      "anatomy": [
+        "色块",
+        "状态文字"
+      ],
+      "variants": [
+        {
+          "name": "待初审",
+          "token": "processing"
+        },
+        {
+          "name": "待放款",
+          "token": "purple"
+        },
+        {
+          "name": "已完成",
+          "token": "success"
+        },
+        {
+          "name": "已驳回",
+          "token": "error"
+        }
+      ],
+      "states": [
+        "normal"
+      ],
+      "tokens": {
+        "radius": "4px",
+        "height": "22px"
+      },
+      "spec": "与任务看板的状态标签保持同一套色板，禁止新增自定义色。"
+    },
+    {
+      "id": "c-amount-input",
+      "name": "退款金额输入",
+      "antd": "InputNumber",
+      "description": "带上下限约束的金额输入",
+      "anatomy": [
+        "减号",
+        "数值",
+        "加号",
+        "帮助文案"
+      ],
+      "variants": [
+        {
+          "name": "normal",
+          "description": "在 (0, 实付金额] 区间内"
+        },
+        {
+          "name": "invalid",
+          "description": "超出实付金额，红色边框 + 错误文案"
+        }
+      ],
+      "states": [
+        "normal",
+        "focus",
+        "error",
+        "disabled"
+      ],
+      "tokens": {
+        "height": "32px",
+        "radius": "6px"
+      },
+      "spec": "超过上限时立即报错，同时禁用提交按钮，不允许仅提示不拦截。"
+    }
+  ],
+  "stateMachines": [
+    {
+      "id": "sm-refund",
+      "name": "退款单状态机",
+      "entity": "RefundOrder",
+      "initial": "reviewing",
+      "states": [
+        {
+          "id": "reviewing",
+          "name": "待初审",
+          "type": "normal"
+        },
+        {
+          "id": "pending_pay",
+          "name": "待放款",
+          "type": "normal"
+        },
+        {
+          "id": "refunded",
+          "name": "已完成",
+          "type": "success"
+        },
+        {
+          "id": "rejected",
+          "name": "已驳回",
+          "type": "error"
+        }
+      ],
+      "transitions": [
+        {
+          "id": "rt-1",
+          "from": "reviewing",
+          "to": "pending_pay",
+          "trigger": "客服点击「通过并转财务」",
+          "role": "u-agent",
+          "guard": "申请信息完整",
+          "action": "记录初审人与时间"
+        },
+        {
+          "id": "rt-2",
+          "from": "reviewing",
+          "to": "rejected",
+          "trigger": "客服点击「驳回」并填写意见",
+          "role": "u-agent",
+          "guard": "审批意见长度 5–200 字",
+          "action": "通知用户驳回理由"
+        },
+        {
+          "id": "rt-3",
+          "from": "pending_pay",
+          "to": "refunded",
+          "trigger": "财务确认放款",
+          "role": "u-finance",
+          "guard": "退款账户与原支付账户一致",
+          "action": "发起原路退回，通知用户"
+        },
+        {
+          "id": "rt-4",
+          "from": "pending_pay",
+          "to": "rejected",
+          "trigger": "财务复核不通过",
+          "role": "u-finance",
+          "guard": "填写复核意见",
+          "action": "回退至客服并通知"
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "cap-refund-approve",
+      "name": "通过并转财务",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-agent"
+      ],
+      "from": [
+        "reviewing"
+      ],
+      "guard": "申请信息完整且凭证已上传",
+      "policy": "disabled",
+      "reason": "仅「待初审」单据可以审批，当前为「待放款 / 已完成 / 已驳回」",
+      "to": "pending_pay",
+      "effect": "记录初审人与时间并通知财务",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-004",
+      "onFail": "凭证缺失时提示补充上传，停留在当前页"
+    },
+    {
+      "id": "cap-refund-reject",
+      "name": "驳回",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-agent"
+      ],
+      "from": [
+        "reviewing"
+      ],
+      "guard": "审批意见 5–200 字",
+      "policy": "disabled",
+      "reason": "仅「待初审」单据可以驳回，当前不是该状态",
+      "to": "rejected",
+      "effect": "记录驳回意见并通知用户",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-004",
+      "onFail": "意见过短时在输入框下提示"
+    },
+    {
+      "id": "cap-refund-pay",
+      "name": "确认放款",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-finance"
+      ],
+      "from": [
+        "pending_pay"
+      ],
+      "guard": "收款账户信息完整",
+      "policy": "reject",
+      "reason": "仅「待放款」单据可以放款，且账户信息需完整",
+      "to": "refunded",
+      "effect": "调用支付渠道并记录流水号",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-005",
+      "onFail": "渠道超时提示稍后重试，不重复放款"
+    },
+    {
+      "id": "cap-refund-review-reject",
+      "name": "复核不通过",
+      "entity": "RefundOrder",
+      "actor": [
+        "u-finance"
+      ],
+      "from": [
+        "pending_pay"
+      ],
+      "guard": "复核意见已填写",
+      "policy": "disabled",
+      "reason": "仅「待放款」单据可以复核驳回，当前不是该状态",
+      "to": "rejected",
+      "effect": "回退到已驳回并通知客服",
+      "page": "page-refund-review",
+      "requirement": "REQ-REFUND-005",
+      "onFail": "未填意见时提示补充"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-REFUND-001",
+      "moduleId": "m-refund",
+      "pageId": "page-refund-apply",
+      "pattern": "event-driven",
+      "title": "提交退款申请",
+      "role": "u-customer",
+      "trigger": "在退款申请页填写完成后点击「提交申请」",
+      "rule": "退款原因必选；金额 ∈ (0, 实付金额]；同一订单 24 小时内最多提交 3 次",
+      "stateMachine": "sm-refund",
+      "expected": "系统生成一笔状态为「待初审」的退款单并展示结果页，结果页包含单号",
+      "acceptance": [
+        "金额输入 900（实付 899）时提交按钮禁用",
+        "提交成功后整页切换为结果页并展示单号",
+        "24 小时内第 4 次提交被拒绝并提示已达上限"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    },
+    {
+      "id": "REQ-REFUND-002",
+      "moduleId": "m-refund",
+      "pageId": "page-refund-apply",
+      "pattern": "unwanted",
+      "title": "金额超限拦截",
+      "role": "system",
+      "trigger": "",
+      "rule": "若用户输入的退款金额大于订单实付金额",
+      "stateMachine": "",
+      "expected": "系统在金额输入框下方展示红色文案「退款金额不能超过实付金额 ¥899.00」并禁用提交按钮",
+      "acceptance": [
+        "输入 900 时金额框下方立即出现红色文案",
+        "同时「提交申请」按钮变为禁用态",
+        "用户把金额改回 899 或以下后错误文案消失且按钮恢复可点击"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    },
+    {
+      "id": "REQ-REFUND-003",
+      "moduleId": "m-refund",
+      "pageId": "page-refund-apply",
+      "pattern": "option",
+      "title": "凭证上传",
+      "role": "u-customer",
+      "trigger": "",
+      "rule": "若申请原因选择「商品质量问题」或「与描述不符」，则凭证上传为必填",
+      "stateMachine": "",
+      "expected": "系统在上传区展示必填标识，未上传时提交按钮禁用",
+      "acceptance": [
+        "选择「商品质量问题」时上传区出现必填星号",
+        "未上传凭证时提交按钮禁用",
+        "选择「不想要了」时上传区变为选填且提交按钮可点击"
+      ],
+      "priority": "P1",
+      "source": "inferred",
+      "status": "draft"
+    },
+    {
+      "id": "REQ-REFUND-004",
+      "moduleId": "m-review",
+      "pageId": "page-refund-review",
+      "pattern": "event-driven",
+      "title": "客服初审",
+      "role": "u-agent",
+      "trigger": "客服在退款审批页点击「通过并转财务」或「驳回」",
+      "rule": "驳回必须填写审批意见且长度 5–200 字；仅客服专员可操作",
+      "stateMachine": "sm-refund",
+      "expected": "系统按状态机把退款单推进到「待放款」或「已驳回」，并记录审批人与时间",
+      "acceptance": [
+        "审批意见为空时「驳回」按钮禁用",
+        "点击「通过并转财务」后状态标签变为「待放款」",
+        "驳回后状态标签变为「已驳回」且两个操作按钮均置灰"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    },
+    {
+      "id": "REQ-REFUND-005",
+      "moduleId": "m-review",
+      "pageId": "page-refund-review",
+      "pattern": "unwanted",
+      "title": "越权访问拦截",
+      "role": "system",
+      "trigger": "",
+      "rule": "若当前账号既不是客服专员也不是财务审核员",
+      "stateMachine": "sm-refund",
+      "expected": "系统隐藏申请详情与操作区，并展示「无审批权限」的错误提示",
+      "acceptance": [
+        "非客服角色访问时申请信息卡与审批操作卡均不可见",
+        "页面展示「无审批权限」提示且文案说明仅客服与财务可访问",
+        "直接通过 URL 访问同样被拦截"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    }
+  ],
+  "boardPlan": [
+    {
+      "id": "bp-1",
+      "order": 1,
+      "name": "退款申请（用户侧）",
+      "pageId": "page-refund-apply",
+      "moduleId": "m-refund",
+      "status": "done",
+      "reqIds": [
+        "REQ-REFUND-001",
+        "REQ-REFUND-002",
+        "REQ-REFUND-003"
+      ]
+    },
+    {
+      "id": "bp-2",
+      "order": 2,
+      "name": "退款审批（客服侧）",
+      "pageId": "page-refund-review",
+      "moduleId": "m-review",
+      "status": "doing",
+      "reqIds": [
+        "REQ-REFUND-004",
+        "REQ-REFUND-005"
+      ]
+    }
+  ],
+  "glossary": [
+    {
+      "term": "退款单",
+      "definition": "一次退款诉求对应的业务单据，全生命周期由状态机管理"
+    },
+    {
+      "term": "原路退回",
+      "definition": "退款金额退回用户原支付渠道，通常 1–3 个工作日到账"
+    },
+    {
+      "term": "初审",
+      "definition": "客服对退款申请合理性的第一次判断"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q-1",
+      "question": "是否需要支持部分退款（金额小于实付）？影响状态机与财务对账逻辑",
+      "owner": "PM",
+      "status": "open",
+      "answer": ""
+    },
+    {
+      "id": "q-2",
+      "question": "「全额退款」快捷按钮的交互细节（点击后是否锁定金额输入）",
+      "owner": "PM",
+      "status": "open",
+      "answer": ""
+    },
+    {
+      "id": "q-3",
+      "question": "凭证上传是否强制为「商品质量问题」必填（REQ-REFUND-003 为 AI 推断）",
+      "owner": "AI",
+      "status": "assumed",
+      "answer": "暂按必填处理，待产品确认"
+    }
+  ]
+}
+''')
+
+
+def main():
+    finalize(DOC, "example-02")
+    dump(DOC, OUT)
+
+
+if __name__ == "__main__":
+    main()

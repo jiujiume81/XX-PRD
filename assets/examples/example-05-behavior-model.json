@@ -333,11 +333,21 @@
                       "title": "操作",
                       "dataIndex": "op",
                       "type": "action",
-                      "width": 210,
+                      "width": 300,
                       "actions": [
                         {
                           "key": "detail",
                           "label": "详情"
+                        },
+                        {
+                          "key": "approve",
+                          "label": "审批",
+                          "capability": "cap-po-approve"
+                        },
+                        {
+                          "key": "receive",
+                          "label": "收货",
+                          "capability": "cap-po-receive"
                         },
                         {
                           "key": "submit",
@@ -408,8 +418,7 @@
                       "expected": "2026-10-17",
                       "summary": "外壳 200 套"
                     }
-                  ],
-                  "rowKey": "poNo"
+                  ]
                 }
               },
               {
@@ -531,6 +540,41 @@
               "type": "message",
               "level": "success",
               "text": "已提交审批，等待采购主管处理"
+            }
+          ]
+        },
+        {
+          "id": "ix-approve",
+          "name": "进入审批页（改由状态驱动按钮可用性）",
+          "on": {
+            "event": "click",
+            "target": "n-po-table__act_*_approve"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-po-approve",
+              "params": {
+                "poNo": "{{row.poNo}}",
+                "supplier": "{{row.supplier}}"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ix-receive",
+          "name": "进入收货页",
+          "on": {
+            "event": "click",
+            "target": "n-po-table__act_*_receive"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-po-receive",
+              "params": {
+                "poNo": "{{row.poNo}}"
+              }
             }
           ]
         },
@@ -684,7 +728,6 @@
                 "type": "Descriptions",
                 "props": {
                   "column": 3,
-                  "size": "small",
                   "items": [
                     {
                       "label": "供应商",
@@ -1264,7 +1307,6 @@
                 "type": "Descriptions",
                 "props": {
                   "column": 3,
-                  "size": "small",
                   "items": [
                     {
                       "label": "供应商",
@@ -1527,7 +1569,6 @@
                 "type": "Descriptions",
                 "props": {
                   "column": 3,
-                  "size": "small",
                   "items": [
                     {
                       "label": "供应商",

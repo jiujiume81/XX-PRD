@@ -27,6 +27,9 @@ EXDIR = ROOT / "assets" / "examples"
 
 # (产物 JSON, 生成器, 期望 capabilities 条数, 期望 system:true 处数)
 CASES = [
+    # 01/02 原先没有生成器（手改 JSON），I-11 补上：六份示例现在都能从生成器复现。
+    ("example-01-task-board.json", "gen_example01.py", 4, 0),
+    ("example-02-refund-flow.json", "gen_example02.py", 4, 0),
     ("example-03-nav-tree.json", "gen_example03.py", 6, 3),
     ("example-04-master-detail.json", "gen_example04.py", 3, 0),
     ("example-05-behavior-model.json", "gen_example05.py", 10, None),
@@ -55,6 +58,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix="xx-prd-gen-") as td:
         tmp = Path(td) / "examples"
         shutil.copytree(EXDIR, tmp)
+        # 生成器现在会 import 同目录的 genlib，并读 `../container/props-contract.json`
+        # （白名单不许手写）。所以副本必须连同契约一起铺好，否则「生成器执行失败」
+        # 会被读成「产物漂移」——两者处置完全不同。
+        cdir = Path(td) / "container"
+        cdir.mkdir()
+        shutil.copy2(ROOT / "assets" / "container" / "props-contract.json", cdir)
 
         for target, gen, want_caps, want_system in CASES:
             proc = subprocess.run(

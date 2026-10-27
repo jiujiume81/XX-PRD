@@ -659,7 +659,6 @@
                       "op": ""
                     }
                   ],
-                  "rowKey": "taskNo",
                   "rowClick": true,
                   "emptyAction": {
                     "text": "去建检验任务",
@@ -682,7 +681,6 @@
                     "type": "Descriptions",
                     "props": {
                       "column": 2,
-                      "size": "small",
                       "items": [
                         {
                           "label": "任务单号",
@@ -1447,7 +1445,7 @@
                 "type": "Alert",
                 "props": {
                   "type": "error",
-                  "text": "请验单查询失败（SRV-502），请重试或手工录入"
+                  "message": "请验单查询失败（SRV-502），请重试或手工录入"
                 }
               },
               {
@@ -1505,15 +1503,14 @@
                     "type": "FormItem",
                     "props": {
                       "label": "请验数量",
-                      "required": true
+                      "required": true,
+                      "help": "单位 kg"
                     },
                     "children": [
                       {
                         "id": "n-new-qty",
                         "type": "InputNumber",
-                        "props": {
-                          "placeholder": "kg"
-                        }
+                        "props": {}
                       }
                     ]
                   },
@@ -1839,7 +1836,7 @@
                 "type": "Alert",
                 "props": {
                   "type": "error",
-                  "text": "统计服务暂时不可用（STA-503），请稍后重试"
+                  "message": "统计服务暂时不可用（STA-503），请稍后重试"
                 }
               },
               {

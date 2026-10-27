@@ -1346,7 +1346,6 @@
                             "type": "Descriptions",
                             "props": {
                               "column": 2,
-                              "bordered": true,
                               "items": [
                                 {
                                   "label": "任务标题",

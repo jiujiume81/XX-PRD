@@ -1,0 +1,2119 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""生成 example-01-task-board.json —— 团队任务看板（列表 + 详情，含状态机与抽屉）
+
+本文件是这份示例的**唯一真源**：改内容改这里，然后重跑，不要手改 JSON。
+    python3 gen_example01.py
+
+生成出口强制三条不变量（见 `genlib.py`）：
+  I1 `props` 的每个键都被该 type 的渲染器读过（白名单来自容器契约，不手写）
+  I2 除 `meta.currentPageId` 外每页都能只沿 `navigate` 跳转边到达
+  I3 有提交类能力的页都写了 `contract.doneWhen`
+
+三条任一不满足 → 生成失败，不写出产物。
+"""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from genlib import finalize, dump
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+OUT = os.path.join(HERE, "example-01-task-board.json")
+
+DOC = json.loads(r'''
+{
+  "meta": {
+    "schemaVersion": "1.0",
+    "product": "团队任务看板",
+    "version": "1.0.0",
+    "createdAt": "2026-10-15T10:00:00+08:00",
+    "updatedAt": "2026-10-15T10:40:00+08:00",
+    "reviewMode": false,
+    "currentPageId": "page-task-list",
+    "defaultPanel": "both"
+  },
+  "product": {
+    "name": "团队任务看板",
+    "oneLiner": "让 10 人以下研发小团队在 5 分钟内完成一次任务同步",
+    "positioning": "面向研发小团队负责人的轻量任务协作工具。以「一眼看清阻塞」为第一设计目标，用最少的操作把口头需求落成可追踪的任务，并通过状态机保证任务流转的确定性。",
+    "targetUsers": [
+      "研发小团队负责人",
+      "开发工程师"
+    ],
+    "coreValue": "把任务对齐成本从「开会 30 分钟」降到「扫一眼 10 秒」",
+    "nonGoals": [
+      "不做跨组织权限体系与 SSO",
+      "不做甘特图与关键路径计算",
+      "不做工时统计与绩效考核"
+    ],
+    "metrics": [
+      {
+        "name": "任务创建耗时",
+        "target": "< 15s",
+        "type": "leading"
+      },
+      {
+        "name": "周活跃团队数",
+        "target": "> 200",
+        "type": "lagging"
+      },
+      {
+        "name": "阻塞任务平均停留时长",
+        "target": "< 24h",
+        "type": "lagging"
+      }
+    ]
+  },
+  "users": [
+    {
+      "id": "u-owner",
+      "name": "项目负责人",
+      "description": "对项目整体进度负责，需要掌握全局状态并分配任务",
+      "goals": [
+        "一眼看到所有阻塞项",
+        "快速把任务指派给具体的人",
+        "知道谁手上活最多"
+      ],
+      "painPoints": [
+        "任务状态散落在群聊里",
+        "阻塞项没人主动上报",
+        "不知道谁的排期已经满了"
+      ]
+    },
+    {
+      "id": "u-dev",
+      "name": "开发工程师",
+      "description": "任务的执行者，需要清楚自己该做什么、做到哪了",
+      "goals": [
+        "看清分配给自己的任务与截止时间",
+        "一键把任务标记为进行中或完成"
+      ],
+      "painPoints": [
+        "任务被口头改期但没人通知",
+        "不清楚优先级顺序"
+      ]
+    }
+  ],
+  "userFlows": [
+    {
+      "id": "flow-create",
+      "name": "创建并指派任务",
+      "role": "u-owner",
+      "goal": "把一句口头需求落成一条可追踪、可指派的任务",
+      "steps": [
+        {
+          "id": "st-1",
+          "name": "进入任务列表页",
+          "pageId": "page-task-list",
+          "note": "默认展示全部任务"
+        },
+        {
+          "id": "st-2",
+          "name": "点击「新建任务」",
+          "pageId": "page-task-list",
+          "note": "打开右侧抽屉表单"
+        },
+        {
+          "id": "st-3",
+          "name": "填写标题、负责人、优先级、截止日期",
+          "pageId": "page-task-list",
+          "note": "标题必填"
+        },
+        {
+          "id": "st-4",
+          "name": "提交",
+          "pageId": "page-task-list",
+          "note": "成功后列表首行出现新任务"
+        },
+        {
+          "id": "st-5",
+          "name": "点击任务行进入详情",
+          "pageId": "page-task-detail",
+          "note": "查看完整信息与操作记录"
+        }
+      ]
+    },
+    {
+      "id": "flow-block",
+      "name": "上报与解除阻塞",
+      "role": "u-dev",
+      "goal": "把被外部依赖卡住的任务显式暴露给负责人",
+      "steps": [
+        {
+          "id": "st-6",
+          "name": "在任务详情页点击「标记阻塞」",
+          "pageId": "page-task-detail",
+          "note": "填写阻塞原因"
+        },
+        {
+          "id": "st-7",
+          "name": "任务状态变为阻塞",
+          "pageId": "page-task-detail",
+          "note": "列表页同步显示红色标识"
+        },
+        {
+          "id": "st-8",
+          "name": "依赖解除后点击「解除阻塞」",
+          "pageId": "page-task-detail",
+          "note": "回到进行中"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "m-task",
+      "name": "任务管理",
+      "goal": "承载任务的创建、浏览、详情查看与状态流转",
+      "priority": "P0",
+      "pageIds": [
+        "page-task-list",
+        "page-task-detail"
+      ],
+      "dependsOn": []
+    }
+  ],
+  "dataModel": {
+    "entities": [
+      {
+        "id": "e-task",
+        "name": "Task",
+        "table": "task",
+        "description": "一条可指派、可流转的最小工作单元",
+        "pageIds": [
+          "page-task-list",
+          "page-task-detail"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "key": "pk",
+            "note": "ULID"
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "required": true,
+            "constraint": "≤ 50 字",
+            "note": "任务标题"
+          },
+          {
+            "name": "status",
+            "type": "enum",
+            "required": true,
+            "constraint": "todo|doing|blocked|done",
+            "note": "见 sm-task 状态机"
+          },
+          {
+            "name": "ownerId",
+            "type": "string",
+            "required": true,
+            "key": "fk",
+            "note": "→ user.id，负责人"
+          },
+          {
+            "name": "priority",
+            "type": "enum",
+            "required": true,
+            "constraint": "P0|P1|P2",
+            "note": "默认 P1"
+          },
+          {
+            "name": "dueDate",
+            "type": "date",
+            "required": false,
+            "note": "截止日期；早于今天且未完成即逾期"
+          },
+          {
+            "name": "createdAt",
+            "type": "datetime",
+            "required": true,
+            "note": ""
+          },
+          {
+            "name": "updatedAt",
+            "type": "datetime",
+            "required": true,
+            "note": ""
+          }
+        ],
+        "relations": [
+          {
+            "type": "belongs_to",
+            "target": "e-user",
+            "via": "ownerId",
+            "note": "负责人"
+          }
+        ],
+        "indexes": [
+          "status",
+          "ownerId",
+          "dueDate"
+        ]
+      },
+      {
+        "id": "e-user",
+        "name": "User",
+        "table": "user",
+        "description": "团队成员",
+        "pageIds": [
+          "page-task-list"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "string",
+            "required": true,
+            "key": "pk",
+            "note": ""
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "required": true,
+            "note": "展示名"
+          },
+          {
+            "name": "role",
+            "type": "enum",
+            "required": true,
+            "constraint": "owner|dev",
+            "note": "项目负责人 / 开发工程师"
+          }
+        ],
+        "relations": [
+          {
+            "type": "has_many",
+            "target": "e-task",
+            "via": "ownerId",
+            "note": ""
+          }
+        ],
+        "indexes": [
+          "name"
+        ]
+      }
+    ],
+    "derived": [
+      {
+        "name": "逾期任务数",
+        "expr": "count(task where dueDate < today and status != done)",
+        "fallback": "无逾期时展示 0",
+        "usedBy": [
+          "page-task-list"
+        ],
+        "reqId": "REQ-TASK-002"
+      },
+      {
+        "name": "本周新增任务数",
+        "expr": "count(task where createdAt >= startOfWeek)",
+        "fallback": "0",
+        "usedBy": [
+          "page-task-list"
+        ],
+        "reqId": "REQ-TASK-001"
+      }
+    ]
+  },
+  "pages": [
+    {
+      "id": "page-task-list",
+      "moduleId": "m-task",
+      "name": "任务列表页",
+      "route": "/tasks",
+      "goal": "让项目负责人在一个屏幕内看清所有任务的状态分布与阻塞情况，并在 15 秒内创建一条新任务",
+      "entryFrom": [],
+      "exitTo": [
+        "page-task-detail"
+      ],
+      "layout": "header-sider-content",
+      "defaultStateId": "s-default",
+      "componentTree": {
+        "id": "n-root",
+        "type": "Layout",
+        "props": {
+          "layout": "header-sider-content"
+        },
+        "children": [
+          {
+            "id": "n-header",
+            "type": "Header",
+            "props": {
+              "title": "任务看板",
+              "logo": true
+            },
+            "slots": {
+              "extra": [
+                {
+                  "id": "n-bell",
+                  "type": "Badge",
+                  "props": {
+                    "count": 3
+                  }
+                },
+                {
+                  "id": "n-avatar",
+                  "type": "Avatar",
+                  "props": {
+                    "text": "我"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "n-sider",
+            "type": "Sider",
+            "props": {
+              "width": 200
+            },
+            "children": [
+              {
+                "id": "n-menu",
+                "type": "Menu",
+                "props": {
+                  "mode": "inline",
+                  "selectedKey": "tasks",
+                  "items": [
+                    {
+                      "key": "home",
+                      "label": "概览",
+                      "icon": "dashboard"
+                    },
+                    {
+                      "key": "tasks",
+                      "label": "任务",
+                      "icon": "list"
+                    },
+                    {
+                      "key": "reports",
+                      "label": "报表",
+                      "icon": "chart"
+                    },
+                    {
+                      "key": "settings",
+                      "label": "设置",
+                      "icon": "setting"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "n-content",
+            "type": "Content",
+            "children": [
+              {
+                "id": "n-crumb",
+                "type": "Breadcrumb",
+                "props": {
+                  "items": [
+                    {
+                      "label": "首页"
+                    },
+                    {
+                      "label": "任务管理"
+                    },
+                    {
+                      "label": "任务列表"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "n-alert",
+                "type": "Alert",
+                "props": {
+                  "type": "warning",
+                  "message": "有 2 条任务已逾期",
+                  "description": "逾期任务会在统计卡中以红色展示",
+                  "showIcon": true,
+                  "closable": true,
+                  "visible": false
+                }
+              },
+              {
+                "id": "n-toolbar",
+                "type": "Space",
+                "props": {
+                  "size": 8,
+                  "wrap": true
+                },
+                "children": [
+                  {
+                    "id": "n-search",
+                    "type": "Input",
+                    "props": {
+                      "placeholder": "搜索任务标题",
+                      "prefix": "search",
+                      "allowClear": true
+                    }
+                  },
+                  {
+                    "id": "n-filter-status",
+                    "type": "Select",
+                    "props": {
+                      "placeholder": "全部状态",
+                      "options": [
+                        {
+                          "label": "待办",
+                          "value": "todo"
+                        },
+                        {
+                          "label": "进行中",
+                          "value": "doing"
+                        },
+                        {
+                          "label": "阻塞",
+                          "value": "blocked"
+                        },
+                        {
+                          "label": "已完成",
+                          "value": "done"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "n-filter-owner",
+                    "type": "Select",
+                    "props": {
+                      "placeholder": "全部负责人",
+                      "options": [
+                        {
+                          "label": "林可",
+                          "value": "lk"
+                        },
+                        {
+                          "label": "陈默",
+                          "value": "cm"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "n-btn-new",
+                    "type": "Button",
+                    "props": {
+                      "text": "新建任务",
+                      "type": "primary",
+                      "icon": "plus"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-stat-row",
+                "type": "Row",
+                "props": {
+                  "gutter": 16,
+                  "justify": "start"
+                },
+                "children": [
+                  {
+                    "id": "n-col-1",
+                    "type": "Col",
+                    "props": {
+                      "span": 8
+                    },
+                    "children": [
+                      {
+                        "id": "n-card-1",
+                        "type": "Card",
+                        "props": {
+                          "size": true
+                        },
+                        "children": [
+                          {
+                            "id": "n-st-1",
+                            "type": "Statistic",
+                            "props": {
+                              "title": "本周新增",
+                              "value": "12"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-col-2",
+                    "type": "Col",
+                    "props": {
+                      "span": 8
+                    },
+                    "children": [
+                      {
+                        "id": "n-card-2",
+                        "type": "Card",
+                        "props": {
+                          "size": true
+                        },
+                        "children": [
+                          {
+                            "id": "n-st-2",
+                            "type": "Statistic",
+                            "props": {
+                              "title": "进行中",
+                              "value": "5"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-col-3",
+                    "type": "Col",
+                    "props": {
+                      "span": 8
+                    },
+                    "children": [
+                      {
+                        "id": "n-card-3",
+                        "type": "Card",
+                        "props": {
+                          "size": true
+                        },
+                        "children": [
+                          {
+                            "id": "n-st-3",
+                            "type": "Statistic",
+                            "props": {
+                              "title": "逾期",
+                              "value": "2",
+                              "trend": "up"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "n-gap",
+                "type": "Divider",
+                "props": {
+                  "plain": true
+                }
+              },
+              {
+                "id": "n-table",
+                "type": "Table",
+                "props": {
+                  "bordered": false,
+                  "rowSelection": true,
+                  "columns": [
+                    {
+                      "title": "任务标题",
+                      "dataIndex": "title"
+                    },
+                    {
+                      "title": "状态",
+                      "dataIndex": "status",
+                      "type": "tag",
+                      "width": 100
+                    },
+                    {
+                      "title": "负责人",
+                      "dataIndex": "owner",
+                      "type": "avatar",
+                      "width": 130
+                    },
+                    {
+                      "title": "截止日期",
+                      "dataIndex": "due",
+                      "width": 110
+                    },
+                    {
+                      "title": "操作",
+                      "type": "action",
+                      "width": 120,
+                      "actions": [
+                        {
+                          "key": "view",
+                          "label": "查看"
+                        },
+                        {
+                          "key": "delete",
+                          "label": "删除",
+                          "type": "danger"
+                        }
+                      ]
+                    }
+                  ],
+                  "data": [
+                    {
+                      "title": "完成登录页联调",
+                      "status": "进行中",
+                      "owner": "林可",
+                      "due": "2026-10-18"
+                    },
+                    {
+                      "title": "修复导出 CSV 中文乱码",
+                      "status": "阻塞",
+                      "owner": "陈默",
+                      "due": "2026-10-16"
+                    },
+                    {
+                      "title": "补充埋点文档",
+                      "status": "已完成",
+                      "owner": "苏禾",
+                      "due": "2026-10-14"
+                    },
+                    {
+                      "title": "设计稿走查与验收",
+                      "status": "待办",
+                      "owner": "林可",
+                      "due": "2026-10-20"
+                    }
+                  ],
+                  "rowClick": true
+                }
+              },
+              {
+                "id": "n-pager",
+                "type": "Pagination",
+                "props": {
+                  "current": 1,
+                  "total": 42,
+                  "pageSize": 10
+                }
+              },
+              {
+                "id": "n-drawer-new",
+                "type": "Drawer",
+                "props": {
+                  "modalId": "drawer-new",
+                  "title": "新建任务",
+                  "open": false,
+                  "placement": "right",
+                  "width": 440
+                },
+                "children": [
+                  {
+                    "id": "n-fi-title",
+                    "type": "FormItem",
+                    "props": {
+                      "label": "任务标题",
+                      "required": true,
+                      "help": "不超过 50 字",
+                      "validateStatus": ""
+                    },
+                    "children": [
+                      {
+                        "id": "n-in-title",
+                        "type": "Input",
+                        "props": {
+                          "placeholder": "例如：完成登录页联调"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-fi-owner",
+                    "type": "FormItem",
+                    "props": {
+                      "label": "负责人"
+                    },
+                    "children": [
+                      {
+                        "id": "n-sel-owner",
+                        "type": "Select",
+                        "props": {
+                          "placeholder": "选择负责人",
+                          "options": [
+                            {
+                              "label": "林可",
+                              "value": "lk"
+                            },
+                            {
+                              "label": "陈默",
+                              "value": "cm"
+                            },
+                            {
+                              "label": "苏禾",
+                              "value": "sh"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-fi-pri",
+                    "type": "FormItem",
+                    "props": {
+                      "label": "优先级"
+                    },
+                    "children": [
+                      {
+                        "id": "n-radio-pri",
+                        "type": "RadioGroup",
+                        "props": {
+                          "value": "P1",
+                          "options": [
+                            "P0",
+                            "P1",
+                            "P2"
+                          ],
+                          "buttonStyle": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-fi-due",
+                    "type": "FormItem",
+                    "props": {
+                      "label": "截止日期"
+                    },
+                    "children": [
+                      {
+                        "id": "n-date-due",
+                        "type": "DatePicker",
+                        "props": {
+                          "placeholder": "选择截止日期"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "n-fi-desc",
+                    "type": "FormItem",
+                    "props": {
+                      "label": "描述"
+                    },
+                    "children": [
+                      {
+                        "id": "n-ta-desc",
+                        "type": "TextArea",
+                        "props": {
+                          "placeholder": "补充背景信息（选填）",
+                          "rows": 3,
+                          "showCount": true,
+                          "maxLength": 200
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "slots": {
+                  "footer": [
+                    {
+                      "id": "n-btn-cancel",
+                      "type": "Button",
+                      "props": {
+                        "text": "取消"
+                      }
+                    },
+                    {
+                      "id": "n-btn-submit",
+                      "type": "Button",
+                      "props": {
+                        "text": "创建任务",
+                        "type": "primary",
+                        "disabled": false
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "n-modal-ok",
+                "type": "Modal",
+                "props": {
+                  "modalId": "m-ok",
+                  "title": "创建成功",
+                  "open": false,
+                  "content": "任务已创建，可在列表中查看。",
+                  "okText": "知道了",
+                  "cancelText": "继续创建"
+                }
+              },
+              {
+                "id": "n-modal-del",
+                "type": "Modal",
+                "props": {
+                  "modalId": "m-del",
+                  "title": "删除任务",
+                  "open": false,
+                  "content": "删除后不可恢复，确认删除该任务？",
+                  "okText": "确认删除",
+                  "cancelText": "取消"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "s-default",
+          "name": "默认态",
+          "description": "列表有数据，无筛选条件",
+          "vars": {
+            "loading": false,
+            "empty": false,
+            "error": false
+          },
+          "overrides": [
+            {
+              "target": "n-alert",
+              "prop": "visible",
+              "value": false
+            }
+          ]
+        },
+        {
+          "id": "s-loading",
+          "name": "加载态",
+          "description": "首次进入页面，接口请求中",
+          "vars": {
+            "loading": true
+          },
+          "overrides": [
+            {
+              "target": "n-table",
+              "prop": "loading",
+              "value": true
+            },
+            {
+              "target": "n-stat-row",
+              "prop": "opacity",
+              "value": "0.5"
+            }
+          ]
+        },
+        {
+          "id": "s-empty",
+          "name": "空态",
+          "description": "团队还没有任何任务",
+          "vars": {
+            "loading": false,
+            "empty": true
+          },
+          "overrides": [
+            {
+              "target": "n-table",
+              "prop": "empty",
+              "value": true
+            },
+            {
+              "target": "n-table",
+              "prop": "emptyText",
+              "value": "还没有任务，点击右上角「新建任务」开始"
+            }
+          ]
+        },
+        {
+          "id": "s-error",
+          "name": "异常态",
+          "description": "接口返回 500 或网络异常",
+          "vars": {
+            "error": true
+          },
+          "overrides": [
+            {
+              "target": "n-alert",
+              "prop": "visible",
+              "value": true
+            },
+            {
+              "target": "n-alert",
+              "prop": "type",
+              "value": "error"
+            },
+            {
+              "target": "n-alert",
+              "prop": "message",
+              "value": "任务列表加载失败"
+            },
+            {
+              "target": "n-alert",
+              "prop": "description",
+              "value": "网络异常，请检查连接后重试"
+            }
+          ]
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ix-open-drawer",
+          "name": "打开新建任务抽屉",
+          "on": {
+            "event": "click",
+            "target": "n-btn-new"
+          },
+          "actions": [
+            {
+              "type": "showDrawer",
+              "drawerId": "drawer-new"
+            }
+          ]
+        },
+        {
+          "id": "ix-close-drawer",
+          "name": "取消创建",
+          "on": {
+            "event": "click",
+            "target": "n-btn-cancel"
+          },
+          "actions": [
+            {
+              "type": "hideDrawer",
+              "drawerId": "drawer-new"
+            }
+          ]
+        },
+        {
+          "id": "ix-submit-task",
+          "name": "提交创建任务",
+          "on": {
+            "event": "click",
+            "target": "n-btn-submit"
+          },
+          "conditions": [
+            "loading !== true"
+          ],
+          "actions": [
+            {
+              "type": "setNode",
+              "target": "n-btn-submit",
+              "prop": "loading",
+              "value": true
+            },
+            {
+              "type": "delay",
+              "ms": 700
+            },
+            {
+              "type": "setNode",
+              "target": "n-btn-submit",
+              "prop": "loading",
+              "value": false
+            },
+            {
+              "type": "hideDrawer",
+              "drawerId": "drawer-new"
+            },
+            {
+              "type": "message",
+              "level": "success",
+              "text": "任务创建成功"
+            },
+            {
+              "type": "showModal",
+              "modalId": "m-ok"
+            }
+          ]
+        },
+        {
+          "id": "ix-close-modal",
+          "name": "关闭成功弹窗",
+          "on": {
+            "event": "click",
+            "target": "n-modal-ok__ok"
+          },
+          "actions": [
+            {
+              "type": "hideModal",
+              "modalId": "m-ok"
+            }
+          ]
+        },
+        {
+          "id": "ix-row-detail",
+          "name": "点行进入任务详情",
+          "on": {
+            "event": "click",
+            "target": "n-table__row_*"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-task-detail",
+              "params": {
+                "taskTitle": "{{row.title}}",
+                "taskOwner": "{{row.owner}}",
+                "taskStatus": "{{row.status}}"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ix-act-view",
+          "name": "点「查看」进入任务详情",
+          "on": {
+            "event": "click",
+            "target": "n-table__act_*_view"
+          },
+          "actions": [
+            {
+              "type": "navigate",
+              "pageId": "page-task-detail",
+              "params": {
+                "taskTitle": "{{row.title}}",
+                "taskOwner": "{{row.owner}}",
+                "taskStatus": "{{row.status}}"
+              }
+            }
+          ]
+        },
+        {
+          "id": "ix-act-delete",
+          "name": "点「删除」弹出确认",
+          "on": {
+            "event": "click",
+            "target": "n-table__act_*_delete"
+          },
+          "actions": [
+            {
+              "type": "showModal",
+              "modalId": "m-del"
+            }
+          ]
+        },
+        {
+          "id": "ix-del-ok",
+          "name": "确认删除",
+          "on": {
+            "event": "click",
+            "target": "n-modal-del__ok"
+          },
+          "actions": [
+            {
+              "type": "hideModal",
+              "modalId": "m-del"
+            },
+            {
+              "type": "message",
+              "level": "success",
+              "text": "任务已删除"
+            }
+          ]
+        },
+        {
+          "id": "ix-del-cancel",
+          "name": "取消删除",
+          "on": {
+            "event": "click",
+            "target": "n-modal-del__cancel"
+          },
+          "actions": [
+            {
+              "type": "hideModal",
+              "modalId": "m-del"
+            }
+          ]
+        }
+      ],
+      "annotations": [
+        {
+          "id": "an-list-1",
+          "pageId": "page-task-list",
+          "anchor": {
+            "nodeId": "n-btn-new",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "text": "「新建任务」按钮建议固定在工具栏右侧，不要随筛选条件换行而移动位置。",
+          "category": "ui",
+          "author": "PM",
+          "status": "resolved",
+          "createdAt": "2026-10-15T10:12:00+08:00",
+          "replies": [
+            {
+              "author": "AI",
+              "text": "已把 n-btn-new 移出 n-toolbar 的自动换行流，固定在工具栏最右侧；同时为 n-toolbar 设置 wrap 仅在窄屏生效。",
+              "createdAt": "2026-10-15T10:18:00+08:00"
+            }
+          ]
+        },
+        {
+          "id": "an-list-2",
+          "pageId": "page-task-list",
+          "anchor": {
+            "nodeId": "n-table",
+            "x": 0.4,
+            "y": 0.7
+          },
+          "text": "阻塞任务希望在整行左侧有一条红色竖条，比只在状态列显示标签更醒目。",
+          "category": "interaction",
+          "author": "PM",
+          "status": "open",
+          "createdAt": "2026-10-15T10:31:00+08:00",
+          "replies": []
+        }
+      ],
+      "prd": {
+        "summary": "本页承载任务的全量浏览与快捷创建，是负责人每日最高频的入口。",
+        "sections": [
+          {
+            "id": "sec-goal",
+            "heading": "页面目标",
+            "body": "让项目负责人在一个屏幕内看清所有任务的状态分布，识别阻塞与逾期，并能在 15 秒内创建一条新任务。"
+          },
+          {
+            "id": "sec-struct",
+            "heading": "页面结构",
+            "body": "顶部为全局导航（Header + Sider），内容区自上而下依次为：面包屑 → 异常提示条 → 工具栏（搜索 / 状态筛选 / 负责人筛选 / 新建） → 三张统计卡 → 任务表格 → 分页。"
+          },
+          {
+            "id": "sec-ix",
+            "heading": "交互说明",
+            "body": "1. 点击「新建任务」打开右侧抽屉，表单预填当前用户为负责人。\n2. 提交时按钮进入 loading 态，成功后抽屉关闭、顶部提示「任务创建成功」并弹出确认弹窗。\n3. 表格行 hover 高亮；点击行进入任务详情页（见 page-task-detail）。\n4. 筛选条件变更后列表重新请求，期间展示加载态。"
+          },
+          {
+            "id": "sec-rules",
+            "heading": "业务规则",
+            "body": "- 标题必填，长度 ≤ 50 字。\n- 仅项目成员可创建任务，非成员不展示「新建任务」按钮。\n- 逾期任务（截止日期早于今天且状态不为「已完成」）计入统计卡的「逾期」计数并以红色展示。\n- 列表默认按「截止日期升序 + 优先级降序」排序。"
+          },
+          {
+            "id": "sec-states",
+            "heading": "页面状态",
+            "body": "覆盖四种状态：默认态（有数据）、加载态（表格骨架屏 + 统计卡半透明）、空态（无任务引导文案）、异常态（顶部错误提示条）。可通过顶部状态下拉逐一切换查看。"
+          },
+          {
+            "id": "sec-accept",
+            "heading": "验收条件",
+            "body": "- [ ] 标题为空时「创建任务」按钮置灰不可点击\n- [ ] 提交成功后抽屉关闭，列表首行出现新任务\n- [ ] 四种页面状态均可通过状态下拉切换并正确渲染\n- [ ] 加载态显示骨架屏而非空白区域"
+          },
+          {
+            "id": "sec-flow",
+            "type": "flow",
+            "heading": "创建任务主流程",
+            "dir": "LR",
+            "caption": "任务列表：新建 → 填写 → 提交 → 成功提示",
+            "nodes": [
+              {
+                "id": "t1",
+                "label": "进入任务列表",
+                "sub": "/tasks",
+                "kind": "start"
+              },
+              {
+                "id": "t2",
+                "label": "点击「新建任务」",
+                "sub": "打开右侧抽屉"
+              },
+              {
+                "id": "t3",
+                "label": "标题是否合法？",
+                "kind": "decision"
+              },
+              {
+                "id": "t4",
+                "label": "提交按钮置灰",
+                "sub": "标题为空 / 超 50 字",
+                "kind": "warn"
+              },
+              {
+                "id": "t5",
+                "label": "提交成功",
+                "sub": "抽屉关闭 + 顶部提示"
+              },
+              {
+                "id": "t6",
+                "label": "弹出成功弹窗",
+                "sub": "m-ok",
+                "kind": "end"
+              }
+            ],
+            "edges": [
+              {
+                "from": "t1",
+                "to": "t2"
+              },
+              {
+                "from": "t2",
+                "to": "t3"
+              },
+              {
+                "from": "t3",
+                "to": "t4",
+                "label": "否"
+              },
+              {
+                "from": "t3",
+                "to": "t5",
+                "label": "是"
+              },
+              {
+                "from": "t4",
+                "to": "t3",
+                "label": "修正标题"
+              },
+              {
+                "from": "t5",
+                "to": "t6"
+              }
+            ]
+          }
+        ],
+        "reqIds": [
+          "REQ-TASK-001",
+          "REQ-TASK-002",
+          "REQ-TASK-003"
+        ]
+      }
+    },
+    {
+      "id": "page-task-detail",
+      "moduleId": "m-task",
+      "name": "任务详情页",
+      "route": "/tasks/:id",
+      "goal": "展示单个任务的完整信息与操作记录，并承载状态流转操作",
+      "entryFrom": [
+        "page-task-list"
+      ],
+      "exitTo": [
+        "page-task-list"
+      ],
+      "layout": "header-content",
+      "defaultStateId": "s-default",
+      "componentTree": {
+        "id": "nd-root",
+        "type": "Layout",
+        "props": {
+          "layout": "header-content"
+        },
+        "children": [
+          {
+            "id": "nd-header",
+            "type": "Header",
+            "props": {
+              "title": "任务详情",
+              "back": true
+            }
+          },
+          {
+            "id": "nd-content",
+            "type": "Content",
+            "children": [
+              {
+                "id": "nd-crumb",
+                "type": "Breadcrumb",
+                "props": {
+                  "items": [
+                    {
+                      "label": "任务列表"
+                    },
+                    {
+                      "label": "完成登录页联调"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "nd-title-row",
+                "type": "Space",
+                "props": {
+                  "size": 12,
+                  "align": "center"
+                },
+                "children": [
+                  {
+                    "id": "nd-title",
+                    "type": "Typography",
+                    "props": {
+                      "text": "完成登录页联调",
+                      "level": 3
+                    }
+                  },
+                  {
+                    "id": "nd-tag-status",
+                    "type": "Tag",
+                    "props": {
+                      "text": "进行中",
+                      "color": "processing"
+                    }
+                  },
+                  {
+                    "id": "nd-tag-pri",
+                    "type": "Tag",
+                    "props": {
+                      "text": "P0",
+                      "color": "red"
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "nd-main",
+                "type": "Row",
+                "props": {
+                  "gutter": 16
+                },
+                "children": [
+                  {
+                    "id": "nd-col-left",
+                    "type": "Col",
+                    "props": {
+                      "span": 16
+                    },
+                    "children": [
+                      {
+                        "id": "nd-card-info",
+                        "type": "Card",
+                        "props": {
+                          "title": "任务信息"
+                        },
+                        "children": [
+                          {
+                            "id": "nd-desc",
+                            "type": "Descriptions",
+                            "props": {
+                              "column": 2,
+                              "items": [
+                                {
+                                  "label": "任务标题",
+                                  "value": "{{taskTitle}}",
+                                  "span": 2
+                                },
+                                {
+                                  "label": "负责人",
+                                  "value": "林可"
+                                },
+                                {
+                                  "label": "优先级",
+                                  "value": "P0"
+                                },
+                                {
+                                  "label": "截止日期",
+                                  "value": "2026-10-18"
+                                },
+                                {
+                                  "label": "创建人",
+                                  "value": "苏禾"
+                                },
+                                {
+                                  "label": "所属项目",
+                                  "value": "用户端 2.3",
+                                  "span": 2
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "id": "nd-div",
+                            "type": "Divider",
+                            "props": {
+                              "text": "任务描述"
+                            }
+                          },
+                          {
+                            "id": "nd-para",
+                            "type": "Paragraph",
+                            "props": {
+                              "text": "打通登录页与后端鉴权接口，覆盖正常登录、验证码错误、账号锁定三种路径，并补充对应的错误提示文案。"
+                            }
+                          },
+                          {
+                            "id": "nd-progress",
+                            "type": "Progress",
+                            "props": {
+                              "percent": 60,
+                              "status": "active"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "id": "nd-card-log",
+                        "type": "Card",
+                        "props": {
+                          "title": "操作记录"
+                        },
+                        "children": [
+                          {
+                            "id": "nd-timeline",
+                            "type": "Timeline",
+                            "props": {
+                              "items": [
+                                {
+                                  "content": "苏禾 创建了任务，状态：待办",
+                                  "time": "2026-10-12 09:20",
+                                  "color": "blue"
+                                },
+                                {
+                                  "content": "林可 开始任务，状态：待办 → 进行中",
+                                  "time": "2026-10-13 10:05",
+                                  "color": "blue"
+                                },
+                                {
+                                  "content": "林可 标记阻塞：等待后端接口联调环境",
+                                  "time": "2026-10-14 15:30",
+                                  "color": "red"
+                                },
+                                {
+                                  "content": "陈默 解除阻塞，状态：阻塞 → 进行中",
+                                  "time": "2026-10-15 09:10",
+                                  "color": "green"
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "id": "nd-col-right",
+                    "type": "Col",
+                    "props": {
+                      "span": 8
+                    },
+                    "children": [
+                      {
+                        "id": "nd-card-action",
+                        "type": "Card",
+                        "props": {
+                          "title": "操作"
+                        },
+                        "children": [
+                          {
+                            "id": "nd-space-act",
+                            "type": "Space",
+                            "props": {
+                              "direction": "vertical",
+                              "size": 8,
+                              "wrap": true
+                            },
+                            "children": [
+                              {
+                                "id": "nd-btn-start",
+                                "type": "Button",
+                                "props": {
+                                  "text": "开始任务",
+                                  "type": "primary",
+                                  "block": true,
+                                  "disabled": true
+                                }
+                              },
+                              {
+                                "id": "nd-btn-block",
+                                "type": "Button",
+                                "props": {
+                                  "text": "标记阻塞",
+                                  "danger": true,
+                                  "block": true
+                                }
+                              },
+                              {
+                                "id": "nd-btn-done",
+                                "type": "Button",
+                                "props": {
+                                  "text": "标记完成",
+                                  "block": true
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "id": "nd-card-sm",
+                        "type": "Card",
+                        "props": {
+                          "title": "状态机：任务"
+                        },
+                        "children": [
+                          {
+                            "id": "nd-steps",
+                            "type": "Steps",
+                            "props": {
+                              "current": 1,
+                              "direction": "vertical",
+                              "items": [
+                                {
+                                  "title": "待办",
+                                  "description": "2026-10-12 09:20"
+                                },
+                                {
+                                  "title": "进行中",
+                                  "description": "2026-10-13 10:05"
+                                },
+                                {
+                                  "title": "阻塞",
+                                  "description": "可随时上报"
+                                },
+                                {
+                                  "title": "已完成",
+                                  "description": "需所有子任务完成"
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "s-default",
+          "name": "默认态",
+          "description": "任务处于「进行中」",
+          "vars": {
+            "status": "doing",
+            "taskTitle": "完成登录页联调",
+            "taskOwner": "林可",
+            "taskStatus": "进行中"
+          },
+          "overrides": []
+        },
+        {
+          "id": "s-loading",
+          "name": "加载态",
+          "description": "详情数据请求中",
+          "vars": {
+            "loading": true
+          },
+          "overrides": [
+            {
+              "target": "nd-card-info",
+              "prop": "loading",
+              "value": true
+            },
+            {
+              "target": "nd-card-log",
+              "prop": "loading",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "s-blocked",
+          "name": "阻塞态",
+          "description": "任务被标记为阻塞",
+          "vars": {
+            "status": "blocked"
+          },
+          "overrides": [
+            {
+              "target": "nd-tag-status",
+              "prop": "text",
+              "value": "阻塞"
+            },
+            {
+              "target": "nd-tag-status",
+              "prop": "color",
+              "value": "warning"
+            },
+            {
+              "target": "nd-btn-block",
+              "prop": "text",
+              "value": "解除阻塞"
+            },
+            {
+              "target": "nd-btn-block",
+              "prop": "danger",
+              "value": false
+            }
+          ]
+        },
+        {
+          "id": "s-error",
+          "name": "异常态",
+          "description": "任务不存在或已被删除",
+          "vars": {
+            "error": true
+          },
+          "overrides": [
+            {
+              "target": "nd-main",
+              "prop": "hidden",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ixd-block",
+          "name": "标记阻塞",
+          "on": {
+            "event": "click",
+            "target": "nd-btn-block"
+          },
+          "actions": [
+            {
+              "type": "gotoState",
+              "stateId": "s-blocked"
+            },
+            {
+              "type": "message",
+              "level": "warning",
+              "text": "任务已标记为阻塞，负责人将收到通知"
+            }
+          ]
+        },
+        {
+          "id": "ixd-done",
+          "name": "标记完成",
+          "on": {
+            "event": "click",
+            "target": "nd-btn-done"
+          },
+          "actions": [
+            {
+              "type": "setNode",
+              "target": "nd-tag-status",
+              "prop": "text",
+              "value": "已完成"
+            },
+            {
+              "type": "setNode",
+              "target": "nd-tag-status",
+              "prop": "color",
+              "value": "success"
+            },
+            {
+              "type": "message",
+              "level": "success",
+              "text": "任务已完成"
+            }
+          ]
+        }
+      ],
+      "annotations": [],
+      "prd": {
+        "summary": "本页是单个任务的唯一事实来源，承载信息展示与全部状态流转操作。",
+        "sections": [
+          {
+            "id": "sec-goal",
+            "heading": "页面目标",
+            "body": "让执行者在一个页面内看清任务的完整上下文（描述、负责人、截止时间、历史记录），并能直接完成状态流转。"
+          },
+          {
+            "id": "sec-struct",
+            "heading": "页面结构",
+            "body": "顶部为返回栏；主体为左右两栏：左栏是「任务信息」卡与「操作记录」时间线，右栏是「操作」按钮组与「状态机」步骤条。"
+          },
+          {
+            "id": "sec-ix",
+            "heading": "交互说明",
+            "body": "1. 点击「开始任务」：状态由待办 → 进行中，记录开始时间。\n2. 点击「标记阻塞」：弹出原因输入，确认后状态 → 阻塞，按钮文案变为「解除阻塞」。\n3. 点击「标记完成」：校验所有子任务已完成，通过后状态 → 已完成并通知关注者。\n4. 每次状态变更都会在「操作记录」时间线顶部插入一条记录。"
+          },
+          {
+            "id": "sec-rules",
+            "heading": "业务规则",
+            "body": "- 仅任务负责人可执行状态流转。\n- 「标记完成」的守卫条件：所有子任务均已完成。\n- 已完成的任务不可再回到进行中（终态）。\n- 操作记录不可删除、不可编辑。"
+          },
+          {
+            "id": "sec-states",
+            "heading": "页面状态",
+            "body": "默认态（进行中）、加载态（卡片骨架屏）、阻塞态（状态标签与按钮文案联动变化）、异常态（任务不存在，隐藏主体内容）。"
+          },
+          {
+            "id": "sec-accept",
+            "heading": "验收条件",
+            "body": "- [ ] 点击「标记阻塞」后状态标签变为阻塞且按钮文案变为「解除阻塞」\n- [ ] 子任务未完成时点击「标记完成」被拒绝并提示原因\n- [ ] 每次状态变更后时间线新增一条记录，且包含操作人、时间、前后状态\n- [ ] 已完成状态下「开始任务」按钮不可点击"
+          }
+        ],
+        "reqIds": [
+          "REQ-TASK-004"
+        ]
+      },
+      "notApplicableStates": [
+        "empty"
+      ],
+      "parentId": "page-task-list"
+    }
+  ],
+  "components": [
+    {
+      "id": "c-status-tag",
+      "name": "任务状态标签",
+      "antd": "Tag",
+      "description": "任务状态在全站的统一视觉表达",
+      "anatomy": [
+        "色块背景",
+        "状态文字"
+      ],
+      "variants": [
+        {
+          "name": "待办",
+          "description": "默认灰",
+          "token": "default"
+        },
+        {
+          "name": "进行中",
+          "description": "主色蓝",
+          "token": "processing"
+        },
+        {
+          "name": "阻塞",
+          "description": "警告黄",
+          "token": "warning"
+        },
+        {
+          "name": "已完成",
+          "description": "成功绿",
+          "token": "success"
+        }
+      ],
+      "states": [
+        "normal"
+      ],
+      "tokens": {
+        "radius": "4px",
+        "height": "22px",
+        "fontSize": "12px",
+        "padding": "0 8px"
+      },
+      "spec": "状态与颜色严格一一映射，禁止自定义色值；同一任务在列表页与详情页必须使用完全相同的映射。"
+    },
+    {
+      "id": "c-task-row",
+      "name": "任务表格行",
+      "antd": "Table row",
+      "description": "列表中的单条任务",
+      "anatomy": [
+        "复选框",
+        "标题",
+        "状态标签",
+        "负责人头像",
+        "截止日期",
+        "操作链接"
+      ],
+      "variants": [
+        {
+          "name": "normal",
+          "description": "常规行"
+        },
+        {
+          "name": "blocked",
+          "description": "阻塞行，左侧加 3px 红色竖条"
+        },
+        {
+          "name": "overdue",
+          "description": "逾期行，截止日期文字转为红色"
+        }
+      ],
+      "states": [
+        "normal",
+        "hover",
+        "selected"
+      ],
+      "tokens": {
+        "height": "56px",
+        "padding": "12px 16px"
+      },
+      "spec": "阻塞与逾期可同时命中；阻塞优先展示左侧竖条，逾期仅改文字颜色。"
+    }
+  ],
+  "stateMachines": [
+    {
+      "id": "sm-task",
+      "name": "任务状态机",
+      "entity": "Task",
+      "initial": "todo",
+      "states": [
+        {
+          "id": "todo",
+          "name": "待办",
+          "type": "normal"
+        },
+        {
+          "id": "doing",
+          "name": "进行中",
+          "type": "normal"
+        },
+        {
+          "id": "blocked",
+          "name": "阻塞",
+          "type": "warning"
+        },
+        {
+          "id": "done",
+          "name": "已完成",
+          "type": "success"
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t-1",
+          "from": "todo",
+          "to": "doing",
+          "trigger": "负责人点击「开始任务」",
+          "role": "u-owner",
+          "guard": "任务已有负责人",
+          "action": "记录开始时间"
+        },
+        {
+          "id": "t-2",
+          "from": "doing",
+          "to": "blocked",
+          "trigger": "负责人点击「标记阻塞」并填写原因",
+          "role": "u-dev",
+          "guard": "已填写阻塞原因",
+          "action": "通知任务关注者"
+        },
+        {
+          "id": "t-3",
+          "from": "blocked",
+          "to": "doing",
+          "trigger": "负责人点击「解除阻塞」",
+          "role": "u-owner",
+          "guard": "",
+          "action": ""
+        },
+        {
+          "id": "t-4",
+          "from": "doing",
+          "to": "done",
+          "trigger": "负责人点击「标记完成」",
+          "role": "u-owner",
+          "guard": "所有子任务已完成",
+          "action": "通知关注者，记录完成时间"
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "cap-task-start",
+      "name": "开始任务",
+      "entity": "Task",
+      "actor": [
+        "u-owner"
+      ],
+      "from": [
+        "todo"
+      ],
+      "guard": "任务已有负责人",
+      "policy": "disabled",
+      "reason": "仅「待办」任务可以开始，当前为「进行中 / 已完成」",
+      "to": "doing",
+      "effect": "记录开始时间",
+      "page": "page-task-list",
+      "requirement": "REQ-TASK-004",
+      "onFail": "无负责人时提示先指派负责人"
+    },
+    {
+      "id": "cap-task-block",
+      "name": "标记阻塞",
+      "entity": "Task",
+      "actor": [
+        "u-dev"
+      ],
+      "from": [
+        "doing"
+      ],
+      "guard": "已填写阻塞原因",
+      "policy": "disabled",
+      "reason": "仅「进行中」任务可以标记阻塞，当前不是该状态",
+      "to": "blocked",
+      "effect": "通知任务关注者",
+      "page": "page-task-list",
+      "requirement": "REQ-TASK-004",
+      "onFail": "未填原因时停留在弹窗并提示"
+    },
+    {
+      "id": "cap-task-unblock",
+      "name": "解除阻塞",
+      "entity": "Task",
+      "actor": [
+        "u-owner"
+      ],
+      "from": [
+        "blocked"
+      ],
+      "guard": "阻塞原因已处理",
+      "policy": "disabled",
+      "reason": "仅「阻塞」任务可以解除阻塞，当前不是该状态",
+      "to": "doing",
+      "effect": "记录解除时间",
+      "page": "page-task-detail",
+      "requirement": "REQ-TASK-004",
+      "onFail": "原因未处理时提示联系提出人"
+    },
+    {
+      "id": "cap-task-done",
+      "name": "标记完成",
+      "entity": "Task",
+      "actor": [
+        "u-owner"
+      ],
+      "from": [
+        "doing"
+      ],
+      "guard": "任务已产出可验收结果",
+      "policy": "disabled",
+      "reason": "仅「进行中」任务可以标记完成，当前不是该状态",
+      "to": "done",
+      "effect": "记录完成时间并通知关注者",
+      "page": "page-task-detail",
+      "requirement": "REQ-TASK-004",
+      "onFail": "无验收结果时提示补充"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-TASK-001",
+      "moduleId": "m-task",
+      "pageId": "page-task-list",
+      "pattern": "event-driven",
+      "title": "创建任务",
+      "role": "u-owner",
+      "trigger": "在任务列表页点击「新建任务」并提交表单",
+      "rule": "标题必填且 ≤ 50 字；仅项目成员可创建；默认负责人为当前用户",
+      "stateMachine": "sm-task",
+      "expected": "系统新增一条状态为「待办」的任务并置于列表首行，提示「任务创建成功」",
+      "acceptance": [
+        "标题为空时「创建任务」按钮置灰不可点击",
+        "标题输入 51 字时输入框下方出现红色提示且无法提交",
+        "提交成功后抽屉关闭，列表首行出现该任务"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    },
+    {
+      "id": "REQ-TASK-002",
+      "moduleId": "m-task",
+      "pageId": "page-task-list",
+      "pattern": "state-driven",
+      "title": "逾期统计高亮",
+      "role": "system",
+      "trigger": "",
+      "rule": "当存在截止日期早于今天且状态不为「已完成」的任务时，统计卡「逾期」以红色展示其数量",
+      "stateMachine": "sm-task",
+      "expected": "系统在统计卡持续以红色展示逾期任务数量，任务完成后计数立即减少",
+      "acceptance": [
+        "存在 2 条逾期任务时，统计卡显示红色数字 2",
+        "任一逾期任务被标记完成后，该计数立即变为 1"
+      ],
+      "priority": "P1",
+      "source": "inferred",
+      "status": "confirmed"
+    },
+    {
+      "id": "REQ-TASK-003",
+      "moduleId": "m-task",
+      "pageId": "page-task-list",
+      "pattern": "unwanted",
+      "title": "列表加载失败降级",
+      "role": "system",
+      "trigger": "",
+      "rule": "若任务列表接口返回非 2xx 或请求超时",
+      "stateMachine": "",
+      "expected": "系统在页面顶部展示错误提示条，文案为「任务列表加载失败」，并提供重试入口",
+      "acceptance": [
+        "接口返回 500 时，页面顶部出现红色提示条",
+        "提示条包含可点击的「重试」入口",
+        "重试期间表格区域展示加载态而非空白"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    },
+    {
+      "id": "REQ-TASK-004",
+      "moduleId": "m-task",
+      "pageId": "page-task-detail",
+      "pattern": "event-driven",
+      "title": "任务状态流转",
+      "role": "u-owner",
+      "trigger": "在任务详情页点击「开始任务」/「标记阻塞」/「标记完成」",
+      "rule": "仅任务负责人可操作；「标记完成」要求所有子任务已完成；已完成为终态不可回退",
+      "stateMachine": "sm-task",
+      "expected": "系统按状态机把任务推进到目标状态，并在操作记录时间线插入一条包含操作人、时间、前后状态的记录",
+      "acceptance": [
+        "点击「标记阻塞」后状态标签变为「阻塞」，按钮文案变为「解除阻塞」",
+        "子任务未完成时点击「标记完成」被拒绝并提示「存在未完成的子任务」",
+        "已完成状态下「开始任务」与「标记阻塞」按钮均不可点击",
+        "每次流转后时间线新增一条记录"
+      ],
+      "priority": "P0",
+      "source": "user",
+      "status": "confirmed"
+    }
+  ],
+  "boardPlan": [
+    {
+      "id": "bp-1",
+      "order": 1,
+      "name": "任务列表",
+      "pageId": "page-task-list",
+      "moduleId": "m-task",
+      "status": "done",
+      "reqIds": [
+        "REQ-TASK-001",
+        "REQ-TASK-002",
+        "REQ-TASK-003"
+      ]
+    },
+    {
+      "id": "bp-2",
+      "order": 2,
+      "name": "任务详情",
+      "pageId": "page-task-detail",
+      "moduleId": "m-task",
+      "status": "doing",
+      "reqIds": [
+        "REQ-TASK-004"
+      ]
+    }
+  ],
+  "glossary": [
+    {
+      "term": "任务",
+      "definition": "一条可指派、可流转的最小工作单元"
+    },
+    {
+      "term": "阻塞",
+      "definition": "任务因外部依赖无法推进时的显式状态，用于让负责人及时发现风险"
+    },
+    {
+      "term": "逾期",
+      "definition": "截止日期早于当前日期且状态不为「已完成」的任务"
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q-1",
+      "question": "是否需要支持子任务？影响「标记完成」的守卫条件实现",
+      "owner": "PM",
+      "status": "open",
+      "answer": ""
+    },
+    {
+      "id": "q-2",
+      "question": "逾期是否需要在列表行加红色标识（REQ-TASK-002 为 AI 推断）",
+      "owner": "AI",
+      "status": "assumed",
+      "answer": "暂按仅在统计卡展示处理，列表行标识待确认"
+    },
+    {
+      "id": "q-3",
+      "question": "非项目成员访问任务详情时的表现（403 页面还是只读？）",
+      "owner": "PM",
+      "status": "open",
+      "answer": ""
+    }
+  ]
+}
+''')
+
+
+def main():
+    finalize(DOC, "example-01")
+    dump(DOC, OUT)
+
+
+if __name__ == "__main__":
+    main()

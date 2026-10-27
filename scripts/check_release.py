@@ -619,12 +619,44 @@ def check_props_contract_dod(_docs, _ph, _gen):
     ex6 = os.path.join(ROOT, "assets", "examples", "example-06-dense-list.json")
     vp = os.path.join(SCRIPTS, "validate_prd_json.py")
     p3 = subprocess.run([sys.executable, vp, ex3], capture_output=True, text=True, cwd=ROOT)
-    p6 = subprocess.run([sys.executable, vp, ex6], capture_output=True, text=True, cwd=ROOT)
-    out6 = (p6.stdout or "") + (p6.stderr or "")
     if p3.returncode != 0:
         return STATUS_FAIL, "绿样本 example-03 被判红", first_lines(p3.stdout or p3.stderr, 5)
+
+    # 造红：**自己造一个只含该缺陷的输入**，不再指望某份示例本身是脏的。
+    # 旧写法拿 example-06 当红样本 —— 它一旦被修干净，这条自证就永远绿不了，
+    # 而「修好产物导致闸门报错」会逼人去改闸门，方向正好相反。
+    import tempfile as _tf
+    red_dir = _tf.mkdtemp(prefix="xx-dod13-")
+    try:
+        red_doc = json.load(open(ex6, encoding="utf-8"))
+
+        def _inject(n):
+            if isinstance(n, dict):
+                if n.get("type") == "Alert":
+                    n.setdefault("props", {})["text"] = "DoD13 造红：Alert 只读 message"
+                    return True
+                for v in n.values():
+                    if _inject(v):
+                        return True
+            elif isinstance(n, list):
+                for v in n:
+                    if _inject(v):
+                        return True
+            return False
+
+        injected = any(_inject(p.get("componentTree") or {}) for p in red_doc.get("pages") or [])
+        if not injected:
+            return STATUS_FAIL, "造红失败：example-06 里找不到任何 Alert 节点可注入", []
+        red = os.path.join(red_dir, "red-alert-text.json")
+        with open(red, "w", encoding="utf-8") as f:
+            json.dump(red_doc, f, ensure_ascii=False)
+        p6 = subprocess.run([sys.executable, vp, red], capture_output=True, text=True, cwd=ROOT)
+        out6 = (p6.stdout or "") + (p6.stderr or "")
+    finally:
+        shutil.rmtree(red_dir, ignore_errors=True)
+
     if p6.returncode == 0 or "Alert).props.text" not in out6:
-        return STATUS_FAIL, "造红失败：example-06 应点名 Alert.text 且非 0", first_lines(out6, 6)
+        return STATUS_FAIL, "造红失败：注入 Alert.text 后应点名且非 0", first_lines(out6, 6)
     if "疑似写错节点" in out6 or "疑似写错节点" in (p3.stdout or ""):
         return STATUS_FAIL, "仍出现「疑似写错节点」（WARN 口径未删）", []
 
@@ -675,7 +707,7 @@ def check_props_contract_dod(_docs, _ph, _gen):
         return STATUS_FAIL, "R6 未对 width:600 判红或消息未写出「声明 600、渲成 560」", first_lines(r6, 3)
 
     info = next((l.strip(" ·") for l in (p3.stdout or "").splitlines() if "props 消费闭合" in l), "")
-    return STATUS_PASS, ("契约同步｜绿样本 03 SS-01 绿｜造红 06 点名 Alert.text｜缺契约 rc=%d｜"
+    return STATUS_PASS, ("契约同步｜绿样本 03 SS-01 绿｜造红（注入 Alert.text）点名｜缺契约 rc=%d｜"
                          "清单篡改 rc=%d｜R6 600→560 已点名｜%s" % (rc, rc_hash, info[:50])), []
 
 

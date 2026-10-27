@@ -13,6 +13,9 @@
 """
 import json
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from genlib import finalize, dump
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "example-04-master-detail.json")
@@ -359,7 +362,7 @@ def page_task_detail():
                          {"label": "计划时间", "value": "2026-10-16 10:00"},
                          {"label": "创建人", "value": "李巡检"},
                      ]}},
-                    {"id": "n-d-actions", "type": "Space", "props": {"style": "margin:12px 0"}, "children": [
+                    {"id": "n-d-actions", "type": "Space", "props": {"size": 12}, "children": [
                         {"id": "n-d-btn-back", "type": "Button", "props": {"text": "返回列表", "icon": "arrow-left"}},
                         {"id": "n-d-btn-done", "type": "Button", "props": {"text": "标记完成", "type": "primary"}},
                     ]},
@@ -737,7 +740,5 @@ data = {
     ],
 }
 
-with open(OUT, "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
-    f.write("\n")
-print("written:", OUT)
+finalize(data, "example-04")
+dump(data, OUT)

@@ -37,6 +37,7 @@ import json
 import re
 import sys
 import os
+import hashlib
 
 # ---------- 组件类型白名单（与 references/05-component-states.md 保持一致） ----------
 WHITELIST = {
@@ -376,12 +377,110 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SCRIPTS = os.path.join(_ROOT, "scripts")
 _PROPS_CONTRACT = os.path.join(_ROOT, "assets", "container", "props-contract.json")
 _CONTAINER_HTML = os.path.join(_ROOT, "assets", "container", "index.html")
+_PROPS_UNSUPPORTED = os.path.join(_ROOT, "references", "props-unsupported.json")
 
 # 值域也是一部分契约（R5）：写了合法键、给了非法值，同样是「声明不生效」。
 _VALUE_DOMAIN = [
     ("Drawer", "placement", ("right", "left", "top", "bottom"), "right/left/top/bottom 四值"),
     ("*", "visible", (True, False), "布尔"),
 ]
+
+# R6（Drawer 声明宽度必须等于渲染）：容器只有两档 —— 不写/写不出数值时 CSS 默认 420，
+# >=560 进 `.ant-drawer.w-lg` 的 560，其余正数写 inline（等于声明）。
+_DRAWER_W_LG = 560
+_DRAWER_W_DEFAULT = 420
+
+
+def _js_number(v):
+    """`Number(v)` 的 JSON 子集。返回 float；NaN/不可解析返回 None（与 isFinite 取反对应）。
+
+    别用 `float(v)` 代替：`float("")` 抛异常（JS 是 0）、`float(True)` 得 1.0（JS 也是 1，
+    但语义上那是布尔不是宽度 —— 交给调用方按 None 之外的路径判）。
+    """
+    if v is None:
+        return 0.0
+    if isinstance(v, bool):
+        return 1.0 if v else 0.0
+    if isinstance(v, (int, float)):
+        return None if v != v else float(v)          # v != v 即 NaN
+    if isinstance(v, str):
+        s = v.strip()
+        if s == "":
+            return 0.0
+        try:
+            n = float(s)
+        except ValueError:
+            return None
+        return None if n != n else n
+    return None
+
+
+def _drawer_rendered_width(pr):
+    """照 `R.Drawer` 的取宽逻辑算**实际渲染宽度**（px）。返回 None 表示「满宽」。
+
+    只是把容器那两行翻译成 Python，不新增口径：
+      - `horiz`（top/bottom）时既不进 w-lg 也不写 inline → 满宽
+      - `isFinite(w)&&w>=560&&!authored` → `.ant-drawer.w-lg` 的 560
+      - `isFinite(w)&&w>0&&!lg&&!(authored&&w===560)` → inline，等于声明
+      - 其余 → `.ant-drawer` 的 CSS 默认 420（或作者自己 class 带的 w-lg）
+    """
+    place = pr.get("placement")
+    if place not in ("right", "left", "top", "bottom"):
+        place = "right"                              # 写错时容器按 right 处理（另由 R5 判）
+    if place in ("top", "bottom"):
+        return None
+    w = _js_number(pr.get("width"))
+    authored = "w-lg" in str(pr.get("class") or pr.get("className") or "")
+    base = _DRAWER_W_LG if authored else _DRAWER_W_DEFAULT
+    if w is not None and w >= _DRAWER_W_LG and not authored:
+        return _DRAWER_W_LG
+    if w is not None and w > 0 and not (authored and w == _DRAWER_W_LG):
+        return w
+    return base
+
+
+def _drawer_width_issues(pid2, label, t, pr):
+    """R6 三条：`top|bottom` 不吃 width / width 必须能取成数 / 只有 420·560 两档。
+
+    判据只有一句：**声明必须等于渲染**。所以它天然不会误杀 440 / 520（inline 写多少渲多少），
+    也不会误杀「作者自己 class 带 w-lg 且声明 600」那种真能渲成 600 的写法。
+    消息一律写成「声明 X、渲成 Y」—— 写「取值非法」会把作者赶去找枚举表，而这里没有枚举。
+    """
+    if t != "Drawer" or "width" not in pr:
+        return []
+    raw = pr.get("width")
+    place = pr.get("placement")
+    rendered = _drawer_rendered_width(pr)
+    if rendered is None:
+        if place not in ("top", "bottom"):
+            return []
+        return ["%s `%s`(Drawer).props.width = %r 配 placement=%r（声明 %r，**渲成满宽** —— "
+                "top/bottom 抽屉不吃 width：R.Drawer 里 horiz 为真时既不加 w-lg 也不写 inline）；"
+                "删掉 width" % (pid2, label, raw, place, raw)]
+    decl = _js_number(raw)
+    if decl is not None and decl == rendered:
+        return []
+    where = "%s `%s`(Drawer).props.width = %r（声明 %r，渲成 %s" % (
+        pid2, label, raw, raw, ("%gpx" % rendered))
+    if decl is None:
+        hint = ("R.Drawer 用 Number(p.width) 取宽，非数字得 NaN，inline 不生效、"
+                "回落 .ant-drawer 默认 %dpx）；改成纯数字，如 width: 520" % _DRAWER_W_DEFAULT)
+    elif decl <= 0:
+        hint = ("inline 只在 w>0 时写，0/负数回落默认 %dpx）；改成正数，或直接删掉 width"
+                % _DRAWER_W_DEFAULT)
+    else:
+        hint = ("isFinite(w)&&w>=560 一律进 .ant-drawer.w-lg，CSS 只有 %dpx 这一档，"
+                "更宽的声明会被压平）；改写成 %d，或把档位缺口单独立项改容器"
+                % (_DRAWER_W_LG, _DRAWER_W_LG))
+    return [where + "，" + hint]
+
+
+def _sha256_file(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
 
 
 def _load_props_contract(rep):
@@ -415,6 +514,19 @@ def _load_props_contract(rep):
         return None
 
     diffs = []
+    # 两枚哈希都要对（§6.8.3）：容器改了没重生成、或**不支持清单**改了没重生成，都是过期契约。
+    # 清单没有逐键比对可做（它是理由表，不进 byType），只校容器会漏掉「过期理由表」。
+    for field, path, human in (
+            ("sourceSha256", _CONTAINER_HTML, "容器"),
+            ("unsupportedSha256", _PROPS_UNSUPPORTED, "不支持清单")):
+        want = _sha256_file(path)
+        got = c.get(field)
+        if want is None:
+            diffs.append("找不到%s源文件 %s，无法校验契约是否过期" % (human, path))
+        elif not got:
+            diffs.append("契约缺 %s（旧版契约，重跑生成器）" % field)
+        elif got != want:
+            diffs.append("%s sha：契约 %s / 现文件 %s" % (human, got[:12], want[:12]))
     if c.get("renderers") != cur["rendererCount"]:
         diffs.append("渲染器数：契约 %s / 源码 %s" % (c.get("renderers"), cur["rendererCount"]))
     if sorted(c.get("shared") or []) != sorted(cur["shared"]):
@@ -427,7 +539,7 @@ def _load_props_contract(rep):
                          % (t, sorted(nb.get(t, set()) - cb.get(t, set())) or "-",
                             sorted(cb.get(t, set()) - nb.get(t, set())) or "-"))
     if diffs:
-        rep.incomplete("[SS-01] props 契约与容器源码不一致（%d 处）—— 先跑 "
+        rep.incomplete("[SS-01] props 契约与源文件不一致（%d 处）—— 先跑 "
                        "python3 scripts/props_contract.py：%s%s"
                        % (len(diffs), "；".join(diffs[:5]), " 等" if len(diffs) > 5 else ""))
         rep.toolchain_fail = True
@@ -436,18 +548,22 @@ def _load_props_contract(rep):
 
 
 def _iter_prop_nodes(node, path, page_id):
-    """遍历节点级 props，**包含没有 id 的模板节点**与 renderItem 里的节点模板。
+    """遍历节点级 props 与插槽名，**包含没有 id 的模板节点**。
 
     没有 id 不等于不在范围内：example-02 的 `List.Item` 就没有 id，
     按 id 过滤会让整类模板静默漏检（假绿）。
+
+    产出 `(page_id, label, type, props, slot_names)`：插槽名要单独判（R2 按 type 判），
+    不能只靠 props 的键 —— 容器对没读过的插槽是**静默丢弃**，画面不报错。
     """
     if not isinstance(node, dict):
         return
     t = node.get("type")
     label = node.get("id") or path
     pr = node.get("props")
-    if t and isinstance(pr, dict):
-        yield page_id, label, t, pr
+    slots = sorted((node.get("slots") or {}).keys())
+    if t and (isinstance(pr, dict) or slots):
+        yield page_id, label, t, pr if isinstance(pr, dict) else {}, slots
     for i, c in enumerate(node.get("children") or []):
         for x in _iter_prop_nodes(c, "%s.children[%d]" % (label, i), page_id):
             yield x
@@ -462,10 +578,12 @@ def _iter_prop_nodes(node, path, page_id):
             if isinstance(it, dict) and it.get("type") in WHITELIST:
                 for x in _iter_prop_nodes(it, "%s.props.%s[%d]" % (label, key, i), page_id):
                     yield x
-    # renderItem 模板（R7）：模板里的节点模板同样是节点
+    # renderItem 模板：模板里的节点模板同样是节点，计入分母并受 R1–R6 约束。
+    # 只做「遍历 + 路径带类型段」；R7 的细则（同类型兄弟靠 children[k]、节点级
+    # renderItem 判 ERROR、无 id 寻址）留给 XX-054 —— 那几条改的是判据，不是分母。
     ri = pr.get("renderItem")
     if isinstance(ri, dict) and ri.get("type"):
-        for x in _iter_prop_nodes(ri, "%s.props.renderItem" % label, page_id):
+        for x in _iter_prop_nodes(ri, "%s.props.renderItem(%s)" % (label, ri["type"]), page_id):
             yield x
 
 
@@ -489,15 +607,18 @@ def check_props_contract(data, rep):
         return
 
     by_type = {k: set(v) for k, v in (c.get("byType") or {}).items()}
+    slots_by_type = {k: set(v) for k, v in (c.get("slotsByType") or {}).items()}
     shared = set(c.get("shared") or [])
     index = c.get("unsupportedIndex") or {}
 
     pairs = {}   # (type, key) -> [样例标签]
     bad_values = []
+    bad_render = []   # R6：声明宽度与渲染宽度对不上
+    bad_slots = []    # R2：插槽名按 type 判
     occ = 0
     for page in data.get("pages") or []:
         pid = page.get("id")
-        for pid2, label, t, pr in _iter_prop_nodes(page.get("componentTree") or {}, "componentTree", pid):
+        for pid2, label, t, pr, slot_names in _iter_prop_nodes(page.get("componentTree") or {}, "componentTree", pid):
             for k, v in pr.items():
                 occ += 1
                 pairs.setdefault((t, k), []).append("%s `%s`(%s).props.%s" % (pid2, label, t, k))
@@ -508,7 +629,17 @@ def check_props_contract(data, rep):
                     if not ok:
                         bad_values.append("%s `%s`(%s).props.%s = %r（只能是 %s）"
                                           % (pid2, label, t, k, v, human))
-    if not pairs:
+            bad_render.extend(_drawer_width_issues(pid2, label, t, pr))
+            for sk in slot_names:
+                if sk in slots_by_type.get(t, ()):
+                    continue
+                have = sorted(slots_by_type.get(t) or [])
+                bad_slots.append(
+                    "%s `%s`(%s).slots.%s ← %s：%s"
+                    % (pid2, label, t, sk, t,
+                       ("只读 %s" % "/".join(have)) if have
+                       else "**一个插槽都不读**（正文放 children；其它内容用 prop 表达）"))
+    if not pairs and not bad_slots and not bad_render:
         rep.info("SS-01 props 消费闭合：INCOMPLETE（产物里没有任何节点级 props，无从判）")
         return
 
@@ -524,7 +655,7 @@ def check_props_contract(data, rep):
             % (len(c.get("allKeys") or []), c.get("renderers"),
                ",".join(sorted(shared)) or "-", len(pairs), occ))
 
-    if bad or bad_values:
+    if bad or bad_values or bad_render or bad_slots:
         lines = []
         for t, k, samples in bad[:40]:
             u = index.get("%s.%s" % (t, k)) or index.get("*.%s" % k)
@@ -535,13 +666,23 @@ def check_props_contract(data, rep):
                 lines.append("%s ← 容器源码 0 命中%s" % (samples[0], _more_samples(samples)))
         if len(bad) > 40:
             lines.append("…另有 %d 个 type×key 越界未列出" % (len(bad) - 40))
+        lines.extend(bad_slots[:10])
         lines.extend(bad_values[:10])
+        lines.extend(bad_render[:10])
+        # 尾句必须分得清四件事：键没人读 / 插槽没人读 / 枚举值写错 / 声明与渲染不符。
+        # 最后一种如果混进「取值非法」，作者会去找一张并不存在的枚举表（R6 没有枚举，只有档位）。
+        parts = []
         if bad:
-            tail = "**%d 个键容器不读**" % len(bad)
-            if bad_values:
-                tail += "；另有 %d 处取值非法" % len(bad_values)
-        else:
-            tail = "%d 处取值非法" % len(bad_values)
+            parts.append("**%d 个键容器不读**" % len(bad))
+        if bad_slots:
+            parts.append("%d 个插槽该类型不读" % len(bad_slots))
+        if bad_values:
+            parts.append("%d 处取值非法" % len(bad_values))
+        if bad_render:
+            parts.append("%d 处声明宽度与渲染不符" % len(bad_render))
+        tail = parts[0]
+        for p in parts[1:]:
+            tail += "；另有 " + p
         rep.error(head + "｜" + tail + "：" + "；".join(lines))
     else:
         rep.info(head + "｜全部被容器读取")

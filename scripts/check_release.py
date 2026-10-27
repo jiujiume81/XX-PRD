@@ -633,6 +633,8 @@ def check_props_contract_dod(_docs, _ph, _gen):
     spec = importlib.util.spec_from_file_location("_vpr", vp)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    contract = mod._PROPS_CONTRACT
+    unsupported = mod._PROPS_UNSUPPORTED
     mod._PROPS_CONTRACT = os.path.join(ROOT, ".no-such-dir", "props-contract.json")
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -641,8 +643,40 @@ def check_props_contract_dod(_docs, _ph, _gen):
     if rc == 0 or "INCOMPLETE [SS-01]" not in txt:
         return STATUS_FAIL, "契约缺失时未按「工具链缺失」非 0 退出（rc=%d）" % rc, first_lines(txt, 4)
 
+    # 第四态：**清单哈希**不符 → INCOMPLETE。只校容器会漏掉「改了清单没重生成」，
+    # 契约里留一份过期理由表且没有任何门会发现（§6.8.3）。
+    mod._PROPS_CONTRACT = contract
+    import tempfile
+    tmpd = tempfile.mkdtemp(prefix="xx050-")
+    try:
+        tampered = os.path.join(tmpd, "props-unsupported.json")
+        doc = json.load(open(unsupported, encoding="utf-8"))
+        doc["entries"][0]["why"] += "（DoD 探针：篡改一个字节）"
+        json.dump(doc, open(tampered, "w", encoding="utf-8"), ensure_ascii=False)
+        mod._PROPS_UNSUPPORTED = tampered
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc_hash = mod.run([ex3], as_json=False)
+        txt_hash = buf.getvalue()
+    finally:
+        mod._PROPS_UNSUPPORTED = unsupported
+        shutil.rmtree(tmpd, ignore_errors=True)
+    if rc_hash == 0 or "INCOMPLETE [SS-01]" not in txt_hash:
+        return STATUS_FAIL, "清单哈希不符时未判 INCOMPLETE（rc=%d）" % rc_hash, first_lines(txt_hash, 4)
+    if "不支持清单 sha" not in txt_hash and "unsupportedSha256" not in txt_hash:
+        return STATUS_FAIL, "清单不符的 INCOMPLETE 没点出是哪枚哈希", first_lines(txt_hash, 4)
+
+    # 第五态：R6 —— 声明宽度与渲染对不上必须**说出来**（不是「取值非法」）。
+    rep = mod.Report("<DoD13 R6 造红>")
+    mod.check_props_contract({"pages": [{"id": "page-dod", "componentTree": {
+        "id": "n-dod-dr", "type": "Drawer", "props": {"title": "T", "width": 600}}}]}, rep)
+    r6 = " ".join(rep.errors)
+    if "声明 600" not in r6 or "渲成 560px" not in r6:
+        return STATUS_FAIL, "R6 未对 width:600 判红或消息未写出「声明 600、渲成 560」", first_lines(r6, 3)
+
     info = next((l.strip(" ·") for l in (p3.stdout or "").splitlines() if "props 消费闭合" in l), "")
-    return STATUS_PASS, "契约同步｜绿样本 03 PASS｜造红 06 点名 Alert.text｜缺契约 rc=%d｜%s" % (rc, info[:60]), []
+    return STATUS_PASS, ("契约同步｜绿样本 03 SS-01 绿｜造红 06 点名 Alert.text｜缺契约 rc=%d｜"
+                         "清单篡改 rc=%d｜R6 600→560 已点名｜%s" % (rc, rc_hash, info[:50])), []
 
 
 ITEMS = [

@@ -61,6 +61,9 @@ DELEGATE_DOT = re.compile(
     r"return\s+R\.([A-Za-z_$][\w$.]*)\s*\(\s*(?:Object\.assign\(\{\}\s*,\s*)?p\b")
 DELEGATE_IDX = re.compile(
     r"return\s+R\[\s*['\"]([^'\"]+)['\"]\s*\]\s*\(\s*(?:Object\.assign\(\{\}\s*,\s*)?p\b")
+# 插槽：容器只通过 `renderSlot(node,'x')` / `slotFirst(node,'x')` 取，其余名字一律丢弃。
+# 插槽名**按 type 判、不继承**（§6.8.1 R2）—— 只有委托继承那一层跟着渲染器走。
+SLOT_CALL = re.compile(r"(?:renderSlot|slotFirst)\s*\(\s*node\s*,\s*['\"]([\w$-]+)['\"]")
 
 
 class ContractError(Exception):
@@ -150,11 +153,14 @@ def find_body_end(src, open_brace):
     raise ContractError("括号不配平：从偏移 %d 开始" % open_brace)
 
 
-def strip_noise(s):
+def strip_noise(s, keep_strings=False):
     """去掉注释与字符串字面量（模板串里的 `${…}` 保留为代码），只留可执行文本。
 
     为什么必须去：注释里写「Col 自己读不到 p.gutter」会让 Row 凭空多一个可读键 ——
     一个被注释放行的白名单，比没有白名单更危险。
+
+    `keep_strings=True` 只去注释、保留字符串原文：**插槽名就在字符串里**
+    （`renderSlot(node,'footer')`），连字符串一起去掉就一个也提不出来。
     """
     out = []
     i, n = 0, len(s)
@@ -172,6 +178,7 @@ def strip_noise(s):
             continue
         if c in "\"'":
             q = c
+            k = i
             i += 1
             while i < n:
                 if s[i] == "\\":
@@ -181,9 +188,10 @@ def strip_noise(s):
                     i += 1
                     break
                 i += 1
-            out.append(q + q)
+            out.append(s[k:i] if keep_strings else q + q)
             continue
         if c == "`":
+            k = i
             i += 1
             while i < n:
                 if s[i] == "\\":
@@ -198,7 +206,7 @@ def strip_noise(s):
                     i = j
                     continue
                 i += 1
-            out.append("``")
+            out.append(s[k:i] if keep_strings else "``")
             continue
         out.append(c)
         i += 1
@@ -319,6 +327,22 @@ def extract(src):
         if not changed:
             break
 
+    # 4') 插槽名同样机械提取：只认 `renderSlot(node,'x')` / `slotFirst(node,'x')`。
+    # 委托渲染器拿到的还是同一个 node，所以插槽也跟着继承（与 props 同一套不动点）。
+    slots = {name: set(SLOT_CALL.findall(strip_noise(info["body"], keep_strings=True)))
+             for name, info in renderers.items()}
+    for _ in range(16):
+        changed = False
+        for name, targets in delegates.items():
+            merged = set(slots[name])
+            for t in targets:
+                merged |= slots[t]
+            if len(merged) > len(slots[name]):
+                slots[name] = merged
+                changed = True
+        if not changed:
+            break
+
     # 5) shared：renderNode 的通用预处理（对所有 type 生效）
     m = re.search(r"function renderNode\s*\([^)]*\)\s*\{", src)
     if not m:
@@ -338,6 +362,7 @@ def extract(src):
     return {
         "rendererCount": len(by_type),
         "byType": {k: sorted(v) for k, v in sorted(by_type.items())},
+        "slotsByType": {k: sorted(v) for k, v in sorted(slots.items()) if v},
         "shared": shared,
         "nonPropP": non_prop_p,
         "helperCount": len(helpers),
@@ -382,13 +407,17 @@ def build():
     return {
         "generatedBy": "scripts/props_contract.py",
         "source": "assets/container/index.html",
-        # sha 只作**诊断**：判同步靠逐类型比对（见 --check 与 validate_prd_json 的 SS-01）
+        # 两个 sha 只作**诊断**：判同步靠逐类型比对（见 --check 与 validate_prd_json 的 SS-01）。
+        # 但**不支持清单**没有逐条比对可言（它是理由表，不参与 byType），只校容器会漏掉
+        # 「改了清单没重生成」—— 契约里会留一份过期理由，没有任何门发现（§6.8.3）。
         "sourceSha256": sha256(CONTAINER),
+        "unsupportedSha256": sha256(UNSUPPORTED),
         "sourceLines": src.count("\n") + 1,
         "renderers": ex["rendererCount"],
         "helpers": ex["helperCount"],
         "allKeys": all_keys,
         "byType": ex["byType"],
+        "slotsByType": ex["slotsByType"],
         "shared": ex["shared"],
         "nonPropP": ex["nonPropP"],
         "unsupported": entries,
@@ -404,10 +433,8 @@ def build():
 
 
 def diff_docs(old, new):
-    """契约文件的实质差异（不含 sha / note 这类诊断字段）。"""
+    """契约文件的实质差异（不含 sha / note 这类纯诊断字段 —— 但两个 sha 例外）。"""
     out = []
-    for field in ("renderers", "helperCount"):
-        pass
     if old.get("renderers") != new.get("renderers"):
         out.append("渲染器数：契约 %s / 源码 %s" % (old.get("renderers"), new.get("renderers")))
     if sorted(old.get("shared") or []) != sorted(new.get("shared") or []):
@@ -424,6 +451,17 @@ def diff_docs(old, new):
         add, sub = sorted(nb[t] - ob[t]), sorted(ob[t] - nb[t])
         if add or sub:
             out.append("%s：源码多 %s / 契约多 %s" % (t, add or "-", sub or "-"))
+    os_ = {k: set(v) for k, v in (old.get("slotsByType") or {}).items()}
+    ns = {k: set(v) for k, v in (new.get("slotsByType") or {}).items()}
+    for t in sorted(set(os_) | set(ns)):
+        if os_.get(t, set()) != ns.get(t, set()):
+            out.append("%s 插槽：源码多 %s / 契约多 %s"
+                       % (t, sorted(ns.get(t, set()) - os_.get(t, set())) or "-",
+                          sorted(os_.get(t, set()) - ns.get(t, set())) or "-"))
+    # 清单哈希：不比对条目内容，只比源文件指纹。改了 `why` 一个字也算不同步。
+    if old.get("unsupportedSha256") != new.get("unsupportedSha256"):
+        out.append("不支持清单：契约 sha %s / 源文件 sha %s（清单改了没重生成 —— 契约里是过期理由表）"
+                   % ((old.get("unsupportedSha256") or "缺失")[:12], new["unsupportedSha256"][:12]))
     return out
 
 
@@ -453,9 +491,9 @@ def main():
                 print("  - %s" % d)
             print("      修法：python3 scripts/props_contract.py")
             return 1
-        print("PASS 契约同步：%d 个渲染器 / %d 个可读键 / shared=%s / 清单 %d 条 / 容器 sha %s"
+        print("PASS 契约同步：%d 个渲染器 / %d 个可读键 / shared=%s / 清单 %d 条 / 容器 sha %s / 清单 sha %s"
               % (doc["renderers"], len(doc["allKeys"]), ",".join(doc["shared"]) or "-",
-                 len(doc["unsupported"]), doc["sourceSha256"][:12]))
+                 len(doc["unsupported"]), doc["sourceSha256"][:12], doc["unsupportedSha256"][:12]))
         return 0
 
     os.makedirs(os.path.dirname(CONTRACT), exist_ok=True)

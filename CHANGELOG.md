@@ -20,7 +20,9 @@
 
 ## [未发布] - 2026-10-27（XX-050：props 契约与 SS-01）
 
-**breaking: 是（两条：① `TextArea.rows` 让已写 `rows` 的产物变高；② 存量产物会在 SS-01 上多红）**
+**breaking: 是（三条：① `TextArea.rows` 让已写 `rows` 的产物变高；② 存量产物会在 SS-01 上多红；
+③ 改容器或 `references/props-unsupported.json` 后**必须**重跑 `python3 scripts/props_contract.py`，
+否则两枚哈希对不上、全线 `INCOMPLETE` 非 0）**
 
 ### 新增判据 SS-01「props 消费闭合」（`references/04` §6.8）
 
@@ -29,12 +31,25 @@
 白名单由 `scripts/props_contract.py` 从容器源码机械提取，**不许手写**（手写的白名单一定会在
 某次改容器后悄悄分叉）。
 
-三态：`PASS` / `ERROR`（键不在该 type 的可读集，或值域不合法）/ `INCOMPLETE`（契约缺失、
-无法解析、与容器逐类型比对不一致 —— 后三种是**工具链缺失**，任何档都非 0 退出）。
+三态：`PASS` / `ERROR`（键不在该 type 的可读集、插槽名不是该 type 读的、值域或宽度对不上）/
+`INCOMPLETE`（契约缺失、无法解析、两枚哈希任一与源文件不符、逐类型比对不一致 —— 这几种是
+**工具链缺失**，任何档都非 0 退出）。
 
 **不设 WARN**：「键被别的类型读过」不是作者的处境差异，是键写错了节点。判成 WARN 就是假绿 ——
 `example-06` 的两个 `Alert` 把正文写在 `props.text`（Alert 只读 `message`），画面是两条
 **空白告警条**，而 WARN 口径下退出码仍是 0。
+
+### 判据内的两条硬口径
+
+- **插槽按 type 判（R2）**：`node.slots.<name>` 的 `name` 必须是**该 type** 的 `renderSlot(node,'x')`
+  / `slotFirst(node,'x')` 读过的名字（机械提取 → 契约 `slotsByType`）。容器对没读过的插槽是
+  **静默丢弃**，画面不报错。现网提取结果：`Card: actions/cover/extra`、`Drawer: footer`、
+  `Header: extra`、`List.Item: extra`、`Result: extra` —— **`FormItem` 一个插槽都不读**。
+- **`Drawer.width` 声明必须等于渲染（R6）**：判据只有一句「声明 = 渲染」，按容器那两行取宽逻辑
+  反推实际像素。① `top`/`bottom` 写 `width` → 渲成满宽；② 非数字（`"600px"` → `Number()` 得
+  NaN）或非正数 → 回落 420；③ `≥560 且 ≠560`（如 600）→ 进 `.ant-drawer.w-lg` 压成 560。
+  消息一律写成「**声明 X、渲成 Y**」，不写「取值非法」—— 这里没有枚举表，只有 420/560 两档，
+  写「非法」会把作者赶去找一张不存在的表。`440 / 520` 走 inline，**声明多少渲多少，不受约束**。
 
 ### 容器新增 5 项读取（`assets/container/index.html`）
 
@@ -57,15 +72,32 @@
 - **注释与字符串里的 `p.xxx` 不计**：注释写「Col 读不到 p.gutter」不该让 Row 凭空多一个可读键。
 - 清单真源改为 `references/props-unsupported.json`（扁平 `entries[]` + `type:"*"` 通配，17 条）。
   **文件缺失或格式不符 → 生成器 ERROR 退出**，不许静默 0 条。
-- `sourceSha256` 降级为诊断；`--check` 与 SS-01 都改成**逐类型比对**。
-  整文件 sha 对「改一行注释」过敏（全线 INCOMPLETE），对「清单换格式」却失明。
+- **契约带两枚哈希**：`sourceSha256`（容器）+ `unsupportedSha256`（不支持清单）。任一枚与源文件
+  不符 → `INCOMPLETE`。只校容器不够：改了清单不重生成，契约里会留一份**过期理由表**，没有任何门
+  会发现（逐类型比对看不见它 —— 清单不进 `byType`）。
+- 同步仍是**逐类型比对**（不是整文件 sha）：sha 只用来判「同一份源文件」，键集差异靠 `byType` /
+  `slotsByType` 逐对比，消息能说出「源码多 X / 契约多 Y」而不只是「哈希变了」。
 
 ### 闸门
 
 - SS-01 的 `INCOMPLETE`（工具链缺失）**任何档都非 0**；R 组的 `INCOMPLETE`（存量产物缺
   `contract` / `fieldRegistry`）仍按原口径默认不拦。两类不再混在一个退出码里。
-- `check_release.py` 新增 **DoD 13**：契约同步 + 绿样本（`example-03`，分母 80）+ 造红
-  （`example-06` 点名 `Alert.text` ×2）+ 契约缺失时非 0，三态各验一次。
+- `check_release.py` 新增 **DoD 13**，五个状态各验一次：契约/清单同步 → 绿样本（`example-03`，
+  SS-01 分母 80）→ 造红（`example-06` 点名 `Alert.text` ×2）→ 契约缺失时非 0 →
+  清单被篡改时非 0 → R6（`width:600` 的消息必须同时出现「声明 600」与「渲成 560px」）。
+  最后一项专防「判据接线了但消息退化成『取值非法』」——那种红作者看不懂，等于没红。
+
+### 造红五连（验收用，实测退出码）
+
+| 输入 | 结果 |
+|---|---|
+| `Table` 写 `rowKey` | `rc=1`，命中不支持清单，附替代写法（主子联动写父节点 `MasterDetail.bind`） |
+| `FormItem` 写 `slots.extra` | `rc=1`：`1 个插槽该类型不读` + 「FormItem：**一个插槽都不读**」 |
+| `Alert` 写 `visible:"false"` | `rc=1`：`props.visible = 'false'（只能是 布尔）` |
+| `Drawer` 写 `width:600` | `rc=1`：`声明 600，渲成 560px` |
+| `Drawer` 写 `width:"600px"` | `rc=1`：`声明 '600px'，渲成 420px` |
+| 删 `props-contract.json` | `rc=1`：`INCOMPLETE [SS-01] props 契约文件缺失` |
+| 改清单一个字而不重生成 | `rc=1`：`INCOMPLETE …不支持清单 sha：契约 378fc3980380 / 现文件 be6940dd7fed` |
 
 ### 存量产物读数（**未修，属 XX-051/052 的范围**）
 
@@ -73,13 +105,16 @@
 |---|---|---|
 | `example-01` | ERROR ×1 | `Descriptions.bordered` |
 | `example-02` | ERROR ×5 | `Descriptions.bordered`、`InputNumber.min/max/step`、`Upload.multiple` |
-| `example-03` | PASS（分母 80） | 绿样本 |
+| `example-03` | SS-01 绿（分母 80） | 绿样本。**注意：产物整体不是 PASS** —— 它是 `errors=0, warnings=16, incomplete=14`（R 组存量缺 `contract`/`fieldRegistry`），`rc=0` 只因为默认档不拦存量 `INCOMPLETE` |
 | `example-04` | ERROR ×1 | `Space.style` |
 | `example-05` | ERROR ×2 | `Table.rowKey`、`Descriptions.size` |
 | `example-06` | ERROR ×4 | `Alert.text`×2、`Descriptions.size`、`InputNumber.placeholder`、`Table.rowKey` |
 
 `run.sh` 仍是 `TOTAL ok=757`（`137/123/136/150/117` 全部未动）；`check_ui_shape` 仍是
 `PASS=105 FAIL=20 SKIP=15`，与接线前逐字相同。
+
+`reject-01`（CAPA）的 `errors` 从 2 变 3：**新增判据抓到的真缺陷**（4 个死键，如
+`DatePicker.showTime`），不是回归 —— 这份产物本来就是反样本，红是它的既有约定。
 
 ## [0.10.0] - 2026-10-27
 

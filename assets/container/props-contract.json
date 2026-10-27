@@ -530,6 +530,25 @@
  "shared": [
   "visible"
  ],
+ "slotsByType": {
+  "Card": [
+   "actions",
+   "cover",
+   "extra"
+  ],
+  "Drawer": [
+   "footer"
+  ],
+  "Header": [
+   "extra"
+  ],
+  "List.Item": [
+   "extra"
+  ],
+  "Result": [
+   "extra"
+  ]
+ },
  "source": "assets/container/index.html",
  "sourceLines": 4580,
  "sourceSha256": "a550fcb6945011c5891821b94fef4963d30226d1f1e614c14f16a6df3702ab3b",
@@ -706,5 +725,6 @@
    "instead": "要表达可多选，写进 `props.text`，例如「点击或拖拽文件到此区域（可多选）」。",
    "why": "容器的 Upload 是**静态示意区**：一个虚线框 + 一句文案，不渲染文件列表。「多选」与「单选」在这里没有可观察差别。对照组：`accept` 会渲染「支持 …」副行，有承载，所以它被支持。"
   }
- }
+ },
+ "unsupportedSha256": "378fc398038035868442fc130008a20ebf84eda813445a08b2f6fcca2279218e"
 }

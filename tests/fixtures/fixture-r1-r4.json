@@ -1,0 +1,686 @@
+{
+  "meta": {
+    "schemaVersion": "1.1",
+    "title": "R1–R4 合格样本（fixture）",
+    "note": "这不是业务示例，是 13 的 R1–R4 十五条判定的**绿样本**。它只求结构上让每条判据都有可判的输入并且全部通过；`tests/check_r1_r4.py` 会在这份文件上逐条就地改一个字段产出 15 个反样本，证明每条都能红。刻意不复用 example-05：example-05 写于 R1–R4 之前、没有源文档，给它编一份 sourceTerms 会让 R1-c 的计数闭合变成恒等式（登记 N 条、源点名 N 条，永远相等）。"
+  },
+  "product": {
+    "name": "R 组夹具",
+    "oneLiner": "只用于判据自证"
+  },
+  "users": [
+    {
+      "id": "u-exec",
+      "name": "措施责任人"
+    },
+    {
+      "id": "u-qa",
+      "name": "质量工程师"
+    }
+  ],
+  "userFlows": [],
+  "modules": [
+    {
+      "id": "m-fx",
+      "name": "夹具模块",
+      "pageIds": [
+        "page-task-hub",
+        "page-verify"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "page-task-hub",
+      "moduleId": "m-fx",
+      "parentId": null,
+      "name": "我的任务",
+      "route": "/tasks",
+      "entity": "Task",
+      "stateMachine": "sm-task",
+      "goal": "责任人只看得到派给自己的措施并提交执行结果",
+      "contract": {
+        "task": "task-hub",
+        "actor": [
+          "u-exec"
+        ],
+        "entity": "Task",
+        "owns": [
+          "cap-m-submit",
+          "cap-t-close"
+        ],
+        "doneWhen": "执行结果已提交，措施进入待验证",
+        "entryFrom": []
+      },
+      "layout": "header-content",
+      "componentTree": {
+        "id": "n-fx-root",
+        "type": "Layout",
+        "props": {
+          "layout": "header-content"
+        },
+        "children": [
+          {
+            "id": "n-fx-header",
+            "type": "Header",
+            "props": {
+              "title": "我的任务",
+              "back": false
+            }
+          },
+          {
+            "id": "n-fx-content",
+            "type": "Content",
+            "children": [
+              {
+                "id": "n-fx-table",
+                "type": "Table",
+                "props": {
+                  "columns": [
+                    {
+                      "title": "任务单号",
+                      "dataIndex": "no",
+                      "width": 160
+                    },
+                    {
+                      "title": "任务状态",
+                      "dataIndex": "status",
+                      "width": 120
+                    },
+                    {
+                      "title": "负责人",
+                      "dataIndex": "owner",
+                      "width": 120
+                    }
+                  ],
+                  "rows": []
+                }
+              },
+              {
+                "id": "n-fx-md",
+                "type": "MasterDetail",
+                "props": {
+                  "bind": "no",
+                  "bindTo": "taskNo",
+                  "detailTitle": "措施明细",
+                  "collapsible": true
+                },
+                "children": [
+                  {
+                    "id": "n-fx-md-master",
+                    "type": "Table",
+                    "props": {
+                      "title": "任务单",
+                      "columns": [
+                        {
+                          "title": "任务单号",
+                          "dataIndex": "no",
+                          "width": 160
+                        },
+                        {
+                          "title": "负责人",
+                          "dataIndex": "owner",
+                          "width": 120
+                        }
+                      ],
+                      "rows": []
+                    }
+                  },
+                  {
+                    "id": "n-fx-md-detail",
+                    "type": "Table",
+                    "props": {
+                      "title": "措施明细",
+                      "columns": [
+                        {
+                          "title": "措施内容",
+                          "dataIndex": "text",
+                          "width": 240
+                        },
+                        {
+                          "title": "责任人",
+                          "dataIndex": "owner",
+                          "width": 120
+                        }
+                      ],
+                      "rows": []
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "n-fx-btn-submit",
+                "type": "Button",
+                "props": {
+                  "text": "提交执行结果",
+                  "type": "primary",
+                  "capability": "cap-m-submit"
+                }
+              },
+              {
+                "id": "n-fx-btn-close",
+                "type": "Button",
+                "props": {
+                  "text": "关闭任务单",
+                  "capability": "cap-t-close"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": "默认",
+          "type": "default"
+        }
+      ],
+      "defaultStateId": "default",
+      "notApplicableStates": [
+        "loading",
+        "empty",
+        "error"
+      ],
+      "interactions": [
+        {
+          "id": "ix-fx-submit",
+          "name": "提交执行结果",
+          "on": {
+            "event": "click",
+            "target": "n-fx-btn-submit"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "success",
+              "text": "已提交，等待验证"
+            }
+          ]
+        },
+        {
+          "id": "ix-fx-close",
+          "name": "关闭任务单",
+          "on": {
+            "event": "click",
+            "target": "n-fx-btn-close"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "success",
+              "text": "任务单已关闭"
+            }
+          ]
+        }
+      ],
+      "annotations": [],
+      "entryFrom": [],
+      "exitTo": [
+        "page-verify"
+      ],
+      "prd": {
+        "sections": [
+          {
+            "type": "text",
+            "title": "页面说明",
+            "body": "夹具页，仅用于判据自证。"
+          }
+        ]
+      }
+    },
+    {
+      "id": "page-verify",
+      "moduleId": "m-fx",
+      "parentId": null,
+      "name": "措施验证",
+      "route": "/verify",
+      "entity": "Measure",
+      "stateMachine": "sm-measure",
+      "goal": "质量工程师对执行结果出结论",
+      "contract": {
+        "task": "task-verify",
+        "actor": [
+          "u-qa"
+        ],
+        "entity": "Measure",
+        "owns": [
+          "cap-m-verify"
+        ],
+        "doneWhen": "验证结论已提交，措施已完成",
+        "entryFrom": [
+          "page-task-hub"
+        ]
+      },
+      "layout": "header-content",
+      "componentTree": {
+        "id": "n-fx-v-root",
+        "type": "Layout",
+        "props": {
+          "layout": "header-content"
+        },
+        "children": [
+          {
+            "id": "n-fx-v-header",
+            "type": "Header",
+            "props": {
+              "title": "措施验证",
+              "back": true
+            }
+          },
+          {
+            "id": "n-fx-v-content",
+            "type": "Content",
+            "children": [
+              {
+                "id": "n-fx-verify-table",
+                "type": "Table",
+                "props": {
+                  "columns": [
+                    {
+                      "title": "措施内容",
+                      "dataIndex": "text",
+                      "width": 240
+                    },
+                    {
+                      "title": "完成时间",
+                      "dataIndex": "doneAt",
+                      "width": 140
+                    }
+                  ],
+                  "rows": []
+                }
+              },
+              {
+                "id": "n-fx-btn-verify",
+                "type": "Button",
+                "props": {
+                  "text": "验证通过",
+                  "type": "primary",
+                  "capability": "cap-m-verify"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "states": [
+        {
+          "id": "default",
+          "name": "默认",
+          "type": "default"
+        }
+      ],
+      "defaultStateId": "default",
+      "notApplicableStates": [
+        "loading",
+        "empty",
+        "error"
+      ],
+      "interactions": [
+        {
+          "id": "ix-fx-verify",
+          "name": "验证通过",
+          "on": {
+            "event": "click",
+            "target": "n-fx-btn-verify"
+          },
+          "actions": [
+            {
+              "type": "message",
+              "level": "success",
+              "text": "已验证，措施关闭"
+            }
+          ]
+        }
+      ],
+      "annotations": [],
+      "entryFrom": [
+        "page-task-hub"
+      ],
+      "exitTo": [],
+      "prd": {
+        "sections": [
+          {
+            "type": "text",
+            "title": "页面说明",
+            "body": "夹具页，仅用于判据自证。"
+          }
+        ]
+      }
+    }
+  ],
+  "components": [],
+  "stateMachines": [
+    {
+      "id": "sm-task",
+      "name": "任务单",
+      "entity": "Task",
+      "initial": "open",
+      "states": [
+        {
+          "id": "open",
+          "name": "进行中",
+          "type": "normal"
+        },
+        {
+          "id": "closed",
+          "name": "已关闭",
+          "type": "success"
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t-fx-1",
+          "from": "open",
+          "to": "closed",
+          "trigger": "质量工程师关闭任务单",
+          "role": "u-qa",
+          "ui": {
+            "pageId": "page-verify",
+            "interactionId": "ix-fx-verify"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sm-measure",
+      "name": "措施",
+      "entity": "Measure",
+      "initial": "todo",
+      "states": [
+        {
+          "id": "todo",
+          "name": "待执行",
+          "type": "normal"
+        },
+        {
+          "id": "submitted",
+          "name": "待验证",
+          "type": "warning"
+        },
+        {
+          "id": "done",
+          "name": "已完成",
+          "type": "success"
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t-fx-2",
+          "from": "todo",
+          "to": "submitted",
+          "trigger": "责任人提交执行结果",
+          "role": "u-exec",
+          "ui": {
+            "pageId": "page-task-hub",
+            "interactionId": "ix-fx-submit"
+          }
+        },
+        {
+          "id": "t-fx-3",
+          "from": "submitted",
+          "to": "done",
+          "trigger": "质量工程师验证通过",
+          "role": "u-qa",
+          "ui": {
+            "pageId": "page-verify",
+            "interactionId": "ix-fx-verify"
+          }
+        }
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "REQ-FX-001",
+      "pageId": "page-task-hub",
+      "moduleId": "m-fx",
+      "ui": {
+        "interactionId": "ix-fx-submit"
+      },
+      "title": "责任人提交执行结果",
+      "pattern": "event-driven",
+      "trigger": "责任人在「我的任务」点击「提交执行结果」",
+      "rule": "措施必须已填执行说明与佐证",
+      "expected": "措施状态由「待执行」变为「待验证」，且只有该责任人的任务可见",
+      "stateMachine": "sm-measure",
+      "role": "u-exec",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "点击「提交执行结果」后措施变为「待验证」，编辑入口消失",
+        "未填佐证时提交被拒绝，提示「请先上传佐证」",
+        "非本人任务不出现在列表中，直接访问详情提示无权限"
+      ]
+    },
+    {
+      "id": "REQ-FX-002",
+      "pageId": "page-verify",
+      "moduleId": "m-fx",
+      "ui": {
+        "interactionId": "ix-fx-verify"
+      },
+      "title": "质量工程师出验证结论",
+      "pattern": "event-driven",
+      "trigger": "质量工程师在「措施验证」点击「验证通过」",
+      "rule": "验证人不得与执行人相同（四眼原则）",
+      "expected": "措施变为「已完成」，主任务单回到待关闭",
+      "stateMachine": "sm-measure",
+      "role": "u-qa",
+      "status": "confirmed",
+      "source": "user",
+      "acceptance": [
+        "点击「验证通过」后措施变为「已完成」，并写回主任务单",
+        "执行人自己不能出现在验证人候选里",
+        "措施处于「待执行」时「验证通过」置灰并提示当前状态不允许"
+      ]
+    }
+  ],
+  "boardPlan": [],
+  "glossary": [],
+  "openQuestions": [],
+  "tasks": [
+    {
+      "id": "task-hub",
+      "name": "处理我的措施",
+      "actor": "u-exec",
+      "goal": "把派给自己的措施做完并提交",
+      "inputs": [
+        "措施内容"
+      ],
+      "doneWhen": "已提交执行结果",
+      "pages": [
+        "page-task-hub"
+      ]
+    },
+    {
+      "id": "task-verify",
+      "name": "验证措施效果",
+      "actor": "u-qa",
+      "goal": "判断措施是否有效并出结论",
+      "inputs": [
+        "执行结果",
+        "佐证"
+      ],
+      "doneWhen": "已出验证结论",
+      "pages": [
+        "page-verify"
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "cap-m-submit",
+      "name": "提交执行结果",
+      "entity": "Measure",
+      "actor": [
+        "u-exec"
+      ],
+      "from": [
+        "todo"
+      ],
+      "to": "submitted",
+      "policy": "disabled",
+      "reason": "未填执行说明或佐证时不可提交",
+      "stage": "submit"
+    },
+    {
+      "id": "cap-m-verify",
+      "name": "验证并关闭",
+      "entity": "Measure",
+      "actor": [
+        "u-qa"
+      ],
+      "from": [
+        "submitted"
+      ],
+      "to": "done",
+      "policy": "disabled",
+      "reason": "措施尚未提交执行结果时不能验证",
+      "stage": "verify",
+      "effects": [
+        {
+          "text": "主任务单回到待关闭，由质量工程师关闭"
+        }
+      ]
+    },
+    {
+      "id": "cap-t-close",
+      "name": "关闭任务单",
+      "entity": "Task",
+      "actor": [
+        "u-exec"
+      ],
+      "from": [
+        "open"
+      ],
+      "to": "closed",
+      "policy": "disabled",
+      "reason": "措施未全部验证通过时不能关闭"
+    }
+  ],
+  "dataModel": {
+    "entities": [
+      {
+        "id": "e-task",
+        "name": "Task",
+        "table": "task",
+        "pageIds": [
+          "page-task-hub"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "key": "pk"
+          },
+          {
+            "name": "no",
+            "type": "varchar(32)",
+            "required": true,
+            "unique": true
+          },
+          {
+            "name": "status",
+            "type": "varchar(16)",
+            "required": true
+          }
+        ]
+      },
+      {
+        "id": "e-measure",
+        "name": "Measure",
+        "table": "measure",
+        "pageIds": [
+          "page-verify"
+        ],
+        "fields": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "key": "pk"
+          },
+          {
+            "name": "text",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "doneAt",
+            "type": "datetime"
+          }
+        ]
+      }
+    ],
+    "relations": [
+      {
+        "from": "Task",
+        "to": "Measure",
+        "kind": "1:N",
+        "note": "一张任务单挂多条措施"
+      }
+    ],
+    "derived": []
+  },
+  "fieldRegistry": [
+    {
+      "id": "f-01",
+      "name": "任务单号",
+      "sourceRef": "2.1.1",
+      "type": "text",
+      "pageId": "page-task-hub",
+      "block": "n-fx-table",
+      "required": true,
+      "scope": "in"
+    },
+    {
+      "id": "f-02",
+      "name": "任务状态",
+      "sourceRef": "2.1.2",
+      "type": "enum",
+      "pageId": "page-task-hub",
+      "block": "n-fx-table",
+      "required": true,
+      "scope": "in"
+    },
+    {
+      "id": "f-03",
+      "name": "负责人",
+      "sourceRef": "2.1.3",
+      "type": "ref",
+      "pageId": "page-task-hub",
+      "block": "n-fx-table",
+      "required": true,
+      "scope": "in"
+    },
+    {
+      "id": "f-04",
+      "name": "完成时间",
+      "sourceRef": "2.1.4",
+      "type": "date",
+      "pageId": "page-verify",
+      "block": "n-fx-verify-table",
+      "required": true,
+      "scope": "in"
+    },
+    {
+      "id": "f-05",
+      "name": "措施明细",
+      "sourceRef": "2.1.5",
+      "type": "page",
+      "pageId": "page-task-hub",
+      "block": "n-fx-md",
+      "required": true,
+      "scope": "in",
+      "oneToMany": true
+    }
+  ],
+  "sourceTerms": [
+    "任务单号",
+    "任务状态",
+    "负责人",
+    "完成时间",
+    "措施明细"
+  ]
+}

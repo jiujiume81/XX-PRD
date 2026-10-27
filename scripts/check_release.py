@@ -571,6 +571,32 @@ def check_shape_gate(_docs, _ph, _gen):
 
 # ---------------------------------------------------------------- 骨架
 
+def check_r_group(_docs, _ph, _gen):
+    """DoD 12：R1–R4 十五条判定的绿样本 + 逐条造红（`tests/check_r1_r4.py`）。
+
+    为什么独立一条 DoD，不并进 DoD 1：
+    DoD 1 判的是「示例不红」，而 R1–R4 需要的输入（`fieldRegistry` / `sourceTerms` /
+    `dataModel.relations` / `capabilities[].stage`）在**全部示例里都不存在** —— 在示例上只能得到
+    13 条 INCOMPLETE，既证明不了判据能红，也证明不了能绿。而给示例补这些数据会出事：
+    示例没有源文档，编一份 `sourceTerms` 再登记等量条目，R1-c 的「计数闭合」就变成恒等式
+    （登记 N 条、源点名 N 条，永远相等）—— 那是**把判据变绿**，不是产物变合格。
+
+    所以本项用专用夹具（`tests/fixtures/fixture-r1-r4.json`，自带源清单与登记表）+ 15 个单点变体：
+    基线必须 15/15 全 PASS，每个变体必须让**目标判据**由 PASS 变 ERROR，连带变色须逐条登记。
+    """
+    argv = [sys.executable, os.path.join(ROOT, "tests", "check_r1_r4.py")]
+    proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
+    out = (proc.stdout or "") + (proc.stderr or "")
+    last = next((l for l in reversed(out.splitlines()) if l.startswith("RESULT")), "")
+    base = next((l for l in out.splitlines() if l.startswith("PASS 基线")), "")
+    detail = "｜".join(x for x in (base, last) if x) or (last or "无 RESULT 行")
+    if proc.returncode != 0:
+        bad = [l for l in out.splitlines()
+               if l.startswith("FAIL") or l.strip().startswith("·")]
+        return STATUS_FAIL, detail, bad[:8] or first_lines(out, 6)
+    return STATUS_PASS, detail, []
+
+
 ITEMS = [
     ("全部示例结构 + 语义校验通过", check_examples),
     ("容器回归全绿", check_regression),
@@ -583,6 +609,7 @@ ITEMS = [
     ("语法检查通过", check_syntax),
     ("反样本守卫（红在登记项上）", check_reject_guard),
     ("形态判据（示例 example-06）", check_shape_gate),
+    ("需求准确性 R1–R4（绿样本 + 逐条造红）", check_r_group),
 ]
 
 

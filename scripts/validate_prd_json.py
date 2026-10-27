@@ -129,6 +129,12 @@ class Report:
         self.errors = []
         self.warns = []
         self.infos = []
+        # 第三种状态：判据在，但产物里没有可判的输入。
+        # 它既不是 PASS（会得到"全绿"的假象）也不是 ERROR（会把"没写输入"和"写错了"混成一件事）。
+        # 与 check_ui_shape 的 INCOMPLETE 同义（见 references/13 §5 的落地状态行）。
+        self.incomplete_msgs = []
+        # R1–R4 的逐条状态：[(rid, "PASS"/"ERROR"/"INCOMPLETE"/"WARN")]，供自证脚本按 rid 断言。
+        self.r_group = []
 
     def error(self, msg):
         self.errors.append(msg)
@@ -138,6 +144,9 @@ class Report:
 
     def info(self, msg):
         self.infos.append(msg)
+
+    def incomplete(self, msg):
+        self.incomplete_msgs.append(msg)
 
 
 # ---------- 载入 ----------
@@ -346,6 +355,118 @@ def interaction_ids_of(page):
 
 
 # ---------- 校验主体 ----------
+# ==================== 需求准确性 R1–R4（references/13-requirements-accuracy.md） ====================
+# 本节只放"与数据结构无关"的取数工具；判定写在 validate() 里，与其它规则共用 gate() 的档位语义。
+R2_TRIGGERS = ("分发至", "各负责人", "多个", "分别", "每个", "明细", "两种")
+
+
+def _r_core(name):
+    """字段名去掉括注：'我的任务（各负责人待办入口）' → '我的任务'。
+    R1-b 要匹配的是核心词 —— 括注是给人看的解释，渲染文本里通常没有。"""
+    return re.split(r"[（(]", name or "", 1)[0].strip()
+
+
+def _r_page_index(page):
+    """返回 (节点 id 集合, {节点 id: 该节点可渲染文本})。
+
+    可渲染文本**只取用户看得见的那些位置**：props 的
+    text/title/label/content/placeholder/extra/value/description、Table 的 columns[].title、
+    以及 children 里的裸字符串。**不做全文搜索** —— 13 §1.5 反模式 1 已经证伪过：
+    `根本原因` 在 CAPA 产物里命中 1 次，命中的是测试数据的**值**，主表根本没有这个字段。
+    """
+    ids, texts = set(), {}
+
+    def rec(n):
+        if not isinstance(n, dict):
+            return
+        nid = n.get("id")
+        buf = []
+        pr = n.get("props") or {}
+        for k in ("text", "title", "label", "content", "placeholder", "extra", "value",
+                  "description", "detailTitle"):
+            v = pr.get(k)
+            if isinstance(v, str):
+                buf.append(v)
+        for col in (pr.get("columns") or []):
+            if isinstance(col, dict) and isinstance(col.get("title"), str):
+                buf.append(col["title"])
+        for ch in (n.get("children") or []):
+            if isinstance(ch, str):
+                buf.append(ch)
+        if nid:
+            ids.add(nid)
+            texts[nid] = "\n".join(buf)
+        for ch in (n.get("children") or []):
+            if isinstance(ch, dict):
+                rec(ch)
+        for sl in (n.get("slots") or {}).values():
+            for ch in (sl if isinstance(sl, list) else [sl]):
+                if isinstance(ch, dict):
+                    rec(ch)
+
+    tree = page.get("componentTree")
+    for n in (tree if isinstance(tree, list) else [tree]):
+        rec(n)
+    # 13 R1-a 允许落位到 interactions 的 on.target —— 它也是"该页里真实存在的节点"
+    for ix in (page.get("interactions") or []):
+        tgt = ((ix.get("on") or {}).get("target"))
+        if tgt:
+            ids.add(tgt)
+    return ids, texts
+
+
+def _r_source_terms(data, target):
+    """源文档点名词清单。两级来源，任取其一；都没有返回 None。
+
+    ① 顶层 `sourceTerms[]`（内联，随产物走 —— 交付包是单文件，`shaping/` 不跟包）；
+    ② `<产物目录>/shaping/source-terms.json`（阶段② 的落盘位置，13 §1.4）。
+    返回 None 时 R1-c 与 R2 **不许**判 PASS：分母为 0 时「登记数 ≥ 0」恒成立，那是恒真式。
+    """
+    inline = data.get("sourceTerms")
+    if isinstance(inline, list) and inline:
+        out = []
+        for x in inline:
+            if isinstance(x, str):
+                out.append(x)
+            elif isinstance(x, dict):
+                out.append(x.get("name") or x.get("term") or "")
+        return [x for x in out if x]
+    if target and os.path.exists(target):
+        cand = os.path.join(os.path.dirname(os.path.abspath(target)), "shaping", "source-terms.json")
+        if os.path.exists(cand):
+            try:
+                with open(cand, encoding="utf-8") as fh:
+                    raw = json.load(fh)
+                if isinstance(raw, dict):
+                    raw = raw.get("terms") or raw.get("items") or []
+                return [x if isinstance(x, str) else (x.get("name") or "") for x in raw if x]
+            except Exception:
+                return None
+    return None
+
+
+def _r_decision_ids(data):
+    """`decisionId` 能指向的 id 集合。13 §1.3 只说「指向存在的决策」，不指定容器 ——
+    本项目里可承载决策的有三处，取并集，避免为这一个字段新造顶层数组。"""
+    ids = set()
+    for k in ("decisions", "openQuestions", "annotations"):
+        for x in (data.get(k) or []):
+            if isinstance(x, dict) and x.get("id"):
+                ids.add(x["id"])
+    return ids
+
+
+def _r_walk(node, out):
+    if isinstance(node, dict):
+        out.append(node)
+        for ch in (node.get("children") or []):
+            if isinstance(ch, dict):
+                _r_walk(ch, out)
+        for sl in (node.get("slots") or {}).values():
+            for ch in (sl if isinstance(sl, list) else [sl]):
+                _r_walk(ch, out)
+
+
 def validate(data, rep: Report, strict=False):
     def gate(msg):
         """新语义检查的统一开关：交付档 ERROR、宽松档 WARN。
@@ -760,7 +881,14 @@ def validate(data, rep: Report, strict=False):
             if e not in page_ids:
                 rep.error(f"[{pid}] 页面关系引用了不存在的页面 `{e}`")
         # PRD
-        prd = p.get("prd") or {}
+        # 类型错就只报这一条，不许抛异常 —— 一旦抛出，validate() 整个中止，
+        # 后面十几条判据（含 R1–R4）一条都不跑，而外层只留一句"校验过程异常"：
+        # 那是"一个字段写错 → 全部判据静默消失"，比报错难查得多。
+        prd = p.get("prd")
+        if prd is not None and not isinstance(prd, dict):
+            rep.error(f"[{pid}] prd 应为对象（含 sections / reqIds），当前是 {type(prd).__name__}")
+            prd = {}
+        prd = prd or {}
         if not (prd.get("sections") or []):
             rep.warn(f"[{pid}] 缺少 prd.sections")
         for rid in (prd.get("reqIds") or []):
@@ -1340,8 +1468,287 @@ def validate(data, rep: Report, strict=False):
     rep.info(f"行为补充：guards={n_guards}（{n_g_req}/{len(reqs)} 条需求） "
              f"effects={n_effects}（{n_e_req}/{len(reqs)} 条需求）")
 
+    # ============ 12. 需求准确性 R1–R4（references/13-requirements-accuracy.md）============
+    # 三态必须分开：PASS / ERROR / INCOMPLETE。
+    # INCOMPLETE = 「判据在，但产物里没有可判的输入」—— 既不许压成 PASS（会得到全绿的假象），
+    # 也不许压成 ERROR（会把「没写输入」和「写错了」混成一件事，处置完全不同）。
+    # 与 check_ui_shape 的 INCOMPLETE 同义，见 13 §5 的落地状态行。
+    _rst = []
 
-def run(paths, as_json=False, profile="default"):
+    def rchk(rid, ok, msg, inc=None, warn_only=False):
+        if inc is not None:
+            _rst.append((rid, "INCOMPLETE"))
+            rep.incomplete(f"[{rid}] {inc}")
+        elif ok:
+            _rst.append((rid, "PASS"))
+        elif warn_only and not strict:
+            _rst.append((rid, "WARN"))
+            rep.warn(f"[{rid}] {msg}")
+        else:
+            _rst.append((rid, "ERROR"))
+            rep.error(f"[{rid}] {msg}")
+
+    _pages = data.get("pages") or []
+    _pages_by_id = {p.get("id"): p for p in _pages}
+    _caps = data.get("capabilities") or []
+    _tasks = data.get("tasks") or []
+    _fr = data.get("fieldRegistry") or []
+    _terms = _r_source_terms(data, rep.target)
+    _dm = data.get("dataModel") or {}
+    _rels = _dm.get("relations") or []
+    _ones = [r for r in _rels if isinstance(r, dict) and r.get("kind") == "1:N"]
+    _sms = data.get("stateMachines") or []
+    _root_ids = {p.get("id") for p in _pages if not (p.get("entryFrom") or [])}
+
+    # ---------------- R1 字段登记 ----------------
+    if not _fr:
+        for rid in ("R1-a", "R1-b", "R1-c", "R1-d"):
+            rchk(rid, False, "", "缺顶层 `fieldRegistry[]`：登记表不存在，本条无从判（不是通过）")
+    else:
+        _idx = {pid: _r_page_index(p) for pid, p in _pages_by_id.items()}
+        _dangling, _invisible = [], []
+        for f in _fr:
+            pid, bid = f.get("pageId"), f.get("block")
+            if pid not in _idx:
+                _dangling.append(f"{f.get('id')} 的 pageId `{pid}` 不存在")
+                continue
+            ids, texts = _idx[pid]
+            if bid not in ids:
+                _dangling.append(f"{f.get('id')} 的 block `{bid}` 在 `{pid}` 里不存在")
+                continue
+            core = _r_core(f.get("name"))
+            if core and core not in (texts.get(bid) or ""):
+                _invisible.append(
+                    f"{f.get('id')}「{f.get('name')}」在 block `{bid}` 的可渲染文本里看不到「{core}」")
+        rchk("R1-a", not _dangling, "悬空落位：" + "；".join(_dangling[:5]))
+        rchk("R1-b", not _invisible, "落位不可见：" + "；".join(_invisible[:5]))
+
+        if _terms is None:
+            rchk("R1-c", False, "",
+                 "无源点名词清单（顶层 `sourceTerms[]` 与 `<产物目录>/shaping/source-terms.json` 都不存在）："
+                 "分母为 0 时「登记数 ≥ 0」恒成立，不能判")
+        else:
+            def _registered(t):
+                c = _r_core(t)
+                if not c:
+                    return False
+                for f in _fr:
+                    fc = _r_core(f.get("name"))
+                    if fc and (c in fc or fc in c):
+                        return True
+                return False
+
+            _miss = [t for t in _terms if not _registered(t)]
+            rchk("R1-c", not _miss,
+                 f"源点名 {len(_terms)} 项、登记 {len(_fr)} 项，缺：{' / '.join(_miss[:6])}")
+
+        _dec_ids = _r_decision_ids(data)
+        _bad_d = [f"{f.get('id')} 缺 scope（只许 in/out）"
+                  for f in _fr if f.get("scope") not in ("in", "out")]
+        for f in _fr:
+            if f.get("scope") == "out":
+                if not (f.get("reason") or "").strip():
+                    _bad_d.append(f"{f.get('id')} scope=out 但没有 reason")
+                elif f.get("decisionId") not in _dec_ids:
+                    _bad_d.append(f"{f.get('id')} 的 decisionId `{f.get('decisionId')}` 指向不存在的决策")
+        rchk("R1-d", not _bad_d, "反向覆盖：" + "；".join(_bad_d[:5]))
+
+    # ---------------- R2 一对多结构 ----------------
+    _decided = [f for f in _fr if isinstance(f.get("oneToMany"), bool)]
+    _o2m_true = [f for f in _fr if f.get("oneToMany") is True]
+    if _terms is None:
+        rchk("R2", False, "", "无源点名词清单：触发词命中数算不出，计数闭合判不了")
+    else:
+        _hits = [t for t in _terms if any(w in t for w in R2_TRIGGERS)]
+        rchk("R2", len(_hits) == len(_decided),
+             f"触发词命中 {len(_hits)} 条（{' / '.join(_hits[:4])}），"
+             f"oneToMany 裁决 {len(_decided)} 条，两者应相等")
+
+    if not _rels:
+        rchk("R2-a", False, "",
+             "`dataModel.relations` 为空：没有 1:N 声明可判（R4 的适用范围也因此为空）")
+    else:
+        rchk("R2-a", len(_ones) >= len(_o2m_true),
+             f"oneToMany:true 的登记 {len(_o2m_true)} 条，relations 里只有 {len(_ones)} 条 kind='1:N'")
+
+    if not _ones:
+        rchk("R2-b", False, "", "没有 1:N 关系：子实体状态机无从判")
+        rchk("R2-c", False, "", "没有 1:N 关系：子实体独立操作人无从判")
+    else:
+        _bad_b, _bad_c = [], []
+        for r in _ones:
+            child, parent = r.get("to"), r.get("from")
+            _csm = [s for s in _sms if s.get("entity") == child]
+            if not _csm:
+                _bad_b.append(f"{parent}→{child} 缺子实体状态机")
+            else:
+                _cset = {st.get("id") or st.get("name") for st in (_csm[0].get("states") or [])}
+                if len(_cset) < 3:
+                    _bad_b.append(f"{child} 状态数 {len(_cset)} < 3")
+                _psm = [s for s in _sms if s.get("entity") == parent]
+                if _psm:
+                    _pset = {st.get("id") or st.get("name") for st in (_psm[0].get("states") or [])}
+                    if _cset and _cset <= _pset:
+                        _bad_b.append(f"{child} 的状态集合 ⊆ {parent} 的（是投影，不是独立状态机）")
+            _c_caps = [c for c in _caps if c.get("entity") == child]
+            if not _c_caps:
+                _bad_c.append(f"{child} 没有任何 capability（被当成主实体的一个字段了）")
+            else:
+                _ca, _pa = set(), set()
+                for c in _c_caps:
+                    _ca |= set(c.get("actor") or [])
+                for c in _caps:
+                    if c.get("entity") == parent:
+                        _pa |= set(c.get("actor") or [])
+                if _pa and _ca and _ca <= _pa and len(_ca) == len(_pa):
+                    _bad_c.append(f"{child} 的操作人集合与 {parent} 完全相同（分不出两个环节）")
+        rchk("R2-b", not _bad_b, "子实体状态机：" + "；".join(_bad_b[:4]))
+        rchk("R2-c", not _bad_c, "子实体独立操作人：" + "；".join(_bad_c[:4]))
+
+    # R2-d：子表里不许有「阶段 / 类型 / stage」列 —— 它说明两类单据被合并了。
+    # 没有 MasterDetail 结构时判 PASS（不存在这个错误），不是 SKIP：这条判的是"有没有错误"，
+    # 不是"有没有对象"。
+    _bad_d2, _md_seen = [], 0
+    for p in _pages:
+        nodes = []
+        tree = p.get("componentTree")
+        for n in (tree if isinstance(tree, list) else [tree]):
+            _r_walk(n, nodes)
+        for n in nodes:
+            if n.get("type") != "MasterDetail":
+                continue
+            _md_seen += 1
+            # 子表 = `children[1]`（children[0] 是主表）。列在节点的 props.columns 里，
+            # 不在 props.children 里 —— 后者是 I-07 之前的老写法，现有校验器要求节点级 children。
+            for ch in (n.get("children") or [])[1:]:
+                if not isinstance(ch, dict):
+                    continue
+                for col in ((ch.get("props") or {}).get("columns") or []):
+                    t = (col.get("title") or "")
+                    di = (col.get("dataIndex") or "")
+                    if t in ("阶段", "类型") or "stage" in di:
+                        _bad_d2.append(f"{p.get('id')} 的子表出现列「{t or di}」")
+    rchk("R2-d", not _bad_d2, "合并结构：" + "；".join(_bad_d2[:4]))
+
+    # ---------------- R3 角色待办归属（含 R3-b 独立待办页） ----------------
+    _roles = []
+    for c in _caps:
+        for a in (c.get("actor") or []):
+            if a not in _roles:
+                _roles.append(a)
+    if not _roles:
+        rchk("R3", False, "", "`capabilities[].actor` 为空：没有角色可判")
+        rchk("R3-b", False, "", "同上：无角色、也无 stage，独立待办页无从判")
+    elif not any(isinstance(p.get("contract"), dict) and p.get("contract") for p in _pages):
+        # 「整份产物一个 contract 都没有」= 契约层没写，不是「写错了」。这与「有契约但不给
+        # 这个角色入口」是两件事：前者是缺输入（INCOMPLETE），后者才是 ERROR。
+        # 混成一件事的后果：example-03/04（写于契约层之前）会被判成「角色没地方干活」，
+        # 而读者看到的结论会是「示例错了」，真去改示例 —— 修的却是判据的适用范围。
+        rchk("R3", False, "",
+             f"全部 {len(_pages)} 个页面都没有 `contract`：R3 靠 `contract.actor` / `owns` 判"
+             f"「以它为主体且能进入」，无从判")
+        rchk("R3-b", False, "", "同上：无 contract 就无 `owns`，独立待办页判不了")
+    else:
+        _gap = []
+        for r in _roles:
+            ok = False
+            for p in _pages:
+                ct = p.get("contract") or {}
+                if r not in (ct.get("actor") or []):
+                    continue
+                task_ok = any(r in (tk.get("actor") or []) and p.get("id") in (tk.get("pages") or [])
+                              for tk in _tasks)
+                entry_ok = bool(p.get("entryFrom")) or p.get("id") in _root_ids
+                if task_ok and entry_ok:
+                    ok = True
+                    break
+            if not ok:
+                _gap.append(r)
+        rchk("R3", not _gap,
+             f"角色待办覆盖：{' '.join('✗' if r in _gap else '✓' for r in _roles)}"
+             f"（{len(_roles) - len(_gap)}/{len(_roles)}）；缺：{', '.join(_gap)} —— "
+             f"有命令、但没有一个页面以它为主体且能被它进入")
+
+        # R3-b（Owner 2026-10-27 裁定）：有提交命令的角色必须有**独立待办页**，
+        # 「从别人的单据页借道」不算。
+        _subs = [c for c in _caps if c.get("stage") == "submit"]
+        if not any(c.get("stage") for c in _caps):
+            rchk("R3-b", False, "",
+                 "`capabilities[].stage` 全为空：分不出「提交类命令」，独立待办页判不了（前置 R4）")
+        elif not _subs:
+            rchk("R3-b", False, "", "没有任何 stage='submit' 的命令：无对象可判")
+        else:
+            _gap_b = []
+            for r in _roles:
+                _my = [c for c in _subs if r in (c.get("actor") or [])]
+                if not _my:
+                    continue
+                _my_ids = {c.get("id") for c in _my}
+                ok = False
+                for p in _pages:
+                    ct = p.get("contract") or {}
+                    if r not in (ct.get("actor") or []):
+                        continue
+                    entry_ok = bool(p.get("entryFrom")) or p.get("id") in _root_ids
+                    if _my_ids <= set(ct.get("owns") or []) and entry_ok:
+                        ok = True
+                        break
+                if not ok:
+                    _gap_b.append(f"{r} 的 {len(_my_ids)} 条提交命令分散在别人为主体的页面上")
+            rchk("R3-b", not _gap_b, "独立待办页：" + "；".join(_gap_b[:4]))
+
+    # ---------------- R4 执行 / 验证双环节 ----------------
+    if not _ones:
+        for rid in ("R4-a", "R4-b", "R4-c", "R4-d"):
+            rchk(rid, False, "",
+                 "`dataModel.relations` 里没有 kind='1:N'：R4 的适用范围（措施/任务类实体）为空，"
+                 "四条无从判")
+    else:
+        _bad_a, _bad_b2, _bad_c2, _bad_d3 = [], [], [], []
+        for r in _ones:
+            ent = r.get("to")
+            _sub = [c for c in _caps if c.get("entity") == ent and c.get("stage") == "submit"]
+            _ver = [c for c in _caps if c.get("entity") == ent and c.get("stage") == "verify"]
+            if not _sub:
+                _bad_a.append(f"{ent} 没有 stage='submit' 的命令")
+            if not _ver:
+                _bad_a.append(f"{ent} 没有 stage='verify' 的命令")
+            for v in _ver:
+                for s in _sub:
+                    sa, va = set(s.get("actor") or []), set(v.get("actor") or [])
+                    if sa & va:
+                        if not v.get("sameActorOk"):
+                            _bad_b2.append(
+                                f"{v.get('id')} 与 {s.get('id')} 的 actor 有交集"
+                                f"（{sorted(sa & va)}）且未声明 sameActorOk")
+                        elif not (v.get("reason") or "").strip():
+                            _bad_b2.append(f"{v.get('id')} 写了 sameActorOk 但没写 reason（例外无效）")
+                    if s.get("to") not in (v.get("from") or []):
+                        _bad_c2.append(f"{v.get('id')}.from 不含 {s.get('id')}.to「{s.get('to')}」")
+                _has_eff = bool([e for e in (v.get("effects") or []) if isinstance(e, dict)])
+                _has_par = any("parentEffect" in sm for sm in _sms if sm.get("entity") == ent)
+                if not (_has_eff or _has_par):
+                    _bad_d3.append(
+                        f"{v.get('id')} 生效后没有 effects[] 指向主实体，状态机里也没有 parentEffect")
+        rchk("R4-a", not _bad_a, "双环节齐全：" + "；".join(_bad_a[:4]))
+        rchk("R4-b", not _bad_b2, "角色不同：" + "；".join(_bad_b2[:4]))
+        rchk("R4-c", not _bad_c2, "状态衔接：" + "；".join(_bad_c2[:4]))
+        rchk("R4-d", not _bad_d3, "主单据联动：" + "；".join(_bad_d3[:4]), warn_only=True)
+
+    _n_pass = sum(1 for _, s in _rst if s == "PASS")
+    _n_err = sum(1 for _, s in _rst if s == "ERROR")
+    _n_inc = sum(1 for _, s in _rst if s == "INCOMPLETE")
+    _n_warn = sum(1 for _, s in _rst if s == "WARN")
+    _inc_ids = sorted({rid for rid, s in _rst if s == "INCOMPLETE"})
+    # 把逐条状态挂到 rep 上：自证脚本要按 rid 断言"目标判据变红了、别的没变"，
+    # 从打印文本里正则捞状态是脆的（文案一改就失配）。
+    rep.r_group = list(_rst)
+    rep.info(f"R 组（13）：判定 {len(_rst)} 条 → PASS={_n_pass} / ERROR={_n_err} / "
+             f"INCOMPLETE={_n_inc} / WARN={_n_warn}"
+             + (f"｜未判：{', '.join(_inc_ids)}" if _inc_ids else ""))
+
+
+def run(paths, as_json=False, profile="default", require_r=False):
     strict = profile == "delivery"
     results = []
     worst = 0
@@ -1366,11 +1773,18 @@ def run(paths, as_json=False, profile="default"):
             rep.error(f"校验过程异常：{e}")
         if rep.errors:
             worst = 1
+        # R 组（R1–R4）的 INCOMPLETE 默认**不**让退出码非 0，原因不是"放过它"，而是：
+        # 存量产物（含全部示例）写于 R1–R4 之前，没有 fieldRegistry / sourceTerms / relations；
+        # 要求它们立刻齐备只会让人关掉检查。真正要求 R 组合格的场景用 `--require-r`
+        # （`check_release.py` 的 DoD 12 就是那样调的），那时 INCOMPLETE 与非 0 退出等价。
+        if require_r and rep.incomplete_msgs:
+            worst = 1
         results.append(rep)
 
     if as_json:
         out = [{"target": r.target, "profile": r.profile,
-                "errors": r.errors, "warns": r.warns, "infos": r.infos}
+                "errors": r.errors, "warns": r.warns, "infos": r.infos,
+                "incomplete": r.incomplete_msgs}
                for r in results]
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return worst
@@ -1382,26 +1796,40 @@ def run(paths, as_json=False, profile="default"):
             print(f"  · {i}")
         for w in r.warns:
             print(f"  WARN  {w}")
+        for m in r.incomplete_msgs:
+            print(f"  INCOMPLETE {m}")
         for e in r.errors:
             print(f"  ERROR {e}")
-        status = "FAIL" if r.errors else ("PASS(with warnings)" if r.warns else "PASS")
+        if r.errors:
+            status = "FAIL"
+        elif r.incomplete_msgs:
+            status = "INCOMPLETE（有判据判不了，不算通过）"
+        elif r.warns:
+            status = "PASS(with warnings)"
+        else:
+            status = "PASS"
         print(f"  => {status}  (errors={len(r.errors)}, warnings={len(r.warns)}, "
-              f"profile={r.profile})")
+              f"incomplete={len(r.incomplete_msgs)}, profile={r.profile})")
+    total_inc = sum(len(r.incomplete_msgs) for r in results)
     print("=" * 68)
     print(f"结论（profile={profile}）："
-          + ("存在 ERROR，必须修复后交付" if worst else "全部通过结构校验"))
+          + ("存在 ERROR，必须修复后交付" if worst else "全部通过结构校验")
+          + (f"｜INCOMPLETE={total_inc} 条（判据在但输入缺，"
+             + ("--require-r 下视为不可交付）" if require_r else "默认不拦，但不许当 PASS）")
+             if total_inc else ""))
     return worst
 
 
 if __name__ == "__main__":
     argv = sys.argv[1:]
     as_json = "--json" in argv
+    require_r = "--require-r" in argv
     profile = "default"
     args = []
     i = 0
     while i < len(argv):
         a = argv[i]
-        if a == "--json":
+        if a in ("--json", "--require-r"):
             pass
         elif a.startswith("--profile="):
             profile = a.split("=", 1)[1].strip()
@@ -1417,4 +1845,4 @@ if __name__ == "__main__":
     if not args:
         print(__doc__)
         sys.exit(2)
-    sys.exit(run(args, as_json, profile))
+    sys.exit(run(args, as_json, profile, require_r))

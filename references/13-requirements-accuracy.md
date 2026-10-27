@@ -97,15 +97,27 @@
 [{ "term": "根本原因分析", "sourceRef": "4.7.19.3", "raw": "需录入不合格（潜在）根本原因分析（5why分析法）" }]
 ```
 
+**两级来源，任取其一（2026-10-27 补）**：
+
+| 位置 | 什么时候用 | 谁读 |
+|---|---|---|
+| 产物顶层 `sourceTerms[]`（字符串数组） | **交付包 / 单文件示例**：`shaping/` 不随产物走，只带一个 `.data.json` 时用它 | `validate_prd_json.py` 优先读这个 |
+| `<产物目录>/shaping/source-terms.json` | 完整工作区：阶段② 的原始落盘位置 | 同上，内联不存在时读它 |
+
+> **为什么允许内联**：交付物是单文件，`shaping/` 不会被带走。若只认外部文件，那么任何**交付包**
+> 在 R1-c 上永远 `INCOMPLETE` —— 判据在交付现场失效，等于没写。
+>
+> **两处都没有时不许判 PASS**：分母为 0 时「登记数 ≥ 0」恒成立，那是恒真式。此时报 `INCOMPLETE`。
+
 **抽取规则**（给模型看的，不是给脚本判的）：
 
 1. 引号 / 书名号 / 括号里的名词短语：`「…」`、`“…”`、`**…**`、`（…分析法）`
 2. 录入类动词的宾语：`录入 X` / `记录 X` / `上传 X` / `维护 X` / `确认 X` / `选择 X` / `分发至 X`
 3. 原文里被加粗的整句，至少要抽出它的核心名词
 
-**判定不靠这条规则，靠计数**：`fieldRegistry.length ≥ source-terms.length`。
+**判定不靠这条规则，靠计数**：`fieldRegistry.length ≥ sourceTerms.length`。
 
-> 人可以往 `source-terms.json` 里加条目，**但不能删** —— 删等于删证据。
+> 人可以往清单里加条目，**但不能删** —— 删等于删证据。
 > 真要不做，写 `scope:"out"` + 理由 + 决策 id，让它留在表里可见。
 
 ### 1.5 四条机检（全 ERROR，两个 profile 同）
@@ -113,7 +125,7 @@
 | # | 判据 | 红的样子 |
 |---|---|---|
 | **R1-a** 悬空落位 | `pageId` 在 `pages[]` 里，`block` 在该页 `componentTree`（或该页 `interactions` 的 `on.target`）里 | `f-07 的落位 n-card-root-cause 在 page-capa-plan 里不存在` |
-| **R1-b** 落位可见 | `block` 节点的可渲染文本（`props.text/title/label/content` 递归拼接）里能匹配 `name` 去掉括注后的核心词 | `f-07 登记了区块，但该区块文本里找不到「根本原因分析」` |
+| **R1-b** 落位可见 | `block` 节点的**可渲染文本**里能匹配 `name` 去掉括注后的核心词。可渲染文本 = 该节点 `props` 的 `text`/`title`/`label`/`content`/`placeholder`/`extra`/`value`/`description`/`detailTitle` + `props.columns[].title` + `children` 里的裸字符串 | `f-07 登记了区块，但该区块文本里找不到「根本原因分析」` |
 | **R1-c** 计数闭合 | `fieldRegistry.length ≥ source-terms.json.length` | `源文档点名 14 项，登记 11 项，缺：责任部门确认纳期 / 我的任务 / …` |
 | **R1-d** 反向覆盖 | `scope:"out"` 必须有非空 `reason` 且 `decisionId` 指向存在的决策 | `f-14 scope=out 但无 decisionId` |
 
@@ -262,10 +274,11 @@ R3 角色待办覆盖：u-qa ✓ / u-dept ✗ / u-manager ✓ (2/3)
 | 3 | 该页 `contract.owns` **覆盖该 role 的全部提交类命令** | 缺一条 → ERROR（**前置条件见下**） |
 | 4 | 该页在导航里可达：`p.entryFrom` 非空，**或**它是根页 | 与 §3.1 第 3 条同款 |
 
-**实现前置（不许跳过）**：约束 3 要判「提交类命令」，而 `capabilities[].stage` 在**现有全部产物里都是 `null`**
-（`example-05` 十项、`CAPA` 十六项，2026-10-27 实测）。没有 `stage` 就只能按命令名里含不含 `submit` 去认，
-那正是 §3.2 明令禁止的文字判据。**所以顺序是：R4 的 `stage` 标注先落地（`XX-041`），R3 的独立页判定才能接线。**
-在这之前本节的四条约束**一律标「当前无自动判据」，不许落 PASS**（与 `12` §10 同规）。
+**约束 3 的取数口径（2026-10-27 已实现为 `R3-b`）**：判「提交类命令」靠 `capabilities[].stage`，
+而它在**现有全部产物里都是 `null`**（`example-05` 十项、`CAPA` 十六项实测）。没有 `stage` 就只剩
+「命令名里含不含 `submit`」这一条路，那是 §3.2 明令禁止的文字判据 —— 所以实现里遇到 stage 全空时
+报 **`INCOMPLETE`（判不了）**，不报 PASS、也不报 ERROR。**这条判据不会因为「大家都还没写 stage」
+就悄悄算通过**；它只是暂时没有输入，而 `INCOMPLETE` 在 `--require-r` 下与非 0 退出等价。
 
 **原 v1 默认形态（已作废，保留以便复核）**：
 
@@ -390,11 +403,36 @@ CAPA 产物里 `u-dept`（部门负责人）在 `capabilities` 里有提交执�
 
 **全部 15 条判定都在 `validate_prd_json.py` 一处实现。** 不在生成器、检查器里各写一遍 —— 一旦各长一套，"什么算一对多""什么算独立状态"会在两个检查里给出不同答案，而且是"两边都 PASS、口径不同"的静默分叉，比报错难查得多（`09` §2.4 已经为"什么算系统行为"付过这个学费）。
 
-> **落地状态（截至 2026-10-27）**：这 15 条在 `scripts/validate_prd_json.py` 里仍是 **0 条**（`fieldRegistry` / `oneToMany` / `verify` 零命中），实现由 **XX-041 验收第 1 条**保证。**落点是对的** —— 这 15 条都是纯 JSON 可判（引用解析 / 计数闭合 / 集合比较），所以 `ERROR` 这个词用在这里成立；但**在接上之前，不许把 R1–R4 当成已生效的闸门**。与此对照：`12` 的视觉条款全部依赖渲染实测，`validate_prd_json.py` **永远**判不了，所以 `12` 里一个 `ERROR` 都不许有（`12` 速查表上方的执行者说明）。
+> **落地状态（2026-10-27 更新）**：这 15 条**已全部实现**在 `scripts/validate_prd_json.py` 的
+> `validate()` 第 12 节，三态分开输出：`PASS` / `ERROR` / `INCOMPLETE`。
+> 逐条造红由 `tests/check_r1_r4.py` 保证（15 个单点变体），绿样本是
+> `tests/fixtures/fixture-r1-r4.json`；两者一起进了发布门 **DoD 12**（`check_release.py`）——
+> 只写判据不进闸门，与「规则写了但页面没落地」同型的病。
 >
-> **2026-10-27 实测到两处会让实现一上来就错的坑**（写成条文，免得 XX-041 开工时重新踩）：
-> ① R3 第 3 条原写 `p.contract.entryFrom`，而两个产物的入口都在 `pages[].entryFrom`，`contract.entryFrom` 逐页为 `None` —— 按原文实现会**把教材也判成无入口**；已改为 `p.entryFrom`。
-> ② `capabilities[].stage` 在 `example-05`（10 项）与 `CAPA`（16 项）里**全部是 `null`**，所以 R4 与 R3-b 目前**没有任何输入**：它们不是「判了但过」，是「无从判」。R3-b 的接线顺序因此在 R4 之后。
+> **`INCOMPLETE` 是第三种状态，不许并进 PASS 或 ERROR**：它表示「判据在，产物里没有可判的输入」。
+> 并进 PASS 会得到全绿的假象；并进 ERROR 会把「没写」和「写错」混成一件事（处置相反：前者补数据，
+> 后者改数据）。它默认**不**让退出码非 0（存量产物写于本规则之前，一次全红只会让人关掉检查），
+> **但 `--require-r` 下与非 0 等价** —— 真正要求 R 组合格的场景用后者的语义。
+>
+> **实测读点（2026-10-27，`reject-01-capa-qms` 反样本）**：
+> `R 组：判定 15 条 → PASS=0 / ERROR=2 / INCOMPLETE=13`。两条红是：
+> - `R2-d` `page-capa-list` 的子表出现「阶段」列 —— 与 §2.4 说的「两类单据被合并成一张表」吻合；
+> - `R3` `u-executor` 有命令但没有一个页面以他为主体且能进入 —— 与 §3.4 完全一致。
+>
+> **这两条就是人工评审当初指出的缺陷**，新判据在真实现场上把它们抓了出来（不是靠造红）。
+>
+> **剩余缺口（如实记）**：CAPA 的 `R1` / `R4` 仍为 `INCOMPLETE`，因为它没有 `fieldRegistry`、
+> 没有 `dataModel.relations`、`capabilities[].stage` 全空 —— 所以 `XX-041` 验收第 1 条要求的
+> 「R1 ≥2 / R2 ≥2 / R3 =1 / R4 ≥2 条 ERROR」目前只达成 **R2-d + R3**，其余要靠给反样本补数据，
+> 不能用「判据已实现」代替。
+>
+> 与此对照：`12` 的视觉条款全部依赖渲染实测，`validate_prd_json.py` **永远**判不了，所以 `12` 里
+> 一个 `ERROR` 都不许有（`12` 速查表上方的执行者说明）。
+>
+> **实现时发现的两处坑（已修，留档免得重踩）**：
+> ① `p.contract.entryFrom` 是错字段 —— 入口在 `pages[].entryFrom`（见 §3.1 第 3 条的修正）。
+> ② R2-d 的子表列在**节点级 `children[1].props.columns`** 里；早期版本写成 `props.children`，
+> 后者是 I-07 之前的老写法，按它实现会让这条判据恒 PASS（永远找不到列，也就永远不红）。
 
 ---
 

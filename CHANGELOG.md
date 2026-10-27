@@ -69,7 +69,9 @@
   旧口径把 `R.Frame` 之后 11 万字符（文件尾 46%）算成 Frame 读的键。
 - **helper 闭包**：渲染器体里以 `p` 为首参调用的同文件函数（`buildFilterBar(p,ctx)`）算它的读取点；
   **只认 `p` 作首参** —— `getPath(o,p)` 那种普通形参不算，否则 `p.split` 会进白名单。
-- **注释与字符串里的 `p.xxx` 不计**：注释写「Col 读不到 p.gutter」不该让 Row 凭空多一个可读键。
+- **注释与字符串里的 `p.xxx` 不计**：容器里那句「Col 自己读不到 `p.gutter`」碰巧不制造假键
+  （`R.Row` 自己就写了 `var g=(p.gutter||0)`），但换一句注释写一个该渲染器不读的键，
+  白名单里就多一个永远抓不到的假绿 —— 被注释放行的白名单比没有更危险。
 - 清单真源改为 `references/props-unsupported.json`（扁平 `entries[]` + `type:"*"` 通配，17 条）。
   **文件缺失或格式不符 → 生成器 ERROR 退出**，不许静默 0 条。
 - **契约带两枚哈希**：`sourceSha256`（容器）+ `unsupportedSha256`（不支持清单）。任一枚与源文件

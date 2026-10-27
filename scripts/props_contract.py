@@ -409,9 +409,9 @@ def build():
     return {
         "generatedBy": "scripts/props_contract.py",
         "source": "assets/container/index.html",
-        # 两个 sha 只作**诊断**：判同步靠逐类型比对（见 --check 与 validate_prd_json 的 SS-01）。
-        # 但**不支持清单**没有逐条比对可言（它是理由表，不参与 byType），只校容器会漏掉
-        # 「改了清单没重生成」—— 契约里会留一份过期理由，没有任何门发现（§6.8.3）。
+        # 两个 sha 只作**诊断**：判同步一律比内容（容器比 byType/slotsByType 键集，
+        # 清单比 entries 逐条）。sha 对「改一行注释」过敏、对「清单换格式」失明，
+        # 拿它当触发条件只会造出假红与假绿；报 INCOMPLETE 时一起打出来，方便看谁动过。
         "sourceSha256": sha256(CONTAINER),
         "unsupportedSha256": sha256(UNSUPPORTED),
         "sourceLines": src.count("\n") + 1,
@@ -434,8 +434,40 @@ def build():
     }
 
 
+def _entry_map(entries):
+    """清单条目 → {(type, key): (why, instead)}。判同步比**内容**，不比哈希。"""
+    m = {}
+    for e in entries or []:
+        if isinstance(e, dict):
+            m[(e.get("type"), e.get("key"))] = (e.get("why"), e.get("instead"))
+    return m
+
+
+def unsupported_diffs(old_entries, new_entries):
+    """两版不支持清单的差异（按条目内容比）。返回人话列表，空 = 一致。"""
+    oe, ne = _entry_map(old_entries), _entry_map(new_entries)
+    add = sorted(k for k in ne if k not in oe)
+    sub = sorted(k for k in oe if k not in ne)
+    chg = sorted(k for k in ne if k in oe and ne[k] != oe[k])
+    if not (add or sub or chg):
+        return []
+    parts = []
+    if add:
+        parts.append("源文件多 %s" % ["%s.%s" % k for k in add[:5]])
+    if sub:
+        parts.append("契约多 %s" % ["%s.%s" % k for k in sub[:5]])
+    if chg:
+        parts.append("文字变了 %s" % ["%s.%s" % k for k in chg[:5]])
+    return ["不支持清单条目不一致：%s（%d 处；比的是 entries 内容，不是哈希）"
+            % (" / ".join(parts), len(add) + len(sub) + len(chg))]
+
+
 def diff_docs(old, new):
-    """契约文件的实质差异（不含 sha / note 这类纯诊断字段 —— 但两个 sha 例外）。"""
+    """契约文件的实质差异。sha / note 只是诊断字段，**不参与判定**：
+
+    判同步一律比内容 —— 容器比 `byType`/`slotsByType` 键集，清单比 `entries` 逐条。
+    sha 对「改一行注释」过敏、对「清单换格式」失明，拿它当触发条件只会制造假红与假绿。
+    """
     out = []
     if old.get("renderers") != new.get("renderers"):
         out.append("渲染器数：契约 %s / 源码 %s" % (old.get("renderers"), new.get("renderers")))
@@ -460,10 +492,7 @@ def diff_docs(old, new):
             out.append("%s 插槽：源码多 %s / 契约多 %s"
                        % (t, sorted(ns.get(t, set()) - os_.get(t, set())) or "-",
                           sorted(os_.get(t, set()) - ns.get(t, set())) or "-"))
-    # 清单哈希：不比对条目内容，只比源文件指纹。改了 `why` 一个字也算不同步。
-    if old.get("unsupportedSha256") != new.get("unsupportedSha256"):
-        out.append("不支持清单：契约 sha %s / 源文件 sha %s（清单改了没重生成 —— 契约里是过期理由表）"
-                   % ((old.get("unsupportedSha256") or "缺失")[:12], new["unsupportedSha256"][:12]))
+    out.extend(unsupported_diffs(old.get("unsupported"), new.get("unsupported")))
     return out
 
 

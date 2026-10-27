@@ -20,9 +20,9 @@
 
 ## [未发布] - 2026-10-27（XX-050：props 契约与 SS-01）
 
-**breaking: 是（三条：① `TextArea.rows` 让已写 `rows` 的产物变高；② 存量产物会在 SS-01 上多红；
-③ 改容器或 `references/props-unsupported.json` 后**必须**重跑 `python3 scripts/props_contract.py`，
-否则两枚哈希对不上、全线 `INCOMPLETE` 非 0）**
+**breaking: 是（两条：① `TextArea.rows` 让已写 `rows` 的产物变高；② 存量产物会在 SS-01 上多红。
+另有一条运维约定：改容器**读取点**或清单**条目内容**后要重跑 `python3 scripts/props_contract.py`，
+否则全线 `INCOMPLETE`；只改注释、只重排清单格式**不需要**——判同步比的是内容，不是哈希）**
 
 ### 新增判据 SS-01「props 消费闭合」（`references/04` §6.8）
 
@@ -74,11 +74,13 @@
   白名单里就多一个永远抓不到的假绿 —— 被注释放行的白名单比没有更危险。
 - 清单真源改为 `references/props-unsupported.json`（扁平 `entries[]` + `type:"*"` 通配，17 条）。
   **文件缺失或格式不符 → 生成器 ERROR 退出**，不许静默 0 条。
-- **契约带两枚哈希**：`sourceSha256`（容器）+ `unsupportedSha256`（不支持清单）。任一枚与源文件
-  不符 → `INCOMPLETE`。只校容器不够：改了清单不重生成，契约里会留一份**过期理由表**，没有任何门
-  会发现（逐类型比对看不见它 —— 清单不进 `byType`）。
-- 同步仍是**逐类型比对**（不是整文件 sha）：sha 只用来判「同一份源文件」，键集差异靠 `byType` /
-  `slotsByType` 逐对比，消息能说出「源码多 X / 契约多 Y」而不只是「哈希变了」。
+- **契约带两枚哈希**：`sourceSha256`（容器）+ `unsupportedSha256`（清单），**只作诊断**。
+  判同步一律比内容：容器比 `byType` / `slotsByType` 键集，清单比 `entries` 逐条
+  （`type`/`key`/`why`/`instead`）。报 `INCOMPLETE` 时两枚 sha 一起打出来，方便看谁动过。
+  sha 不进触发条件：它对「改一行注释」过敏（假红）、对「清单换格式」失明（条目顺序或缩进变了
+  就报「没同步」，而实质内容一模一样）—— 实测清单重排 + 改缩进后 `rc=0`，改一个 `why` 才 `rc=1`。
+- 同步仍是**逐类型比对**，消息能说出「源码多 X / 契约多 Y」而不只是「哈希变了」；
+  清单差异也按条目点名（`不支持清单条目不一致：文字变了 ['*.style']`）。
 
 ### 闸门
 
@@ -99,7 +101,8 @@
 | `Drawer` 写 `width:600` | `rc=1`：`声明 600，渲成 560px` |
 | `Drawer` 写 `width:"600px"` | `rc=1`：`声明 '600px'，渲成 420px` |
 | 删 `props-contract.json` | `rc=1`：`INCOMPLETE [SS-01] props 契约文件缺失` |
-| 改清单一个字而不重生成 | `rc=1`：`INCOMPLETE …不支持清单 sha：契约 378fc3980380 / 现文件 be6940dd7fed` |
+| 改清单一个 `why` 而不重生成 | `rc=1`：`INCOMPLETE …不支持清单条目不一致：文字变了 ['*.style']（1 处；比的是 entries 内容，不是哈希）`｜诊断：`清单 sha 378fc3980380/bf0f5981a90f` |
+| 清单重排 + 改缩进（内容相同） | `rc=0`：sha 变了但条目逐条相同 —— 这正是「按内容比，不按哈希」要放过的那种 |
 
 ### 存量产物读数（**未修，属 XX-051/052 的范围**）
 

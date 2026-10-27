@@ -514,19 +514,16 @@ def _load_props_contract(rep):
         return None
 
     diffs = []
-    # 两枚哈希都要对（§6.8.3）：容器改了没重生成、或**不支持清单**改了没重生成，都是过期契约。
-    # 清单没有逐键比对可做（它是理由表，不进 byType），只校容器会漏掉「过期理由表」。
-    for field, path, human in (
-            ("sourceSha256", _CONTAINER_HTML, "容器"),
-            ("unsupportedSha256", _PROPS_UNSUPPORTED, "不支持清单")):
-        want = _sha256_file(path)
-        got = c.get(field)
-        if want is None:
-            diffs.append("找不到%s源文件 %s，无法校验契约是否过期" % (human, path))
-        elif not got:
-            diffs.append("契约缺 %s（旧版契约，重跑生成器）" % field)
-        elif got != want:
-            diffs.append("%s sha：契约 %s / 现文件 %s" % (human, got[:12], want[:12]))
+    # 同步判据一律比**内容**，不比哈希：容器比 byType / slotsByType 键集，清单比 entries 逐条。
+    # sha 只是诊断（报 INCOMPLETE 时一起打出来），不进触发条件 ——
+    # 它对「改一行注释」过敏（全线假红）、对「清单换格式」失明（假绿）。
+    # 清单必须逐条比：它是理由表，不进 byType，只校容器会留下过期理由而无人发现。
+    uns_doc = None
+    try:
+        with open(_PROPS_UNSUPPORTED, encoding="utf-8") as f:
+            uns_doc = json.load(f)
+    except Exception as e:
+        diffs.append("不支持清单读不出来（%s）：%s" % (os.path.relpath(_PROPS_UNSUPPORTED, _ROOT), e))
     if c.get("renderers") != cur["rendererCount"]:
         diffs.append("渲染器数：契约 %s / 源码 %s" % (c.get("renderers"), cur["rendererCount"]))
     if sorted(c.get("shared") or []) != sorted(cur["shared"]):
@@ -538,10 +535,23 @@ def _load_props_contract(rep):
             diffs.append("%s：源码多 %s / 契约多 %s"
                          % (t, sorted(nb.get(t, set()) - cb.get(t, set())) or "-",
                             sorted(cb.get(t, set()) - nb.get(t, set())) or "-"))
+    cs = {k: set(v) for k, v in (c.get("slotsByType") or {}).items()}
+    ns = {k: set(v) for k, v in cur["slotsByType"].items()}
+    for t in sorted(set(cs) | set(ns)):
+        if cs.get(t, set()) != ns.get(t, set()):
+            diffs.append("%s 插槽：源码多 %s / 契约多 %s"
+                         % (t, sorted(ns.get(t, set()) - cs.get(t, set())) or "-",
+                            sorted(cs.get(t, set()) - ns.get(t, set())) or "-"))
+    if uns_doc is not None:
+        diffs.extend(pc.unsupported_diffs(c.get("unsupported"),
+                                          uns_doc.get("entries")))
     if diffs:
         rep.incomplete("[SS-01] props 契约与源文件不一致（%d 处）—— 先跑 "
-                       "python3 scripts/props_contract.py：%s%s"
-                       % (len(diffs), "；".join(diffs[:5]), " 等" if len(diffs) > 5 else ""))
+                       "python3 scripts/props_contract.py：%s%s（诊断：容器 sha %s/%s，清单 sha %s/%s）"
+                       % (len(diffs), "；".join(diffs[:5]), " 等" if len(diffs) > 5 else "",
+                          (c.get("sourceSha256") or "缺失")[:12], (_sha256_file(_CONTAINER_HTML) or "读取失败")[:12],
+                          (c.get("unsupportedSha256") or "缺失")[:12],
+                          (_sha256_file(_PROPS_UNSUPPORTED) or "读取失败")[:12]))
         rep.toolchain_fail = True
         return None
     return c

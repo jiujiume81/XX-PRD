@@ -662,9 +662,9 @@ def check_props_contract_dod(_docs, _ph, _gen):
         mod._PROPS_UNSUPPORTED = unsupported
         shutil.rmtree(tmpd, ignore_errors=True)
     if rc_hash == 0 or "INCOMPLETE [SS-01]" not in txt_hash:
-        return STATUS_FAIL, "清单哈希不符时未判 INCOMPLETE（rc=%d）" % rc_hash, first_lines(txt_hash, 4)
-    if "不支持清单 sha" not in txt_hash and "unsupportedSha256" not in txt_hash:
-        return STATUS_FAIL, "清单不符的 INCOMPLETE 没点出是哪枚哈希", first_lines(txt_hash, 4)
+        return STATUS_FAIL, "清单内容变了却没判 INCOMPLETE（rc=%d）" % rc_hash, first_lines(txt_hash, 4)
+    if "不支持清单条目不一致" not in txt_hash:
+        return STATUS_FAIL, "清单不符的 INCOMPLETE 没点出是哪几条条目", first_lines(txt_hash, 4)
 
     # 第五态：R6 —— 声明宽度与渲染对不上必须**说出来**（不是「取值非法」）。
     rep = mod.Report("<DoD13 R6 造红>")

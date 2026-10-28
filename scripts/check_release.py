@@ -498,7 +498,13 @@ SHAPE_TARGET = os.path.join(ROOT, "assets", "examples", "example-06-dense-list.j
 
 
 def check_shape_gate(_docs, _ph, _gen):
-    """DoD 11：形态判据在 `example-06` 上必须绿（`PASS=55 FAIL=0 SKIP=1` 这一组）。
+    """DoD 11：形态判据在 `example-06` 上必须绿（`FAIL=0`，SKIP 必须点名）。
+
+    **这里刻意不写死 PASS 条数。** 原注释写「`PASS=55 FAIL=0 SKIP=1` 这一组」，
+    到 0.11.0 实测已是 `PASS=69 FAIL=0 SKIP=1` —— 数字随 `check_ui_shape` 长出新判据而变，
+    而闸门从来不读它（只读 `FAIL` 与 SKIP 的**身份**）。写死的数只会得到两种结局：
+    要么被人当阈值去比对（然后被改动搞红），要么过期后与读数矛盾（然后没人再信那行注释）。
+    判据本身（`FAIL=0` + SKIP 点名）不受影响，见下。
 
     为什么这条必须在门里：与 DoD 10 同源 —— CAPA 产物 `PASS=11 FAIL=21` 照样交付，
     说明**判据即便做了，也没人替发布签字**。DoD 10 管"反样本还红不红"，这条管"教材还绿不绿"。
